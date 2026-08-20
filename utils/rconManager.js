@@ -151,21 +151,23 @@ async function connectRcon(guildId, client) {
 async function sendRconCommand(guildId, commandStr) {
     let ws = activeConnections.get(guildId);
     
+    // If not connected, force an instant connection and wait for it
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         try {
             await connectRcon(guildId, global.discordClient); 
             ws = activeConnections.get(guildId);
-        } catch (e) {}
+        } catch (e) {
+            // If connection fails entirely
+        }
     }
 
     if (!ws || ws.readyState !== WebSocket.OPEN) {
-        throw new Error("Not connected to RCON. Please reconnect using the RCON Server admin panel.");
+        throw new Error("Not connected to RCON. Please go to the RCON Server admin panel and click 'Connect RCON' first.");
     }
 
     ws.send(JSON.stringify({ Identifier: 1, Message: commandStr, Name: "BuddyBot" }));
     return true;
 }
-
 // Helper to hook into admin position queues with a 5-second anti-hang timeout safety net
 function queueAdminPos(adminName, guildId, adminId, channelId, type, client) {
     if (adminPosQueue.has(adminName)) {
