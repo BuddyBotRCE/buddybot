@@ -28,6 +28,12 @@ const GuildConfig = sequelize.define('GuildConfig', {
     autoEventType: { type: DataTypes.STRING, defaultValue: 'supply.drop' },
     lastAutoEvent: { type: DataTypes.DATE, allowNull: true },
     
+    // --- INDIVIDUAL AUTO-EVENT INTERVALS ---
+    cargoInterval: { type: DataTypes.INTEGER, defaultValue: 60 },
+    supplyInterval: { type: DataTypes.INTEGER, defaultValue: 60 },
+    eliteInterval: { type: DataTypes.INTEGER, defaultValue: 60 },
+    timedInterval: { type: DataTypes.INTEGER, defaultValue: 60 },
+    
     cargoDockX: { type: DataTypes.FLOAT, allowNull: true },
     cargoDockY: { type: DataTypes.FLOAT, allowNull: true },
     cargoDockZ: { type: DataTypes.FLOAT, allowNull: true },
@@ -70,9 +76,9 @@ const UserEconomy = sequelize.define('UserEconomy', {
     homeY: { type: DataTypes.FLOAT, allowNull: true },
     homeZ: { type: DataTypes.FLOAT, allowNull: true },
     lastTp: { type: DataTypes.DATE, allowNull: true },
-pvpKills: { type: DataTypes.INTEGER, defaultValue: 0 },
-pveKills: { type: DataTypes.INTEGER, defaultValue: 0 },
-deaths: { type: DataTypes.INTEGER, defaultValue: 0 }
+    pvpKills: { type: DataTypes.INTEGER, defaultValue: 0 },
+    pveKills: { type: DataTypes.INTEGER, defaultValue: 0 },
+    deaths: { type: DataTypes.INTEGER, defaultValue: 0 }
 });
 
 const ShopItem = sequelize.define('ShopItem', {
@@ -114,8 +120,8 @@ const CustomBind = sequelize.define('CustomBind', {
     emote: { type: DataTypes.STRING, allowNull: false },
     command: { type: DataTypes.STRING, allowNull: false },
     cooldown: { type: DataTypes.INTEGER, defaultValue: 0 }, 
-    cost: { type: DataTypes.INTEGER, defaultValue: 0 },     
-    roleId: { type: DataTypes.STRING, allowNull: true }     
+    cost: { type: DataTypes.INTEGER, defaultValue: 0 },    
+    roleId: { type: DataTypes.STRING, allowNull: true }    
 });
 
 const BindCooldown = sequelize.define('BindCooldown', {
