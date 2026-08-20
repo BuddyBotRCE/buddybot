@@ -1,8 +1,12 @@
 const { Sequelize, DataTypes } = require('sequelize');
+const fs = require('fs');
+
+// Automatically use the permanent Railway volume if hosted, or local folder if on PC
+const dbPath = fs.existsSync('/app') ? '/app/data/database.sqlite' : './database.sqlite';
 
 const sequelize = new Sequelize({
     dialect: 'sqlite',
-    storage: './database.sqlite',
+    storage: dbPath,
     logging: false
 });
 
