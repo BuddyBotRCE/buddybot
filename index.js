@@ -15,6 +15,8 @@ const client = new Client({
     ]
 });
 
+global.discordClient = client;
+
 client.commands = new Collection();
 
 // ==========================================

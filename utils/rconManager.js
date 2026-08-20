@@ -137,8 +137,23 @@ async function connectRcon(guildId, client) {
 }
 
 async function sendRconCommand(guildId, commandStr) {
-    const ws = activeConnections.get(guildId);
-    if (!ws || ws.readyState !== WebSocket.OPEN) throw new Error("Not connected to RCON.");
+    let ws = activeConnections.get(guildId);
+    
+    // If not connected, attempt a quick auto-reconnect on the fly!
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        try {
+            // Grab client instance or wait for connection
+            await connectRcon(guildId, global.discordClient); 
+            ws = activeConnections.get(guildId);
+        } catch (e) {
+            // Fallback if auto-reconnect fails
+        }
+    }
+
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        throw new Error("Not connected to RCON. Please reconnect using the RCON Server admin panel.");
+    }
+
     ws.send(JSON.stringify({ Identifier: 1, Message: commandStr, Name: "BuddyBot" }));
     return true;
 }
