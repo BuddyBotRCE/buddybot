@@ -49,16 +49,18 @@ if (fs.existsSync(eventsPath)) {
 client.once('clientReady', async () => {
     console.log(`[SYSTEM] BuddyBotRCE is online as ${client.user.tag}`);
 
-    // Sync Discord Commands
+    // Instant Guild-Specific Command Sync
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     const commandData = client.commands.map(cmd => cmd.data.toJSON());
     
     try {
-        await rest.put(
-            Routes.applicationCommands(client.user.id),
-            { body: commandData },
-        );
-        console.log('[SYSTEM] Discord command cache wiped and cleanly synced.');
+        for (const [guildId, guild] of client.guilds.cache) {
+            await rest.put(
+                Routes.applicationGuildCommands(client.user.id, guildId),
+                { body: commandData },
+            );
+            console.log(`[SYSTEM] Commands instantly synced for guild: ${guild.name}`);
+        }
     } catch (error) {
         console.error('[COMMAND SYNC ERROR]', error);
     }
