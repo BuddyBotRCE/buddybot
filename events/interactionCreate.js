@@ -611,7 +611,6 @@ module.exports = async (interaction, client) => {
                     const userProfile = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
                     if (!userProfile) return interaction.reply({ content: '❌ Link Rust account first using `/playerpanel`!', flags: 64 });
                     queueAdminPos(userProfile.inGameName, interaction.guild.id, interaction.user.id, interaction.channel.id, 'orp', client);
-                    await sendRconCommand(interaction.guild.id, 'playerlist');
                     return interaction.reply({ content: `⏳ Stand in the middle of your base and grab coordinates for ORP setup...`, flags: 64 });
                 }
                 else if (template === 'tpl_custom') {
@@ -622,7 +621,6 @@ module.exports = async (interaction, client) => {
                     const userProfile = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
                     if (!userProfile) return interaction.reply({ content: '❌ Link Rust account first!', flags: 64 });
                     queueAdminPos(userProfile.inGameName, interaction.guild.id, interaction.user.id, interaction.channel.id, template, client);
-                    await sendRconCommand(interaction.guild.id, 'playerlist');
                     return interaction.reply({ content: `⏳ Grabbing coordinates...`, flags: 64 });
                 }
             }
@@ -705,13 +703,12 @@ module.exports = async (interaction, client) => {
                     return interaction.reply({ content: `⚠️ No custom dock position set. Triggered standard procedural Cargo Ship event instead!`, flags: 64 });
                 }
             }
-            if (interaction.customId === 'btn_ae_set_cargo_pos') {
+           if (interaction.customId === 'btn_ae_set_cargo_pos') {
                 const userProfile = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
                 if (!userProfile || !userProfile.inGameName) {
                     return interaction.reply({ content: '❌ Link your Rust account first using `/playerpanel` before grabbing coordinates!', flags: 64 });
                 }
                 queueAdminPos(userProfile.inGameName, interaction.guild.id, interaction.user.id, interaction.channel.id, 'cargodock', client);
-                await sendRconCommand(interaction.guild.id, 'playerlist');
                 return interaction.reply({ content: `⏳ Stand at your desired Cargo Ship dock location... grabbing your coordinates via RCON.`, flags: 64 });
             }
             if (interaction.customId === 'btn_ae_set_crates') {
@@ -735,7 +732,6 @@ module.exports = async (interaction, client) => {
                     return interaction.reply({ content: '❌ Link your Rust account first using `/playerpanel` before setting zone coordinates!', flags: 64 });
                 }
                 queueAdminPos(userProfile.inGameName, interaction.guild.id, interaction.user.id, interaction.channel.id, 'pvezone', client);
-                await sendRconCommand(interaction.guild.id, 'playerlist');
                 return interaction.reply({ content: `⏳ Stand at the center point where you want your PVE zone created... grabbing coordinates via RCON.`, flags: 64 });
             }
 

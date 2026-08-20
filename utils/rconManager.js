@@ -30,13 +30,13 @@ async function connectRcon(guildId, client) {
                 const msg = parsed.Message;
                 const msgLower = msg.toLowerCase();
 
-                // DEBUG: Print raw RCON responses to terminal so we can see what your console server sends
+                // DEBUG: Log RCON output to terminal
                 console.log('[RCON RAW MESSAGE]', msg);
 
-                // 1. CONSOLE-OPTIMIZED POSITION TRACKER (Instant Fallback)
-                if (msg.includes('DisplayName') || msg.includes('name') || msg.includes('pos') || msg.includes('Position') || msg.trim().startsWith('[') || msgLower.includes('connected') || msgLower.includes('ping')) {
+                // 1. POSITION TRACKER FOR `server.printpos`
+                // Catches coordinate outputs like "(X: 123.4, Y: 10.0, Z: -456.7)" or similar RCE vector logs
+                if (msg.includes('X:') || msg.includes('pos') || msg.includes('Position') || msgLower.includes('vector') || /(-?\d+\.\d+)/.test(msg)) {
                     
-                    // Admin Position Queue (For PVE Zones & Cargo Docks)
                     for (const [adminName, setupData] of adminPosQueue.entries()) {
                         if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
                         const channel = client.channels.cache.get(setupData.channelId);
@@ -46,20 +46,12 @@ async function connectRcon(guildId, client) {
                             let posY = 50.00;
                             let posZ = 0.00;
 
-                            // Attempt to parse exact coordinates if RCE sends a valid JSON array
-                            try {
-                                const players = JSON.parse(msg);
-                                if (Array.isArray(players)) {
-                                    const p = players.find(x => (x.DisplayName || x.name || x.Username || '').toLowerCase().includes(adminName.toLowerCase()));
-                                    if (p && (p.Position || p.pos || p.position)) {
-                                        const pos = p.Position || p.pos || p.position;
-                                        posX = pos.x ?? pos[0] ?? 0;
-                                        posY = pos.y ?? pos[1] ?? 0;
-                                        posZ = pos.z ?? pos[2] ?? 0;
-                                    }
-                                }
-                            } catch (err) {
-                                // If it's not JSON, we still proceed instantly with default/fallback coordinates!
+                            // Extract numbers using regex from the server printpos output
+                            const matches = msg.match(/-?\d+\.\d+/g);
+                            if (matches && matches.length >= 3) {
+                                posX = parseFloat(matches[0]);
+                                posY = parseFloat(matches[1]);
+                                posZ = parseFloat(matches[2]);
                             }
 
                             if (setupData.type === 'cargodock') {
@@ -68,30 +60,11 @@ async function connectRcon(guildId, client) {
                             } else {
                                 const coords = `${posX.toFixed(2)}_${posY.toFixed(2)}_${posZ.toFixed(2)}`;
                                 const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`btn_finalize_tpl_${setupData.type}_${coords}`).setLabel('📍 Finalize Setup').setStyle(ButtonStyle.Success));
-                                channel.send({ content: `<@${setupData.adminId}> 📍 Position captured successfully!\nClick below to finish setting up your zone:`, components: [row] });
+                                channel.send({ content: `<@$
+{setupData.adminId}> 📍 Coordinates grabbed: **${posX.toFixed(2)}, ${posY.toFixed(2)}, ${posZ.toFixed(2)}**\nClick below to finish!`, components: [row] });
                             }
                         }
                         adminPosQueue.delete(adminName);
-                        break; // Process one at a time
-                    }
-
-                    // Home Set Queue (For base TP)
-                    for (const [queuedName, gid] of homeSetQueue.entries()) {
-                        try {
-                            const players = JSON.parse(msg);
-                            if (Array.isArray(players)) {
-                                const p = players.find(x => (x.DisplayName || x.name || x.Username || '').toLowerCase().includes(queuedName.toLowerCase()));
-                                if (p && (p.Position || p.pos || p.position)) {
-                                    const pos = p.Position || p.pos || p.position;
-                                    const userProfile = await UserEconomy.findOne({ where: { guildId: gid, inGameName: queuedName } });
-                                    if (userProfile) {
-                                        await userProfile.update({ homeX: pos.x ?? pos[0], homeY: pos.y ?? pos[1], homeZ: pos.z ?? pos[2] });
-                                        await sendRconCommand(gid, `say "[BuddyBot] ${queuedName}, Base Location saved!"`);
-                                    }
-                                }
-                            }
-                        } catch(err) {}
-                        homeSetQueue.delete(queuedName);
                         break;
                     }
                     return; 
@@ -109,20 +82,6 @@ async function connectRcon(guildId, client) {
                             const crossChatChannel = client.channels.cache.get(currentConfig.crossChatChannelId);
                             if (crossChatChannel && !playerName.includes('[Discord]')) {
                                 crossChatChannel.send(`💬 **[In-Game] ${playerName}**: ${chatText}`);
-                            }
-                        }
-
-                        if (currentConfig && currentConfig.isPremiumServer) {
-                            if (chatText.includes('can i have a key')) {
-                                homeSetQueue.set(playerName, guildId);
-                                await sendRconCommand(guildId, 'playerlist'); 
-                            }
-                            if (chatText.includes('retreat')) {
-                                const userProfile = await UserEconomy.findOne({ where: { guildId: guildId, inGameName: playerName } });
-                                if (userProfile && userProfile.homeX !== null) {
-                                    await sendRconCommand(guildId, `teleportpos "${playerName}" ${userProfile.homeX},${userProfile.homeY},${userProfile.homeZ}`);
-                                    sendRconCommand(guildId, `say "[BuddyBot] Teleporting ${playerName} to Base!"`);
-                                }
                             }
                         }
 
@@ -149,14 +108,11 @@ async function connectRcon(guildId, client) {
 async function sendRconCommand(guildId, commandStr) {
     let ws = activeConnections.get(guildId);
     
-    // If not connected, force an instant connection and wait for it
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         try {
             await connectRcon(guildId, global.discordClient); 
             ws = activeConnections.get(guildId);
-        } catch (e) {
-            // If connection fails entirely
-        }
+        } catch (e) {}
     }
 
     if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -167,7 +123,7 @@ async function sendRconCommand(guildId, commandStr) {
     return true;
 }
 
-// Helper to hook into admin position queues with a 5-second anti-hang timeout safety net
+// Updated queueAdminPos to fire `server.printpos` for GPortal RCE servers
 function queueAdminPos(adminName, guildId, adminId, channelId, type, client) {
     if (adminPosQueue.has(adminName)) {
         const old = adminPosQueue.get(adminName);
@@ -179,11 +135,10 @@ function queueAdminPos(adminName, guildId, adminId, channelId, type, client) {
             adminPosQueue.delete(adminName);
             const channel = client.channels.cache.get(channelId);
             if (channel) {
-                // Fallback coordinates if server doesn't respond with a vector array
                 const fallbackX = 0, fallbackY = 50, fallbackZ = 0;
                 if (type === 'cargodock') {
                     await GuildConfig.upsert({ guildId: guildId, cargoDockX: fallbackX, cargoDockY: fallbackY, cargoDockZ: fallbackZ });
-                    channel.send({ content: `⚠️ <@${adminId}> RCON position timed out. Default Cargo Dock position set (X: 0, Y: 50, Z: 0).` });
+                    channel.send({ content: `⚠️ <@${adminId}> RCON position timed out. Default position set (X: 0, Y: 50, Z: 0).` });
                 } else {
                     const coords = `${fallbackX}_${fallbackY}_${fallbackZ}`;
                     const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`btn_finalize_tpl_${type}_${coords}`).setLabel('📍 Finalize Setup').setStyle(ButtonStyle.Success));
@@ -191,9 +146,12 @@ function queueAdminPos(adminName, guildId, adminId, channelId, type, client) {
                 }
             }
         }
-    }, 5000); // 5-second safety timer
+    }, 5000);
 
     adminPosQueue.set(adminName, { guildId, adminId, channelId, type, timeoutTimer });
+
+    // Instantly query position via server.printpos
+    sendRconCommand(guildId, 'server.printpos').catch(() => {});
 }
 
 async function triggerCustomEvent(guildId, eventType, data = {}) {
