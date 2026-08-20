@@ -328,9 +328,12 @@ module.exports = async (interaction, client) => {
                         new StringSelectMenuBuilder().setCustomId('select_ai_provider').setPlaceholder('Choose AI Platform / Provider...')
                             .addOptions([
                                 { label: 'OpenAI (ChatGPT)', description: 'api.openai.com', value: 'openai', emoji: '🟢' },
-                                { label: 'OpenRouter (Multi-Model)', description: 'openrouter.ai', value: 'openrouter', emoji: '🌐' },
+                                { label: 'OpenRouter (Claude, Llama, etc.)', description: 'openrouter.ai', value: 'openrouter', emoji: '🌐' },
                                 { label: 'Groq (Ultra-Fast)', description: 'api.groq.com', value: 'groq', emoji: '⚡' },
                                 { label: 'DeepSeek', description: 'api.deepseek.com', value: 'deepseek', emoji: '🐋' },
+                                { label: 'Google Gemini', description: 'generativelanguage.googleapis.com', value: 'gemini', emoji: '🌌' },
+                                { label: 'xAI (Grok)', description: 'api.x.ai', value: 'xai', emoji: '✖️' },
+                                { label: 'Mistral AI', description: 'api.mistral.ai', value: 'mistral', emoji: '🌪️' },
                                 { label: 'Custom / Self-Hosted', description: 'Ollama, vLLM, etc.', value: 'custom', emoji: '🛠️' }
                             ])
                     );
@@ -370,11 +373,13 @@ module.exports = async (interaction, client) => {
                 let defaultUrl = 'https://api.openai.com/v1';
                 let defaultModel = 'gpt-4o-mini';
 
-                if (provider === 'openrouter') { defaultUrl = 'https://openrouter.ai/api/v1'; defaultModel = 'openai/gpt-4o-mini'; } 
+               if (provider === 'openrouter') { defaultUrl = 'https://openrouter.ai/api/v1'; defaultModel = 'openai/gpt-4o-mini'; } 
                 else if (provider === 'groq') { defaultUrl = 'https://api.groq.com/openai/v1'; defaultModel = 'llama-3.3-70b-versatile'; } 
                 else if (provider === 'deepseek') { defaultUrl = 'https://api.deepseek.com/v1'; defaultModel = 'deepseek-chat'; } 
+                else if (provider === 'gemini') { defaultUrl = 'https://generativelanguage.googleapis.com/v1beta/openai/'; defaultModel = 'gemini-1.5-flash'; }
+                else if (provider === 'xai') { defaultUrl = 'https://api.x.ai/v1'; defaultModel = 'grok-beta'; }
+                else if (provider === 'mistral') { defaultUrl = 'https://api.mistral.ai/v1'; defaultModel = 'mistral-small-latest'; }
                 else if (provider === 'custom') { defaultUrl = 'http://localhost:11434/v1'; defaultModel = 'llama3'; }
-
                 let [config] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
                 await config.update({ aiProvider: provider, aiBaseUrl: defaultUrl, aiModel: defaultModel });
                 
