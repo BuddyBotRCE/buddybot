@@ -16,17 +16,22 @@ const client = new Client({
 global.discordClient = client;
 client.commands = new Collection();
 
-// Load Slash Commands
+// Load Slash Commands with Console Debugging
 const commandsPath = path.join(__dirname, 'commands');
+console.log(`[SYSTEM] Looking for commands in: ${commandsPath}`);
 if (fs.existsSync(commandsPath)) {
     const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+    console.log(`[SYSTEM] Found command files:`, commandFiles);
     for (const file of commandFiles) {
         const filePath = path.join(commandsPath, file);
         const command = require(filePath);
         if ('data' in command && 'execute' in command) {
             client.commands.set(command.data.name, command);
+            console.log(`[SYSTEM] Successfully loaded command: /${command.data.name}`);
         }
     }
+} else {
+    console.log(`[SYSTEM ERROR] Commands directory not found!`);
 }
 
 // Load Events
@@ -48,20 +53,18 @@ if (fs.existsSync(eventsPath)) {
 
 client.once('clientReady', async () => {
     console.log(`[SYSTEM] BuddyBotRCE is online as ${client.user.tag}`);
-// To wipe all global commands instantly (run once, then remove this line)
-await rest.put(Routes.applicationCommands(client.user.id), { body: [] });
-    // Instant Guild-Specific Command Sync
+
+    // Standard Global Command Registration
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     const commandData = client.commands.map(cmd => cmd.data.toJSON());
     
     try {
-        for (const [guildId, guild] of client.guilds.cache) {
-            await rest.put(
-                Routes.applicationGuildCommands(client.user.id, guildId),
-                { body: commandData },
-            );
-            console.log(`[SYSTEM] Commands instantly synced for guild: ${guild.name}`);
-        }
+        console.log(`[SYSTEM] Registering ${commandData.length} global commands to Discord...`);
+        await rest.put(
+            Routes.applicationCommands(client.user.id),
+            { body: commandData },
+        );
+        console.log('[SYSTEM] Global commands successfully registered!');
     } catch (error) {
         console.error('[COMMAND SYNC ERROR]', error);
     }
