@@ -373,15 +373,13 @@ module.exports = async (interaction, client) => {
                 let defaultUrl = 'https://api.openai.com/v1';
                 let defaultModel = 'gpt-4o-mini';
 
-               if (provider === 'openrouter') { defaultUrl = 'https://openrouter.ai/api/v1'; defaultModel = 'openai/gpt-4o-mini'; } 
+              if (provider === 'openrouter') { defaultUrl = 'https://openrouter.ai/api/v1'; defaultModel = 'openai/gpt-4o-mini'; } 
                 else if (provider === 'groq') { defaultUrl = 'https://api.groq.com/openai/v1'; defaultModel = 'llama-3.3-70b-versatile'; } 
                 else if (provider === 'deepseek') { defaultUrl = 'https://api.deepseek.com/v1'; defaultModel = 'deepseek-chat'; } 
-                else if (provider === 'gemini') { defaultUrl = 'https://generativelanguage.googleapis.com/v1beta/openai/'; defaultModel = 'gemini-1.5-flash'; }
+                else if (provider === 'gemini') { defaultUrl = 'https://generativelanguage.googleapis.com/v1beta/openai/'; defaultModel = 'gemini-3.7-flash'; }
                 else if (provider === 'xai') { defaultUrl = 'https://api.x.ai/v1'; defaultModel = 'grok-beta'; }
                 else if (provider === 'mistral') { defaultUrl = 'https://api.mistral.ai/v1'; defaultModel = 'mistral-small-latest'; }
                 else if (provider === 'custom') { defaultUrl = 'http://localhost:11434/v1'; defaultModel = 'llama3'; }
-                let [config] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
-                await config.update({ aiProvider: provider, aiBaseUrl: defaultUrl, aiModel: defaultModel });
                 
                 const row2 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_ai_set_key').setLabel('Set API Key & Model').setStyle(ButtonStyle.Primary).setEmoji('🔑'));
                 return interaction.update({ content: `✅ AI Platform set to **${provider.toUpperCase()}**! Now click **Set API Key & Model** to enter your credentials.`, embeds: [], components: [row2] });
