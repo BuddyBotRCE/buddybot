@@ -13,7 +13,7 @@ module.exports = {
 
         const embed = new EmbedBuilder()
             .setTitle(`🎮 ${interaction.guild.name} — Player Hub`)
-            .setDescription(`Welcome to the community hub! Use the buttons below to manage your Rust account, check your balance, claim daily rewards, view leaderboards, vote, and browse the store.`)
+            .setDescription(`Welcome to the community hub! Use the buttons below to manage your Rust account, check your balance, deposit/withdraw currency, claim daily rewards, view leaderboards, vote, and browse the store.`)
             .setColor('#3498db')
             .setTimestamp();
 
@@ -25,11 +25,16 @@ module.exports = {
         );
 
         const row2 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('hub_casino').setLabel('Casino').setStyle(ButtonStyle.Danger).setEmoji('🎰'),
+            new ButtonBuilder().setCustomId('hub_deposit').setLabel('Deposit').setStyle(ButtonStyle.Primary).setEmoji('🏦'),
+            new ButtonBuilder().setCustomId('hub_withdraw').setLabel('Withdraw').setStyle(ButtonStyle.Secondary).setEmoji('🏧'),
+            new ButtonBuilder().setCustomId('hub_casino').setLabel('Casino').setStyle(ButtonStyle.Danger).setEmoji('🎰')
+        );
+
+        const row3 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('hub_leaderboards').setLabel('Leaderboards').setStyle(ButtonStyle.Primary).setEmoji('🏆'),
             new ButtonBuilder().setCustomId('hub_vote_info').setLabel('Vote & Claim').setStyle(ButtonStyle.Success).setEmoji('🗳️')
         );
 
-        return interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
+        return interaction.reply({ embeds: [embed], components: [row1, row2, row3], flags: 64 });
     }
 };

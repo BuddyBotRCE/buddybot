@@ -843,7 +843,7 @@ module.exports = async (interaction, client) => {
                 return interaction.showModal(modal);
             }
 
-            // --- PLAYER HUB: LEADERBOARDS & VOTE INFO ---
+            // --- PLAYER HUB: LEADERBOARDS, DEPOSIT, WITHDRAW & VOTE INFO ---
             if (interaction.customId === 'hub_leaderboards') {
                 const row = new ActionRowBuilder().addComponents(
                     new StringSelectMenuBuilder()
@@ -856,6 +856,18 @@ module.exports = async (interaction, client) => {
                         ])
                 );
                 return interaction.reply({ content: '🏆 **Server Leaderboards:** Select a category below to view rankings:', components: [row], flags: 64 });
+            }
+
+            if (interaction.customId === 'hub_deposit') {
+                const modal = new ModalBuilder().setCustomId('modal_hub_deposit').setTitle('Deposit Currency to Bank');
+                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel("Amount to Deposit (or 'all')").setStyle(TextInputStyle.Short).setRequired(true)));
+                return interaction.showModal(modal);
+            }
+
+            if (interaction.customId === 'hub_withdraw') {
+                const modal = new ModalBuilder().setCustomId('modal_hub_withdraw').setTitle('Withdraw Currency to Wallet');
+                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel("Amount to Withdraw (or 'all')").setStyle(TextInputStyle.Short).setRequired(true)));
+                return interaction.showModal(modal);
             }
 
             if (interaction.customId === 'hub_vote_info') {
@@ -1548,6 +1560,35 @@ module.exports = async (interaction, client) => {
                 const crates = parseInt(interaction.fields.getTextInputValue('crate_amount')) || 3;
                 await GuildConfig.upsert({ guildId: interaction.guild.id, cargoCrateCount: crates });
                 return interaction.reply({ content: `✅ Cargo ship crate quantity successfully set to **${crates} crates**!`, flags: 64 });
+            }
+
+            // --- BANKING MODAL SUBMISSIONS ---
+            if (interaction.customId === 'modal_hub_deposit') {
+                const input = interaction.fields.getTextInputValue('amount').trim().toLowerCase();
+                const [user] = await UserEconomy.findOrCreate({ where: { guildId: interaction.guild.id, userId: interaction.user.id }, defaults: { wallet: 0, bank: 0 } });
+                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+                const currency = config?.economyCurrency || 'Scrap';
+
+                let amount = input === 'all' ? user.wallet : parseInt(input);
+                if (isNaN(amount) || amount <= 0) return interaction.reply({ content: '❌ Please enter a valid number or "all".', flags: 64 });
+                if (user.wallet < amount) return interaction.reply({ content: `❌ You only have **${user.wallet} ${currency}** in your wallet!`, flags: 64 });
+
+                await user.update({ wallet: user.wallet - amount, bank: user.bank + amount });
+                return interaction.reply({ content: `🏦 Successfully deposited **${amount} ${currency}** into your bank!\n• Wallet: **${user.wallet}**\n• Bank: **${user.bank}**`, flags: 64 });
+            }
+
+            if (interaction.customId === 'modal_hub_withdraw') {
+                const input = interaction.fields.getTextInputValue('amount').trim().toLowerCase();
+                const [user] = await UserEconomy.findOrCreate({ where: { guildId: interaction.guild.id, userId: interaction.user.id }, defaults: { wallet: 0, bank: 0 } });
+                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+                const currency = config?.economyCurrency || 'Scrap';
+
+                let amount = input === 'all' ? user.bank : parseInt(input);
+                if (isNaN(amount) || amount <= 0) return interaction.reply({ content: '❌ Please enter a valid number or "all".', flags: 64 });
+                if (user.bank < amount) return interaction.reply({ content: `❌ You only have **${user.bank} ${currency}** in your bank!`, flags: 64 });
+
+                await user.update({ bank: user.bank - amount, wallet: user.wallet + amount });
+                return interaction.reply({ content: `🏧 Successfully withdrew **${amount} ${currency}** to your wallet!\n• Wallet: **${user.wallet}**\n• Bank: **${user.bank}**`, flags: 64 });
             }
 
             // --- ADMIN EMBED MODAL SUBMISSION ---
