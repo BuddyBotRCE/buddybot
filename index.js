@@ -16,23 +16,29 @@ const client = new Client({
 global.discordClient = client;
 client.commands = new Collection();
 
-// Load Slash Commands with Console Debugging
+// Load Slash Commands Recursively (Supports subfolders like admin/ and player/)
 const commandsPath = path.join(__dirname, 'commands');
-console.log(`[SYSTEM] Looking for commands in: ${commandsPath}`);
-if (fs.existsSync(commandsPath)) {
-    const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
-    console.log(`[SYSTEM] Found command files:`, commandFiles);
-    for (const file of commandFiles) {
-        const filePath = path.join(commandsPath, file);
-        const command = require(filePath);
-        if ('data' in command && 'execute' in command) {
-            client.commands.set(command.data.name, command);
-            console.log(`[SYSTEM] Successfully loaded command: /${command.data.name}`);
+console.log(`[SYSTEM] Looking for commands in subdirectories of: ${commandsPath}`);
+
+function loadCommandsRecursively(dir) {
+    if (!fs.existsSync(dir)) return;
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    
+    for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+            loadCommandsRecursively(fullPath);
+        } else if (entry.name.endsWith('.js')) {
+            const command = require(fullPath);
+            if ('data' in command && 'execute' in command) {
+                client.commands.set(command.data.name, command);
+                console.log(`[SYSTEM] Successfully loaded command: /${command.data.name} (from ${path.relative(__dirname, fullPath)})`);
+            }
         }
     }
-} else {
-    console.log(`[SYSTEM ERROR] Commands directory not found!`);
 }
+
+loadCommandsRecursively(commandsPath);
 
 // Load Events
 const eventsPath = path.join(__dirname, 'events');
@@ -54,7 +60,7 @@ if (fs.existsSync(eventsPath)) {
 client.once('clientReady', async () => {
     console.log(`[SYSTEM] BuddyBotRCE is online as ${client.user.tag}`);
 
-    // Standard Global Command Registration
+    // Register all discovered commands globally to Discord
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     const commandData = client.commands.map(cmd => cmd.data.toJSON());
     
