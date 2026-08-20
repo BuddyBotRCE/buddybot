@@ -42,9 +42,6 @@ module.exports = async (interaction, client) => {
             return await command.execute(interaction);
         }
 
-        // ====================================================================
-        // SECTION: NATIVE SELECTORS (Role / Channel / User)
-        // ====================================================================
         if (interaction.isRoleSelectMenu()) {
             if (interaction.customId.startsWith('bind_role_menu_')) {
                 const bindId = interaction.customId.split('_')[3];
@@ -70,6 +67,10 @@ module.exports = async (interaction, client) => {
             if (interaction.customId === 'select_crosschat_channel') {
                 await GuildConfig.upsert({ guildId: interaction.guild.id, crossChatChannelId: interaction.values[0] });
                 return interaction.update({ content: `✅ Cross-Chat linked!`, components: [] });
+            }
+            if (interaction.customId === 'select_killfeed_channel') {
+                await GuildConfig.upsert({ guildId: interaction.guild.id, killfeedChannelId: interaction.values[0] });
+                return interaction.update({ content: `✅ Killfeed channel successfully linked!`, components: [] });
             }
             if (interaction.customId === 'select_giveaway_channel') {
                 await GuildConfig.upsert({ guildId: interaction.guild.id, giveawayChannelId: interaction.values[0] });
@@ -125,14 +126,11 @@ module.exports = async (interaction, client) => {
             }
         }
 
-        // ====================================================================
-        // SECTION: STRING SELECT MENUS (ADMIN PANEL DROPDOWNS)
-        // ====================================================================
         if (interaction.isStringSelectMenu()) {
             const module = interaction.values[0];
 
             if (interaction.customId === 'select_pve_delete_exec') {
-                const zoneId = module; // module holds interaction.values[0]
+                const zoneId = module;
                 const zone = await PveZone.findByPk(zoneId);
                 if (!zone) return interaction.reply({ content: '❌ Zone not found or already deleted.', flags: 64 });
 
@@ -140,6 +138,11 @@ module.exports = async (interaction, client) => {
                 await zone.destroy();
                 return interaction.update({ content: `✅ Successfully deleted the PVE Zone **"${zoneName}"**!`, components: [] });
             }
+            if (module === 'setup_killfeed') {
+                    const row = new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_killfeed_channel').setPlaceholder('Select killfeed channel...').addChannelTypes(ChannelType.GuildText));
+                    return interaction.reply({ content: '💀 Select a text channel for the killfeed:', components: [row], flags: 64 });
+                }
+
             if (interaction.customId === 'admin_menu_select') {
                 if (module === 'setup_shop') {
                     const embed = new EmbedBuilder().setTitle('🛒 Server Shop Manager').setDescription('Add prebuilt catalog items, custom gear, or adjust pricing multipliers.').setColor('#e67e22');
@@ -212,7 +215,7 @@ module.exports = async (interaction, client) => {
                     return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
                 }
 
-          if (module === 'setup_pvezones') {
+                if (module === 'setup_pvezones') {
                     const zones = await PveZone.findAll({ where: { guildId: interaction.guild.id } });
                     const zoneList = zones.length ? zones.map(z => `• **${z.zoneName}** (${z.shape.toUpperCase()}, Size: ${z.size})`).join('\n') : 'No custom PVE zones configured yet.';
 
@@ -228,6 +231,7 @@ module.exports = async (interaction, client) => {
                     );
                     return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
                 }
+
                 if (module === 'setup_autoevents') {
                     const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
                     const isPremium = config?.isPremiumServer || false;
@@ -321,7 +325,6 @@ module.exports = async (interaction, client) => {
                     return interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
                 }
 
-                // --- AI INTEGRATION ADMIN MENU (PRIMARY) ---
                 if (module === 'setup_ai') {
                     const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
                     const embed = new EmbedBuilder()
@@ -371,13 +374,11 @@ module.exports = async (interaction, client) => {
                     return interaction.reply({ content: '💬 Select a text channel:', components: [row], flags: 64 });
                 }
                 
-                // Fallback for missing admin panels
                 const modal = new ModalBuilder().setCustomId(`modal_${module}`).setTitle('Configure Settings');
                 modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('setup_input').setLabel('Data').setStyle(TextInputStyle.Short).setRequired(true)));
                 return interaction.showModal(modal);
             }
 
-            // --- AI PROVIDER SELECTION LOGIC ---
             if (interaction.customId === 'select_ai_provider') {
                 const provider = module;
                 let defaultUrl = 'https://api.openai.com/v1';
@@ -649,12 +650,7 @@ module.exports = async (interaction, client) => {
             }
         }
 
-        // ====================================================================
-        // SECTION: BUTTON CLICKS
-        // ====================================================================
         if (interaction.isButton()) {
-
-            // --- LEADERBOARD REFRESH HANDLER ---
             if (interaction.customId.startsWith('lb_refresh_')) {
                 const category = interaction.customId.replace('lb_refresh_', '');
                 const guildId = interaction.guild.id;
@@ -726,7 +722,7 @@ module.exports = async (interaction, client) => {
 
                 return interaction.update({ embeds: [embed], components: [row] });
             }
-            // --- AI SET KEY BUTTON ---
+
             if (interaction.customId === 'btn_ai_set_key') {
                 const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
                 const modal = new ModalBuilder().setCustomId('modal_ai_credentials').setTitle('Configure AI Credentials');
@@ -737,7 +733,6 @@ module.exports = async (interaction, client) => {
                 );
                 return interaction.showModal(modal);
             }
-
 
             if (interaction.customId === 'btn_econ_name') {
                 const modal = new ModalBuilder().setCustomId('modal_setup_economy').setTitle('Configure Currency');
@@ -785,7 +780,7 @@ module.exports = async (interaction, client) => {
                     return interaction.reply({ content: `⚠️ No custom dock position set. Triggered standard procedural Cargo Ship event instead!`, flags: 64 });
                 }
             }
-           if (interaction.customId === 'btn_ae_set_cargo_pos') {
+            if (interaction.customId === 'btn_ae_set_cargo_pos') {
                 const userProfile = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
                 if (!userProfile || !userProfile.inGameName) {
                     return interaction.reply({ content: '❌ Link your Rust account first using `/playerpanel` before grabbing coordinates!', flags: 64 });
@@ -1238,12 +1233,7 @@ module.exports = async (interaction, client) => {
             }
         }
 
-        // ====================================================================
-        // SECTION: MODAL SUBMISSIONS
-        // ====================================================================
         if (interaction.isModalSubmit()) {
-
-            // --- AI MODAL EXECUTION ---
             if (interaction.customId === 'modal_ai_credentials') {
                 const apiKey = interaction.fields.getTextInputValue('ai_key');
                 const model = interaction.fields.getTextInputValue('ai_model');
@@ -1731,7 +1721,7 @@ module.exports = async (interaction, client) => {
                 const cd = parseInt(interaction.fields.getTextInputValue('item_cooldown')) || 0;
                 const newItem = await ShopItem.create({ guildId: interaction.guild.id, name, command: cmd, price, category: 'custom', cooldownSeconds: cd });
                 const roleMenu = new RoleSelectMenuBuilder().setCustomId(`shop_role_${newItem.id}`).setPlaceholder('Select required Discord role (Optional)...');
-                return interaction.reply({ content: `✅ Custom item **${name}** added! Optional role restriction:`, components: [new ActionRowBuilder().addComponents(roleMenu)], flags: 64 });
+                return interaction.reply({ content: `✅ Custom item **${name}** added! Optional role restriction:`, components: [new ActionRowBuilder().addComponents(new ActionRowBuilder().addComponents(roleMenu))], flags: 64 });
             }
             if (interaction.customId === 'modal_shop_multiplier') {
                 const mult = parseInt(interaction.fields.getTextInputValue('multiplier'));

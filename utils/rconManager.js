@@ -30,13 +30,14 @@ async function connectRcon(guildId, client) {
                 const msg = parsed.Message;
                 const msgLower = msg.toLowerCase();
 
+                // Ignore standard server error echoes
+                if (msgLower.includes('invalid player') || msgLower.includes('unknown command')) return;
+
                 // DEBUG: Log RCON output to terminal
                 console.log('[RCON RAW MESSAGE]', msg);
 
-                // 1. POSITION TRACKER FOR `server.printpos`
-                // Catches coordinate outputs like "(X: 123.4, Y: 10.0, Z: -456.7)" or similar RCE vector logs
+                // 1. POSITION TRACKER FOR `server.printpos` (GPortal RCE)
                 if (msg.includes('X:') || msg.includes('pos') || msg.includes('Position') || msgLower.includes('vector') || /(-?\d+\.\d+)/.test(msg)) {
-                    
                     for (const [adminName, setupData] of adminPosQueue.entries()) {
                         if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
                         const channel = client.channels.cache.get(setupData.channelId);
@@ -46,7 +47,6 @@ async function connectRcon(guildId, client) {
                             let posY = 50.00;
                             let posZ = 0.00;
 
-                            // Extract numbers using regex from the server printpos output
                             const matches = msg.match(/-?\d+\.\d+/g);
                             if (matches && matches.length >= 3) {
                                 posX = parseFloat(matches[0]);
@@ -66,48 +66,15 @@ async function connectRcon(guildId, client) {
                         adminPosQueue.delete(adminName);
                         break;
                     }
-                    return; 
                 }
 
-                // 2. CHAT PARSER
-                if (msgLower.includes('[chat]')) {
-                    const chatMatch = msg.match(/\[CHAT\] (.*?): (.*)/i);
-                    if (chatMatch) {
-                        const playerName = chatMatch[1].replace(/\[.*?\]/g, '').trim();
-                        const chatText = chatMatch[2].toLowerCase();
-                        const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
-
-                        if (currentConfig && currentConfig.crossChatChannelId) {
-                            const crossChatChannel = client.channels.cache.get(currentConfig.crossChatChannelId);
-                            if (crossChatChannel && !playerName.includes('[Discord]')) {
-                                crossChatChannel.send(`💬 **[In-Game] ${playerName}**: ${chatText}`);
-                            }
-                        }
-
-                        const serverBinds = await CustomBind.findAll({ where: { guildId: guildId } });
-                        const activeBind = serverBinds.find(b => b.emote.toLowerCase() === chatText);
-                        if (activeBind) {
-                            const userProfile = await UserEconomy.findOne({ where: { guildId: guildId, inGameName: playerName } });
-                            if (activeBind.cost > 0 && (!userProfile || userProfile.wallet < activeBind.cost)) return;
-                            if (activeBind.cost > 0) await userProfile.update({ wallet: userProfile.wallet - activeBind.cost });
-
-                            const finalCommandString = activeBind.command.replace(/{player}/gi, `"${playerName}"`);
-                            const commands = finalCommandString.split('\n');
-                            for (const cmd of commands) {
-                                if (cmd.trim() !== '') await sendRconCommand(guildId, cmd.trim());
-                            }
-                        }
-                    }
-                }
-
-               // 3. KILLFEED & COMBAT LOG PARSER (Discord & In-Game Broadcast)
+                // 2. KILLFEED & COMBAT LOG PARSER (Discord & In-Game Broadcast)
                 if ((msgLower.includes('killed') || msgLower.includes('murdered') || msgLower.includes('suicide') || msgLower.includes('died') || msgLower.includes('slain')) && !msg.includes('[Killfeed]')) {
                     const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
-
-                    // A. Broadcast into the In-Game Chat for all players to see
+                    
+                    // Broadcast in-game chat feed
                     await sendRconCommand(guildId, `say "[Killfeed] ${msg}"`);
 
-                    // B. Send to Discord Killfeed Channel if configured
                     if (currentConfig && currentConfig.killfeedChannelId) {
                         const killfeedChannel = client.channels.cache.get(currentConfig.killfeedChannelId);
                         if (killfeedChannel) {
@@ -122,7 +89,7 @@ async function connectRcon(guildId, client) {
                                 killType = '💀 Suicide';
                             }
 
-                            // Update database stats for Kills/Deaths
+                            // Update K/D database records
                             const players = await UserEconomy.findAll({ where: { guildId: guildId } });
                             for (const p of players) {
                                 if (p.inGameName && msg.includes(p.inGameName)) {
@@ -145,6 +112,37 @@ async function connectRcon(guildId, client) {
                                 .setTimestamp();
 
                             killfeedChannel.send({ embeds: [killEmbed] }).catch(() => {});
+                        }
+                    }
+                }
+
+                // 3. CHAT PARSER & CUSTOM BINDS
+                if (msgLower.includes('[chat]')) {
+                    const chatMatch = msg.match(/\[CHAT\] (.*?): (.*)/i);
+                    if (chatMatch) {
+                        const playerName = chatMatch[1].replace(/\[.*?\]/g, '').trim(); 
+                        const chatText = chatMatch[2].toLowerCase();
+                        const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
+
+                        if (currentConfig && currentConfig.crossChatChannelId) {
+                            const crossChatChannel = client.channels.cache.get(currentConfig.crossChatChannelId);
+                            if (crossChatChannel && !playerName.includes('[Discord]')) {
+                                crossChatChannel.send(`💬 **[In-Game] ${playerName}**: ${chatText}`);
+                            }
+                        }
+
+                        const serverBinds = await CustomBind.findAll({ where: { guildId: guildId } });
+                        const activeBind = serverBinds.find(b => b.emote.toLowerCase() === chatText);
+                        if (activeBind) {
+                            const userProfile = await UserEconomy.findOne({ where: { guildId: guildId, inGameName: playerName } });
+                            if (activeBind.cost > 0 && (!userProfile || userProfile.wallet < activeBind.cost)) return;
+                            if (activeBind.cost > 0) await userProfile.update({ wallet: userProfile.wallet - activeBind.cost });
+
+                            const finalCommandString = activeBind.command.replace(/{player}/gi, `"${playerName}"`);
+                            const commands = finalCommandString.split('\n');
+                            for (const cmd of commands) {
+                                if (cmd.trim() !== '') await sendRconCommand(guildId, cmd.trim());
+                            }
                         }
                     }
                 }
@@ -171,7 +169,6 @@ async function sendRconCommand(guildId, commandStr) {
     return true;
 }
 
-// Updated queueAdminPos to fire `server.printpos` for GPortal RCE servers
 function queueAdminPos(adminName, guildId, adminId, channelId, type, client) {
     if (adminPosQueue.has(adminName)) {
         const old = adminPosQueue.get(adminName);
@@ -198,7 +195,7 @@ function queueAdminPos(adminName, guildId, adminId, channelId, type, client) {
 
     adminPosQueue.set(adminName, { guildId, adminId, channelId, type, timeoutTimer });
 
-    // Instantly query position via server.printpos
+    // Instantly query position via server.printpos for GPortal RCE
     sendRconCommand(guildId, 'server.printpos').catch(() => {});
 }
 
