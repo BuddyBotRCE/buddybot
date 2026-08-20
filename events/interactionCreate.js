@@ -5,7 +5,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelSelectMenuBuilder, RoleSelectMenuBuilder, UserSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType, PermissionFlagsBits } = require('discord.js');
 const { GuildConfig, UserEconomy, Giveaway, CustomBind, BindCooldown, ServerKit, ShopItem, ShopCooldown, CasinoCooldown, OrpConfig, PlayerOrpBase, BuddyPassChallenge, BuddyPassReward, TicketCategory, PveZone } = require('../database/db');
 const { Op } = require('sequelize'); 
-const { connectRcon, sendRconCommand, adminPosQueue } = require('../utils/rconManager');
+const { connectRcon, sendRconCommand, adminPosQueue, queueAdminPos } = require('../utils/rconManager');
 const { RUST_CATEGORIES } = require('../utils/rustCatalog');
 const discordTranscripts = require('discord-html-transcripts');
 
@@ -374,7 +374,7 @@ module.exports = async (interaction, client) => {
                 let defaultUrl = 'https://api.openai.com/v1';
                 let defaultModel = 'gpt-4o-mini';
 
-               if (provider === 'openrouter') { defaultUrl = 'https://openrouter.ai/api/v1'; defaultModel = 'openai/gpt-4o-mini'; } 
+                if (provider === 'openrouter') { defaultUrl = 'https://openrouter.ai/api/v1'; defaultModel = 'openai/gpt-4o-mini'; } 
                 else if (provider === 'groq') { defaultUrl = 'https://api.groq.com/openai/v1'; defaultModel = 'llama-3.3-70b-versatile'; } 
                 else if (provider === 'deepseek') { defaultUrl = 'https://api.deepseek.com/v1'; defaultModel = 'deepseek-chat'; } 
                 else if (provider === 'gemini') { defaultUrl = 'https://generativelanguage.googleapis.com/v1beta/openai/'; defaultModel = 'gemini-3.7-flash'; }
@@ -610,7 +610,7 @@ module.exports = async (interaction, client) => {
                 else if (template === 'tpl_orp') {
                     const userProfile = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
                     if (!userProfile) return interaction.reply({ content: '❌ Link Rust account first using `/playerpanel`!', flags: 64 });
-                    queueAdminPos.set(userProfile.inGameName, { type: 'orp', adminId: interaction.user.id, channelId: interaction.channel.id });
+                    queueAdminPos(userProfile.inGameName, interaction.guild.id, interaction.user.id, interaction.channel.id, 'orp', client);
                     await sendRconCommand(interaction.guild.id, 'playerlist');
                     return interaction.reply({ content: `⏳ Stand in the middle of your base and grab coordinates for ORP setup...`, flags: 64 });
                 }
@@ -621,7 +621,7 @@ module.exports = async (interaction, client) => {
                 else {
                     const userProfile = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
                     if (!userProfile) return interaction.reply({ content: '❌ Link Rust account first!', flags: 64 });
-                    adminPosQueue.set(userProfile.inGameName, { type: template, adminId: interaction.user.id, channelId: interaction.channel.id });
+                    queueAdminPos(userProfile.inGameName, interaction.guild.id, interaction.user.id, interaction.channel.id, template, client);
                     await sendRconCommand(interaction.guild.id, 'playerlist');
                     return interaction.reply({ content: `⏳ Grabbing coordinates...`, flags: 64 });
                 }
@@ -710,7 +710,7 @@ module.exports = async (interaction, client) => {
                 if (!userProfile || !userProfile.inGameName) {
                     return interaction.reply({ content: '❌ Link your Rust account first using `/playerpanel` before grabbing coordinates!', flags: 64 });
                 }
-                adminPosQueue.set(userProfile.inGameName, { type: 'cargodock', adminId: interaction.user.id, channelId: interaction.channel.id });
+                queueAdminPos(userProfile.inGameName, interaction.guild.id, interaction.user.id, interaction.channel.id, 'cargodock', client);
                 await sendRconCommand(interaction.guild.id, 'playerlist');
                 return interaction.reply({ content: `⏳ Stand at your desired Cargo Ship dock location... grabbing your coordinates via RCON.`, flags: 64 });
             }
@@ -734,7 +734,7 @@ module.exports = async (interaction, client) => {
                 if (!userProfile || !userProfile.inGameName) {
                     return interaction.reply({ content: '❌ Link your Rust account first using `/playerpanel` before setting zone coordinates!', flags: 64 });
                 }
-                adminPosQueue.set(userProfile.inGameName, { type: 'pvezone', adminId: interaction.user.id, channelId: interaction.channel.id });
+                queueAdminPos(userProfile.inGameName, interaction.guild.id, interaction.user.id, interaction.channel.id, 'pvezone', client);
                 await sendRconCommand(interaction.guild.id, 'playerlist');
                 return interaction.reply({ content: `⏳ Stand at the center point where you want your PVE zone created... grabbing coordinates via RCON.`, flags: 64 });
             }
