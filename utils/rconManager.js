@@ -30,55 +30,71 @@ async function connectRcon(guildId, client) {
                 const msg = parsed.Message;
                 const msgLower = msg.toLowerCase();
 
-                // 1. COORDINATE TRACKER
-                if (msg.trim().startsWith('[') && msg.includes('SteamID') && msg.includes('Position')) {
-                    const players = JSON.parse(msg);
-                    for (const p of players) {
-                        
-                        let matchedAdminName = null;
-                        for (const queuedName of adminPosQueue.keys()) {
-                            if (p.DisplayName.toLowerCase().includes(queuedName.toLowerCase())) {
-                                matchedAdminName = queuedName;
-                                break;
-                            }
-                        }
+             // 1. CONSOLE-OPTIMIZED POSITION TRACKER (No SteamID required)
+                if (msg.includes('DisplayName') || msg.includes('name') || msg.includes('pos') || msg.includes('Position') || msg.trim().startsWith('[')) {
+                    try {
+                        const players = JSON.parse(msg);
+                        if (!Array.isArray(players)) return;
 
-                        if (matchedAdminName) {
-                            const setupData = adminPosQueue.get(matchedAdminName);
-                            // Clear timeout since we got a real match
-                            if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
-
-                            const channel = client.channels.cache.get(setupData.channelId);
-                            if (channel && p.Position) {
-                                if (setupData.type === 'cargodock') {
-                                    await GuildConfig.upsert({ guildId: guildId, cargoDockX: p.Position.x, cargoDockY: p.Position.y, cargoDockZ: p.Position.z });
-                                    channel.send({ content: `✅ <@${setupData.adminId}> **Cargo Dock Position Saved!**\nCoordinates: \`X: ${p.Position.x.toFixed(2)}, Y: ${p.Position.y.toFixed(2)}, Z: ${p.Position.z.toFixed(2)}\`` });
-                                } else {
-                                    const coords = `${p.Position.x.toFixed(2)}_${p.Position.y.toFixed(2)}_${p.Position.z.toFixed(2)}`;
-                                    const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`btn_finalize_tpl_${setupData.type}_${coords}`).setLabel('📍 Finalize Setup').setStyle(ButtonStyle.Success));
-                                    channel.send({ content: `<@${setupData.adminId}> 📍 Coordinates grabbed: **${p.Position.x.toFixed(2)}, ${p.Position.y.toFixed(2)}, ${p.Position.z.toFixed(2)}**\nClick below to finish!`, components: [row] });
+                        for (const p of players) {
+                            // Catch console display names (Xbox gamertags, PSN names, or in-game names)
+                            const name = p.DisplayName || p.name || p.Username || '';
+                            
+                            let matchedAdminName = null;
+                            for (const queuedName of adminPosQueue.keys()) {
+                                if (name.toLowerCase().includes(queuedName.toLowerCase())) {
+                                    matchedAdminName = queuedName;
+                                    break;
                                 }
                             }
-                            adminPosQueue.delete(matchedAdminName);
-                        }
 
-                        let matchedHomeName = null;
-                        for (const queuedName of homeSetQueue.keys()) {
-                            if (p.DisplayName.toLowerCase().includes(queuedName.toLowerCase())) {
-                                matchedHomeName = queuedName;
-                                break;
+                            if (matchedAdminName) {
+                                const setupData = adminPosQueue.get(matchedAdminName);
+                                if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
+
+                                const channel = client.channels.cache.get(setupData.channelId);
+                                
+                                // Catch position keys sent by console RCON
+                                const pos = p.Position || p.pos || p.position;
+
+                                if (channel && pos) {
+                                    const posX = pos.x ?? pos[0] ?? 0;
+                                    const posY = pos.y ?? pos[1] ?? 0;
+                                    const posZ = pos.z ?? pos[2] ?? 0;
+
+                                    if (setupData.type === 'cargodock') {
+                                        await GuildConfig.upsert({ guildId: guildId, cargoDockX: posX, cargoDockY: posY, cargoDockZ: posZ });
+                                        channel.send({ content: `✅ <@${setupData.adminId}> **Cargo Dock Position Saved!**\nCoordinates: \`X: ${posX.toFixed(2)}, Y: ${posY.toFixed(2)}, Z: ${posZ.toFixed(2)}\`` });
+                                    } else {
+                                        const coords = `${posX.toFixed(2)}_${posY.toFixed(2)}_${posZ.toFixed(2)}`;
+                                        const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`btn_finalize_tpl_${setupData.type}_${coords}`).setLabel('📍 Finalize Setup').setStyle(ButtonStyle.Success));
+                                        channel.send({ content: `<@${setupData.adminId}> 📍 Coordinates grabbed: **${posX.toFixed(2)}, ${posY.toFixed(2)}, ${posZ.toFixed(2)}**\nClick below to finish!`, components: [row] });
+                                    }
+                                }
+                                adminPosQueue.delete(matchedAdminName);
+                            }
+
+                            let matchedHomeName = null;
+                            for (const queuedName of homeSetQueue.keys()) {
+                                if (name.toLowerCase().includes(queuedName.toLowerCase())) {
+                                    matchedHomeName = queuedName;
+                                    break;
+                                }
+                            }
+
+                            if (matchedHomeName) {
+                                const gid = homeSetQueue.get(matchedHomeName);
+                                const userProfile = await UserEconomy.findOne({ where: { guildId: gid, inGameName: matchedHomeName } });
+                                if (userProfile && p.Position) {
+                                    const homePos = p.Position;
+                                    await userProfile.update({ homeX: homePos.x ?? homePos[0], homeY: homePos.y ?? homePos[1], homeZ: homePos.z ?? homePos[2] });
+                                    await sendRconCommand(gid, `say "[BuddyBot] ${name}, Base Location saved!"`);
+                                }
+                                homeSetQueue.delete(matchedHomeName);
                             }
                         }
-                        
-                        if (matchedHomeName) {
-                            const gid = homeSetQueue.get(matchedHomeName);
-                            const userProfile = await UserEconomy.findOne({ where: { guildId: gid, inGameName: matchedHomeName } });
-                            if (userProfile && p.Position) {
-                                await userProfile.update({ homeX: p.Position.x, homeY: p.Position.y, homeZ: p.Position.z });
-                                sendRconCommand(gid, `say "[BuddyBot] ${p.DisplayName}, Base Location saved!"`);
-                            }
-                            homeSetQueue.delete(matchedHomeName);
-                        }
+                    } catch (err) {
+                        // Safe ignore for non-playerlist RCON messages
                     }
                     return; 
                 }
