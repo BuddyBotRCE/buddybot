@@ -1,5 +1,5 @@
 // ============================================================================
-// MASTER INTERACTION HANDLER - BUDDYBOT RCE
+// MASTER INTERACTION HANDLER - BUDDYBOT RCE (FULL ORGANIZED FILE)
 // ============================================================================
 
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelSelectMenuBuilder, RoleSelectMenuBuilder, UserSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType, PermissionFlagsBits } = require('discord.js');
@@ -36,12 +36,18 @@ const RUST_ITEMS = [
 
 module.exports = async (interaction, client) => {
     try {
+        // ====================================================================
+        // 1. SLASH COMMAND EXECUTOR
+        // ====================================================================
         if (interaction.isChatInputCommand()) {
             const command = client.commands.get(interaction.commandName);
             if (!command) return;
             return await command.execute(interaction);
         }
 
+        // ====================================================================
+        // 2. ROLE SELECT MENUS
+        // ====================================================================
         if (interaction.isRoleSelectMenu()) {
             if (interaction.customId.startsWith('bind_role_menu_')) {
                 const bindId = interaction.customId.split('_')[3];
@@ -63,6 +69,9 @@ module.exports = async (interaction, client) => {
             }
         }
         
+        // ====================================================================
+        // 3. CHANNEL SELECT MENUS
+        // ====================================================================
         if (interaction.isChannelSelectMenu()) {
             if (interaction.customId === 'select_crosschat_channel') {
                 await GuildConfig.upsert({ guildId: interaction.guild.id, crossChatChannelId: interaction.values[0] });
@@ -86,6 +95,9 @@ module.exports = async (interaction, client) => {
             }
         }
         
+        // ====================================================================
+        // 4. USER SELECT MENUS
+        // ====================================================================
         if (interaction.isUserSelectMenu()) {
             if (interaction.customId === 'select_give_item_target') {
                 const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.values[0] } });
@@ -126,22 +138,31 @@ module.exports = async (interaction, client) => {
             }
         }
 
+        // ====================================================================
+        // 5. STRING SELECT MENUS (ADMIN PANEL & DROPDOWNS)
+        // ====================================================================
         if (interaction.isStringSelectMenu()) {
             const module = interaction.values[0];
 
             if (interaction.customId === 'select_pve_delete_exec') {
+                await interaction.deferUpdate();
                 const zoneId = module;
                 const zone = await PveZone.findByPk(zoneId);
-                if (!zone) return interaction.reply({ content: '❌ Zone not found or already deleted.', flags: 64 });
+                if (!zone) return interaction.followUp({ content: '❌ Zone not found or already deleted.', flags: 64 });
 
                 const zoneName = zone.zoneName;
                 await zone.destroy();
-                return interaction.update({ content: `✅ Successfully deleted the PVE Zone **"${zoneName}"**!`, components: [] });
+                try {
+                    await sendRconCommand(interaction.guild.id, `zones.deletecustomzone "${zoneName}"`);
+                } catch (e) {}
+                return interaction.editReply({ content: `✅ Successfully deleted the PVE Zone **"${zoneName}"** from database and in-game server!`, components: [] });
             }
-            if (module === 'setup_killfeed') {
-                    const row = new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_killfeed_channel').setPlaceholder('Select killfeed channel...').addChannelTypes(ChannelType.GuildText));
-                    return interaction.reply({ content: '💀 Select a text channel for the killfeed:', components: [row], flags: 64 });
-                }
+
+            if (interaction.customId === 'select_pve_toggle_area') {
+                const zoneName = module.replace('toggle_zone_', '');
+                await sendRconCommand(interaction.guild.id, `zones.editcustomzone "${zoneName}" "showarea" 1`);
+                return interaction.update({ content: `👁️ Visual outline toggled ON in-game for zone **"${zoneName}"**!`, components: [] });
+            }
 
             if (interaction.customId === 'admin_menu_select') {
                 if (module === 'setup_shop') {
@@ -227,7 +248,8 @@ module.exports = async (interaction, client) => {
                     const row = new ActionRowBuilder().addComponents(
                         new ButtonBuilder().setCustomId('btn_pve_create').setLabel('Create PVE Zone').setStyle(ButtonStyle.Success).setEmoji('➕'),
                         new ButtonBuilder().setCustomId('btn_pve_list').setLabel('View Zone Details').setStyle(ButtonStyle.Secondary).setEmoji('📋'),
-                        new ButtonBuilder().setCustomId('btn_pve_delete_menu').setLabel('Delete PVE Zone').setStyle(ButtonStyle.Danger).setEmoji('🗑️')
+                        new ButtonBuilder().setCustomId('btn_pve_delete_menu').setLabel('Delete Zone').setStyle(ButtonStyle.Danger).setEmoji('🗑️'),
+                        new ButtonBuilder().setCustomId('btn_pve_wipe_all').setLabel('Wipe All Zones').setStyle(ButtonStyle.Danger).setEmoji('☢️')
                     );
                     return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
                 }
@@ -650,6 +672,9 @@ module.exports = async (interaction, client) => {
             }
         }
 
+        // ====================================================================
+        // 6. BUTTON CLICKS
+        // ====================================================================
         if (interaction.isButton()) {
             if (interaction.customId.startsWith('lb_refresh_')) {
                 const category = interaction.customId.replace('lb_refresh_', '');
@@ -816,8 +841,36 @@ module.exports = async (interaction, client) => {
                 const zones = await PveZone.findAll({ where: { guildId: interaction.guild.id } });
                 if (zones.length === 0) return interaction.reply({ content: '❌ No PVE zones registered.', flags: 64 });
                 
-                const list = zones.map(z => `🏕️ **${z.zoneName}**\n• Shape: \`${z.shape}\` | Size/Dimensions: \`${z.size}\` | Color: \`${z.color}\`\n• Pos: \`X: ${z.x}, Y: ${z.y}, Z: ${z.z}\`\n• Enter Msg: *${z.enterMessage}*\n• Exit Msg: *${z.exitMessage}*\n`).join('\n');
-                return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🏕️ Registered PVE Zones').setDescription(list).setColor('#1abc9c')], flags: 64 });
+                const list = zones.map(z => `🏕️ **${z.zoneName}**\n• Shape: \`${z.shape}\` | Size: \`${z.size}\` | Color: \`${z.color}\`\n• Pos: \`X: ${z.x}, Y: ${z.y}, Z: ${z.z}\`\n`).join('\n');
+                
+                const options = zones.map(z => ({
+                    label: `Toggle Outline: ${z.zoneName}`,
+                    description: `Turn visual boundary on/off for ${z.zoneName}`,
+                    value: `toggle_zone_${z.zoneName}`
+                }));
+
+                const row = new ActionRowBuilder().addComponents(
+                    new StringSelectMenuBuilder()
+                        .setCustomId('select_pve_toggle_area')
+                        .setPlaceholder('Select a zone to toggle in-game outline...')
+                        .addOptions(options)
+                );
+
+                return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🏕️ Registered PVE Zones').setDescription(list).setColor('#1abc9c')], components: [row], flags: 64 });
+            }
+
+            if (interaction.customId === 'btn_pve_wipe_all') {
+                await interaction.deferReply({ flags: 64 });
+                const zones = await PveZone.findAll({ where: { guildId: interaction.guild.id } });
+                if (zones.length === 0) return interaction.editReply({ content: '❌ No PVE zones to wipe.' });
+
+                for (const z of zones) {
+                    try {
+                        await sendRconCommand(interaction.guild.id, `zones.deletecustomzone "${z.zoneName}"`);
+                    } catch (e) {}
+                }
+                await PveZone.destroy({ where: { guildId: interaction.guild.id } });
+                return interaction.editReply({ content: `☢️ Successfully wiped **all PVE zones** from the database and in-game server!` });
             }
 
             if (interaction.customId === 'btn_ae_toggle') {
@@ -937,7 +990,12 @@ module.exports = async (interaction, client) => {
                 return interaction.showModal(modal);
             }
             if (interaction.customId === 'btn_wipe_selective') {
-                const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('select_wipe_custom').setPlaceholder('Select...').setMinValues(1).setMaxValues(3).addOptions([{ label: 'Economy', value: 'wipe_econ' }, { label: 'Bases', value: 'wipe_tp' }, { label: 'BuddyPass', value: 'wipe_bp' }]));
+                const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('select_wipe_custom').setPlaceholder('Select...').setMinValues(1).setMaxValues(4).addOptions([
+                    { label: 'Economy', value: 'wipe_econ' }, 
+                    { label: 'Bases & TPs', value: 'wipe_tp' }, 
+                    { label: 'BuddyPass', value: 'wipe_bp' },
+                    { label: 'PVE Zones', value: 'wipe_zones' }
+                ]));
                 return interaction.reply({ content: 'Select modules to wipe:', components: [row], flags: 64 });
             }
             if (interaction.customId === 'rcon_quick_connect') {
@@ -1233,6 +1291,9 @@ module.exports = async (interaction, client) => {
             }
         }
 
+        // ====================================================================
+        // 7. MODAL SUBMISSIONS
+        // ====================================================================
         if (interaction.isModalSubmit()) {
             if (interaction.customId === 'modal_ai_credentials') {
                 const apiKey = interaction.fields.getTextInputValue('ai_key');
@@ -1318,7 +1379,6 @@ module.exports = async (interaction, client) => {
                     finalSize = parseFloat(sizeInput) || 50;
                 }
 
-                // 1. Save locally to Database
                 await PveZone.create({
                     guildId: interaction.guild.id,
                     zoneName,
@@ -1330,15 +1390,13 @@ module.exports = async (interaction, client) => {
                     exitMessage
                 });
 
-                // 2. Map color names to RGB values for Rust Console Edition custom zones
-                let rgbColor = "0,255,0"; // Default Green
+                let rgbColor = "0,255,0";
                 if (colorInput.includes('blue')) rgbColor = "0,0,255";
                 else if (colorInput.includes('red')) rgbColor = "255,0,0";
                 else if (colorInput.includes('yellow')) rgbColor = "255,255,0";
                 else if (colorInput.includes('purple')) rgbColor = "128,0,128";
                 else if (colorInput.includes('cyan')) rgbColor = "0,255,255";
 
-                // 3. Send native RCE zone creation & visibility commands via RCON to GPortal
                 const rconShape = shape === 'box' ? 'Box' : 'Sphere';
                 const formattedSize = shape === 'box' ? `(${finalSize})` : finalSize;
                 
@@ -1740,7 +1798,7 @@ module.exports = async (interaction, client) => {
                 const cd = parseInt(interaction.fields.getTextInputValue('item_cooldown')) || 0;
                 const newItem = await ShopItem.create({ guildId: interaction.guild.id, name, command: cmd, price, category: 'custom', cooldownSeconds: cd });
                 const roleMenu = new RoleSelectMenuBuilder().setCustomId(`shop_role_${newItem.id}`).setPlaceholder('Select required Discord role (Optional)...');
-                return interaction.reply({ content: `✅ Custom item **${name}** added! Optional role restriction:`, components: [new ActionRowBuilder().addComponents(new ActionRowBuilder().addComponents(roleMenu))], flags: 64 });
+                return interaction.reply({ content: `✅ Custom item **${name}** added! Optional role restriction:`, components: [new ActionRowBuilder().addComponents(roleMenu)], flags: 64 });
             }
             if (interaction.customId === 'modal_shop_multiplier') {
                 const mult = parseInt(interaction.fields.getTextInputValue('multiplier'));
@@ -1754,12 +1812,25 @@ module.exports = async (interaction, client) => {
             if (interaction.customId === 'modal_wipe_full' || interaction.customId.startsWith('modal_wipe_sel_')) {
                 if (interaction.fields.getTextInputValue('confirm_text') !== 'WIPE') return interaction.reply({ content: '❌ Cancelled.', flags: 64 });
                 let updateData = {}; 
-                if (interaction.customId === 'modal_wipe_full') updateData = { wallet: 0, xp: 0, level: 1, homeX: null, homeY: null, homeZ: null };
-                else {
+                if (interaction.customId === 'modal_wipe_full') {
+                    const allZones = await PveZone.findAll({ where: { guildId: interaction.guild.id } });
+                    for (const z of allZones) {
+                        try { await sendRconCommand(interaction.guild.id, `zones.deletecustomzone "${z.zoneName}"`); } catch (e) {}
+                    }
+                    await PveZone.destroy({ where: { guildId: interaction.guild.id } });
+                    updateData = { wallet: 0, xp: 0, level: 1, homeX: null, homeY: null, homeZ: null };
+                } else {
                     const sel = interaction.customId.replace('modal_wipe_sel_', '').split('-');
                     if (sel.includes('wipe_econ')) updateData.wallet = 0;
                     if (sel.includes('wipe_bp')) { updateData.xp = 0; updateData.level = 1; }
                     if (sel.includes('wipe_tp')) { updateData.homeX = null; updateData.homeY = null; updateData.homeZ = null; }
+                    if (sel.includes('wipe_zones')) {
+                        const selZones = await PveZone.findAll({ where: { guildId: interaction.guild.id } });
+                        for (const z of selZones) {
+                            try { await sendRconCommand(interaction.guild.id, `zones.deletecustomzone "${z.zoneName}"`); } catch (e) {}
+                        }
+                        await PveZone.destroy({ where: { guildId: interaction.guild.id } });
+                    }
                 }
                 await UserEconomy.update(updateData, { where: { guildId: interaction.guild.id } });
                 return interaction.reply({ content: `☢️ WIPED!` });
