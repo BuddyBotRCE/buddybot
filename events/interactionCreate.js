@@ -1309,7 +1309,7 @@ module.exports = async (interaction, client) => {
 
                 const zoneName = interaction.fields.getTextInputValue('zone_name');
                 const sizeInput = interaction.fields.getTextInputValue('zone_size');
-                const color = interaction.fields.getTextInputValue('zone_color');
+                const colorInput = interaction.fields.getTextInputValue('zone_color').toLowerCase();
                 const enterMessage = interaction.fields.getTextInputValue('enter_msg');
                 const exitMessage = interaction.fields.getTextInputValue('exit_msg');
 
@@ -1318,18 +1318,37 @@ module.exports = async (interaction, client) => {
                     finalSize = parseFloat(sizeInput) || 50;
                 }
 
+                // 1. Save locally to Database
                 await PveZone.create({
                     guildId: interaction.guild.id,
                     zoneName,
                     shape,
                     x, y, z,
                     size: finalSize,
-                    color,
+                    color: colorInput,
                     enterMessage,
                     exitMessage
                 });
 
-                return interaction.reply({ content: `✅ Custom PVE Zone **"${zoneName}"** created successfully!\n• Shape: \`${shape}\` | Size/Dimensions: \`${finalSize}\` | Color: \`${color}\`\n• Center Position: \`X: ${x}, Y: ${y}, Z: ${z}\`\n• Enter Msg: *${enterMessage}*\n• Exit Msg: *${exitMessage}*`, flags: 64 });
+                // 2. Map color names to RGB values for Rust Console Edition custom zones
+                let rgbColor = "0,255,0"; // Default Green
+                if (colorInput.includes('blue')) rgbColor = "0,0,255";
+                else if (colorInput.includes('red')) rgbColor = "255,0,0";
+                else if (colorInput.includes('yellow')) rgbColor = "255,255,0";
+                else if (colorInput.includes('purple')) rgbColor = "128,0,128";
+                else if (colorInput.includes('cyan')) rgbColor = "0,255,255";
+
+                // 3. Send native RCE zone creation & visibility commands via RCON to GPortal
+                const rconShape = shape === 'box' ? 'Box' : 'Sphere';
+                const formattedSize = shape === 'box' ? `(${finalSize})` : finalSize;
+                
+                await sendRconCommand(interaction.guild.id, `zones.createcustomzone "${zoneName}" (${x},${y},${z}) 0 ${rconShape} ${formattedSize} 0 0 0 0 1`);
+                await sendRconCommand(interaction.guild.id, `zones.editcustomzone "${zoneName}" "showarea" 1`);
+                await sendRconCommand(interaction.guild.id, `zones.editcustomzone "${zoneName}" "color" "(${rgbColor})"`);
+                await sendRconCommand(interaction.guild.id, `zones.editcustomzone "${zoneName}" "entermessage" "${enterMessage}"`);
+                await sendRconCommand(interaction.guild.id, `zones.editcustomzone "${zoneName}" "leavemessage" "${exitMessage}"`);
+
+                return interaction.reply({ content: `✅ Custom PVE Zone **"${zoneName}"** created and outlined in-game!\n• Shape: \`${shape}\` | Size: \`${finalSize}\` | Color: \`${colorInput}\`\n• Center Position: \`X: ${x}, Y: ${y}, Z: ${z}\``, flags: 64 });
             }
 
             if (interaction.customId === 'modal_ae_config') {
