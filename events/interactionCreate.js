@@ -131,6 +131,15 @@ module.exports = async (interaction, client) => {
         if (interaction.isStringSelectMenu()) {
             const module = interaction.values[0];
 
+            if (interaction.customId === 'select_pve_delete_exec') {
+                const zoneId = module; // module holds interaction.values[0]
+                const zone = await PveZone.findByPk(zoneId);
+                if (!zone) return interaction.reply({ content: '❌ Zone not found or already deleted.', flags: 64 });
+
+                const zoneName = zone.zoneName;
+                await zone.destroy();
+                return interaction.update({ content: `✅ Successfully deleted the PVE Zone **"${zoneName}"**!`, components: [] });
+            }
             if (interaction.customId === 'admin_menu_select') {
                 if (module === 'setup_shop') {
                     const embed = new EmbedBuilder().setTitle('🛒 Server Shop Manager').setDescription('Add prebuilt catalog items, custom gear, or adjust pricing multipliers.').setColor('#e67e22');
@@ -203,7 +212,7 @@ module.exports = async (interaction, client) => {
                     return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
                 }
 
-                if (module === 'setup_pvezones') {
+          if (module === 'setup_pvezones') {
                     const zones = await PveZone.findAll({ where: { guildId: interaction.guild.id } });
                     const zoneList = zones.length ? zones.map(z => `• **${z.zoneName}** (${z.shape.toUpperCase()}, Size: ${z.size})`).join('\n') : 'No custom PVE zones configured yet.';
 
@@ -214,11 +223,11 @@ module.exports = async (interaction, client) => {
 
                     const row = new ActionRowBuilder().addComponents(
                         new ButtonBuilder().setCustomId('btn_pve_create').setLabel('Create PVE Zone').setStyle(ButtonStyle.Success).setEmoji('➕'),
-                        new ButtonBuilder().setCustomId('btn_pve_list').setLabel('View Zone Details').setStyle(ButtonStyle.Secondary).setEmoji('📋')
+                        new ButtonBuilder().setCustomId('btn_pve_list').setLabel('View Zone Details').setStyle(ButtonStyle.Secondary).setEmoji('📋'),
+                        new ButtonBuilder().setCustomId('btn_pve_delete_menu').setLabel('Delete PVE Zone').setStyle(ButtonStyle.Danger).setEmoji('🗑️')
                     );
                     return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
                 }
-
                 if (module === 'setup_autoevents') {
                     const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
                     const isPremium = config?.isPremiumServer || false;
@@ -656,6 +665,7 @@ module.exports = async (interaction, client) => {
                 );
                 return interaction.showModal(modal);
             }
+
 
             if (interaction.customId === 'btn_econ_name') {
                 const modal = new ModalBuilder().setCustomId('modal_setup_economy').setTitle('Configure Currency');
