@@ -30,36 +30,55 @@ async function connectRcon(guildId, client) {
                 const msg = parsed.Message;
                 const msgLower = msg.toLowerCase();
 
-                // 1. COORDINATE TRACKER (Updated for Cargo Dock)
+                // 1. COORDINATE TRACKER (Fixed Name Matching & Button IDs)
                 if (msg.trim().startsWith('[') && msg.includes('SteamID') && msg.includes('Position')) {
                     const players = JSON.parse(msg);
                     for (const p of players) {
-                        if (adminPosQueue.has(p.DisplayName)) {
-                            const setupData = adminPosQueue.get(p.DisplayName);
+                        
+                        // FIX 1: Loose matching for names (ignores caps and clan tags)
+                        let matchedAdminName = null;
+                        for (const queuedName of adminPosQueue.keys()) {
+                            if (p.DisplayName.toLowerCase().includes(queuedName.toLowerCase())) {
+                                matchedAdminName = queuedName;
+                                break;
+                            }
+                        }
+
+                        if (matchedAdminName) {
+                            const setupData = adminPosQueue.get(matchedAdminName);
                             const channel = client.channels.cache.get(setupData.channelId);
                             if (channel && p.Position) {
                                 
-                                // Direct Save for Cargo Dock (No extra button needed)
                                 if (setupData.type === 'cargodock') {
                                     await GuildConfig.upsert({ guildId: guildId, cargoDockX: p.Position.x, cargoDockY: p.Position.y, cargoDockZ: p.Position.z });
                                     channel.send({ content: `✅ <@${setupData.adminId}> **Cargo Dock Position Saved!**\nCoordinates: \`X: ${p.Position.x.toFixed(2)}, Y: ${p.Position.y.toFixed(2)}, Z: ${p.Position.z.toFixed(2)}\`` });
                                 } else {
-                                    // Standard Finalize Button for Custom Binds & PVE Zones
                                     const coords = `${p.Position.x.toFixed(2)}_${p.Position.y.toFixed(2)}_${p.Position.z.toFixed(2)}`;
-                                    const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`btn_finalize_${setupData.type}_${coords}`).setLabel('📍 Finalize Setup').setStyle(ButtonStyle.Success));
+                                    // FIX 2: Added "tpl_" to the button ID so it connects perfectly to interactionCreate.js
+                                    const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`btn_finalize_tpl_${setupData.type}_${coords}`).setLabel('📍 Finalize Setup').setStyle(ButtonStyle.Success));
                                     channel.send({ content: `<@${setupData.adminId}> 📍 Coordinates grabbed: **${p.Position.x.toFixed(2)}, ${p.Position.y.toFixed(2)}, ${p.Position.z.toFixed(2)}**\nClick below to finish!`, components: [row] });
                                 }
                             }
-                            adminPosQueue.delete(p.DisplayName);
+                            adminPosQueue.delete(matchedAdminName);
                         }
-                        if (homeSetQueue.has(p.DisplayName)) {
-                            const gid = homeSetQueue.get(p.DisplayName);
-                            const userProfile = await UserEconomy.findOne({ where: { guildId: gid, inGameName: p.DisplayName } });
+
+                        // Loose match for TP home setting
+                        let matchedHomeName = null;
+                        for (const queuedName of homeSetQueue.keys()) {
+                            if (p.DisplayName.toLowerCase().includes(queuedName.toLowerCase())) {
+                                matchedHomeName = queuedName;
+                                break;
+                            }
+                        }
+                        
+                        if (matchedHomeName) {
+                            const gid = homeSetQueue.get(matchedHomeName);
+                            const userProfile = await UserEconomy.findOne({ where: { guildId: gid, inGameName: matchedHomeName } });
                             if (userProfile && p.Position) {
                                 await userProfile.update({ homeX: p.Position.x, homeY: p.Position.y, homeZ: p.Position.z });
                                 sendRconCommand(gid, `say "[BuddyBot] ${p.DisplayName}, Base Location saved!"`);
                             }
-                            homeSetQueue.delete(p.DisplayName);
+                            homeSetQueue.delete(matchedHomeName);
                         }
                     }
                     return; 
@@ -134,7 +153,6 @@ async function triggerCustomEvent(guildId, eventType, data = {}) {
         if (config && config.cargoDockX !== null && config.cargoDockY !== null && config.cargoDockZ !== null) {
             return await sendRconCommand(guildId, `spawn cargoship ${config.cargoDockX} ${config.cargoDockY} ${config.cargoDockZ}`);
         }
-        // Fallback to normal cargo if no dock position is configured
         return await sendRconCommand(guildId, 'event_cargoship');
     }
     throw new Error('Unknown custom event type.');
