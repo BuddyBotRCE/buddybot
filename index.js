@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, Collection, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, Collection, EmbedBuilder, REST, Routes } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 
@@ -49,13 +49,13 @@ if (fs.existsSync(eventsPath)) {
 client.once('ready', async () => {
     console.log(`[SYSTEM] BuddyBotRCE is online as ${client.user.tag}`);
 
-    // Sync Discord Commands
-    const rest = require('@discordjs/rest').REST.setToken(process.env.DISCORD_TOKEN);
+    // Sync Discord Commands (Fixed with 'new REST')
+    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     const commandData = client.commands.map(cmd => cmd.data.toJSON());
     
     try {
         await rest.put(
-            require('discord-js').Routes.applicationCommands(client.user.id),
+            Routes.applicationCommands(client.user.id),
             { body: commandData },
         );
         console.log('[SYSTEM] Discord command cache wiped and cleanly synced.');
