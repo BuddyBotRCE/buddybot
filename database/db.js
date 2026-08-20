@@ -1,12 +1,31 @@
 const { Sequelize, DataTypes } = require('sequelize');
 const path = require('path');
 
-const storagePath = process.env.DATABASE_STORAGE || path.join(__dirname, '../database.sqlite');
-const sequelize = new Sequelize({
-    dialect: 'sqlite',
-    storage: storagePath,
-    logging: false
-});
+let sequelize;
+
+if (process.env.DATABASE_URL) {
+    // Production: Use PostgreSQL (Railway persistent database)
+    sequelize = new Sequelize(process.env.DATABASE_URL, {
+        dialect: 'postgres',
+        logging: false,
+        dialectOptions: {
+            ssl: {
+                require: true,
+                rejectUnauthorized: false
+            }
+        }
+    });
+    console.log('[DATABASE] Connected to production PostgreSQL database.');
+} else {
+    // Local Testing: Fallback to local SQLite file
+    const storagePath = process.env.DATABASE_STORAGE || path.join(__dirname, '../database.sqlite');
+    sequelize = new Sequelize({
+        dialect: 'sqlite',
+        storage: storagePath,
+        logging: false
+    });
+    console.log('[DATABASE] Connected to local SQLite database.');
+}
 
 const GuildConfig = sequelize.define('GuildConfig', {
     guildId: { type: DataTypes.STRING, primaryKey: true },
@@ -42,7 +61,6 @@ const GuildConfig = sequelize.define('GuildConfig', {
     voteUrl: { type: DataTypes.STRING, allowNull: true },
     voteRewardAmount: { type: DataTypes.INTEGER, defaultValue: 250 },
     isPremiumServer: { type: DataTypes.BOOLEAN, defaultValue: false },
-    // Stripe Subscription Fields
     stripeCustomerId: { type: DataTypes.STRING, allowNull: true },
     subscriptionStatus: { type: DataTypes.STRING, defaultValue: 'inactive' },
     subscriptionExpiresAt: { type: DataTypes.DATE, allowNull: true },
@@ -179,7 +197,7 @@ const PveZone = sequelize.define('PveZone', {
 async function initDb() {
     await sequelize.authenticate();
     await sequelize.sync();
-    console.log('[DATABASE] Synced securely.');
+    console.log('[DATABASE] Tables synchronized successfully.');
 }
 
 initDb();
