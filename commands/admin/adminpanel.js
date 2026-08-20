@@ -8,12 +8,12 @@ module.exports = {
         
     async execute(interaction) {
         const adminEmbed = new EmbedBuilder()
-            .setTitle('🛠️ Admin Panel')
-            .setDescription('Configure bot modules, shops, and server economies.')
+            .setTitle('🛠️ Admin Panel & Dashboard')
+            .setDescription('Configure bot modules, shops, custom embeds, and server economies.')
             .setColor('#2b2d31');
         
         const row1 = new ActionRowBuilder().addComponents(
-            new StringSelectMenuBuilder().setCustomId('admin_menu_select').setPlaceholder('Select a module...')
+            new StringSelectMenuBuilder().setCustomId('admin_menu_select').setPlaceholder('Select a module to configure...')
                 .addOptions([
                     { label: 'RCON Server', value: 'setup_rcon', emoji: '🌐' },
                     { label: 'Live Admin Tools', value: 'admin_tools', emoji: '🧰' },
@@ -28,14 +28,14 @@ module.exports = {
                     { label: 'Custom Binds', value: 'setup_binds', emoji: '🗣️' },
                     { label: 'Cross-Chat', value: 'setup_crosschat', emoji: '💬' },
                     { label: 'ORP Manager', value: 'setup_orp', emoji: '🛡️' },
-                    { label: 'AI Integration Setup', value: 'setup_ai', emoji: '🤖' },
-                    { label: 'Killfeed Channel', value: 'setup_killfeed', emoji: '💀' },
+                    { label: 'AI Integration Setup', value: 'setup_ai', emoji: '🤖' }
                 ])
         );
 
         const row2 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('btn_giveaway_panel').setLabel('Giveaways').setStyle(ButtonStyle.Secondary).setEmoji('🎉'),
-            new ButtonBuilder().setCustomId('wipe_panel_open').setLabel('Wipe Panel').setStyle(ButtonStyle.Danger)
+            new ButtonBuilder().setCustomId('wipe_panel_open').setLabel('Wipe Panel').setStyle(ButtonStyle.Danger).setEmoji('☢️'),
+            new ButtonBuilder().setCustomId('btn_admin_embed_helper').setLabel('Post Custom Embed').setStyle(ButtonStyle.Primary).setEmoji('📢')
         );
 
         await interaction.reply({ embeds: [adminEmbed], components: [row1, row2], flags: 64 });

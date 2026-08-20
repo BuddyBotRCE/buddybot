@@ -164,6 +164,70 @@ module.exports = async (interaction, client) => {
                 return interaction.update({ content: `👁️ Visual outline toggled ON in-game for zone **"${zoneName}"**!`, components: [] });
             }
 
+            if (interaction.customId === 'hub_lb_select') {
+                const category = module;
+                const guildId = interaction.guild.id;
+                const config = await GuildConfig.findOne({ where: { guildId } });
+                const currency = config ? config.economyCurrency : 'Scrap';
+                const allPlayers = await UserEconomy.findAll({ where: { guildId } });
+                let leaderboardText = '';
+                let embedTitle = '';
+                let embedColor = '';
+
+                if (category === 'wealth') {
+                    const sortedPlayers = allPlayers.sort((a, b) => (b.wallet + b.bank) - (a.wallet + a.bank)).slice(0, 10);
+                    embedTitle = '💰 Wealth Leaderboard';
+                    embedColor = '#FFD700';
+                    sortedPlayers.forEach((player, index) => {
+                        const rank = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `**#${index + 1}**`;
+                        const totalWealth = player.wallet + player.bank;
+                        const ign = player.inGameName ? `**${player.inGameName}**` : 'Unlinked';
+                        leaderboardText += `${rank} ${ign} (<@${player.userId}>) - **${totalWealth}** ${currency}\n`;
+                    });
+                } else if (category === 'level') {
+                    const sortedPlayers = allPlayers.sort((a, b) => {
+                        if (b.level === a.level) return b.xp - a.xp;
+                        return b.level - a.level;
+                    }).slice(0, 10);
+                    embedTitle = '⭐ BuddyPass Leaderboard';
+                    embedColor = '#00ff00';
+                    sortedPlayers.forEach((player, index) => {
+                        const rank = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `**#${index + 1}**`;
+                        const ign = player.inGameName ? `**${player.inGameName}**` : 'Unlinked';
+                        leaderboardText += `${rank} ${ign} (<@${player.userId}>) - **Level ${player.level || 1}** (${player.xp || 0} XP)\n`;
+                    });
+                } else if (category === 'pvp') {
+                    const sortedPlayers = allPlayers.sort((a, b) => {
+                        const kdRatioA = a.deaths === 0 ? a.pvpKills : (a.pvpKills / a.deaths);
+                        const kdRatioB = b.deaths === 0 ? b.pvpKills : (b.pvpKills / b.deaths);
+                        if (kdRatioB === kdRatioA) return b.pvpKills - a.pvpKills;
+                        return kdRatioB - kdRatioA;
+                    }).slice(0, 10);
+                    embedTitle = '⚔️ PvP K/D Leaderboard';
+                    embedColor = '#e74c3c';
+                    sortedPlayers.forEach((player, index) => {
+                        const rank = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `**#${index + 1}**`;
+                        const ign = player.inGameName ? `**${player.inGameName}**` : 'Unlinked';
+                        const kills = player.pvpKills || 0;
+                        const deaths = player.deaths || 0;
+                        const kd = deaths === 0 ? kills.toFixed(2) : (kills / deaths).toFixed(2);
+                        leaderboardText += `${rank} ${ign} (<@${player.userId}>) — **K: ${kills} | D: ${deaths} | KD: ${kd}**\n`;
+                    });
+                }
+
+                const embed = new EmbedBuilder()
+                    .setTitle(embedTitle)
+                    .setDescription(leaderboardText || 'No data recorded yet.')
+                    .setColor(embedColor)
+                    .setTimestamp();
+
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(`lb_refresh_${category}`).setLabel('Refresh').setStyle(ButtonStyle.Secondary).setEmoji('🔄')
+                );
+
+                return interaction.update({ content: null, embeds: [embed], components: [row] });
+            }
+
             if (interaction.customId === 'admin_menu_select') {
                 if (module === 'setup_shop') {
                     const embed = new EmbedBuilder().setTitle('🛒 Server Shop Manager').setDescription('Add prebuilt catalog items, custom gear, or adjust pricing multipliers.').setColor('#e67e22');
@@ -775,6 +839,46 @@ module.exports = async (interaction, client) => {
                 modal.addComponents(
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('interest_rate').setLabel("Interest Rate % (e.g. 2.5)").setStyle(TextInputStyle.Short).setRequired(true)),
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('interest_hours').setLabel("Interval in Hours").setStyle(TextInputStyle.Short).setValue('24').setRequired(true))
+                );
+                return interaction.showModal(modal);
+            }
+
+            // --- PLAYER HUB: LEADERBOARDS & VOTE INFO ---
+            if (interaction.customId === 'hub_leaderboards') {
+                const row = new ActionRowBuilder().addComponents(
+                    new StringSelectMenuBuilder()
+                        .setCustomId('hub_lb_select')
+                        .setPlaceholder('Choose a leaderboard category...')
+                        .addOptions([
+                            { label: 'Wealth Leaderboard', value: 'wealth', emoji: '💰' },
+                            { label: 'BuddyPass Level Leaderboard', value: 'level', emoji: '⭐' },
+                            { label: 'PvP K/D Leaderboard', value: 'pvp', emoji: '⚔️' }
+                        ])
+                );
+                return interaction.reply({ content: '🏆 **Server Leaderboards:** Select a category below to view rankings:', components: [row], flags: 64 });
+            }
+
+            if (interaction.customId === 'hub_vote_info') {
+                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+                const voteUrl = config?.voteUrl || 'https://rust-servers.net';
+                const reward = config?.voteRewardAmount || 250;
+                const currency = config?.economyCurrency || 'Scrap';
+
+                const embed = new EmbedBuilder()
+                    .setTitle('🗳️ Support Our Server')
+                    .setDescription(`Vote for our GPortal server to help us grow and earn **${reward} ${currency}**!\n\n🔗 **Vote Link:** [Click Here to Vote](${voteUrl})\n\n*After voting, use the command \`/claimvote\` to deliver your reward in-game!*`)
+                    .setColor('#e67e22');
+                return interaction.reply({ embeds: [embed], flags: 64 });
+            }
+
+            // --- ADMIN: CUSTOM EMBED BUILDER TRIGGER ---
+            if (interaction.customId === 'btn_admin_embed_helper') {
+                const modal = new ModalBuilder().setCustomId('modal_admin_embed').setTitle('Create Custom Embed');
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('channel_id').setLabel("Target Channel ID").setStyle(TextInputStyle.Short).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel("Embed Title").setStyle(TextInputStyle.Short).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('description').setLabel("Description (supports \\n)").setStyle(TextInputStyle.Paragraph).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('color').setLabel("Hex Color (e.g. #3498db)").setStyle(TextInputStyle.Short).setValue('#2b2d31').setRequired(false))
                 );
                 return interaction.showModal(modal);
             }
@@ -1444,6 +1548,26 @@ module.exports = async (interaction, client) => {
                 const crates = parseInt(interaction.fields.getTextInputValue('crate_amount')) || 3;
                 await GuildConfig.upsert({ guildId: interaction.guild.id, cargoCrateCount: crates });
                 return interaction.reply({ content: `✅ Cargo ship crate quantity successfully set to **${crates} crates**!`, flags: 64 });
+            }
+
+            // --- ADMIN EMBED MODAL SUBMISSION ---
+            if (interaction.customId === 'modal_admin_embed') {
+                const channelId = interaction.fields.getTextInputValue('channel_id');
+                const title = interaction.fields.getTextInputValue('title');
+                const description = interaction.fields.getTextInputValue('description');
+                const color = interaction.fields.getTextInputValue('color') || '#2b2d31';
+
+                const targetChannel = interaction.guild.channels.cache.get(channelId);
+                if (!targetChannel) return interaction.reply({ content: '❌ Invalid Channel ID provided.', flags: 64 });
+
+                const embed = new EmbedBuilder()
+                    .setTitle(title)
+                    .setDescription(description.replace(/\\n/g, '\n'))
+                    .setColor(color)
+                    .setTimestamp();
+
+                await targetChannel.send({ embeds: [embed] });
+                return interaction.reply({ content: `✅ Custom embed successfully posted in <#${targetChannel.id}>!`, flags: 64 });
             }
 
             // --- AUTO-EVENT INTERVAL MODAL SUBMISSIONS ---
