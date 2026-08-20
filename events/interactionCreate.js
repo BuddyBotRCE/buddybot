@@ -8,6 +8,7 @@ const { Op } = require('sequelize');
 const { connectRcon, sendRconCommand, adminPosQueue, queueAdminPos } = require('../utils/rconManager');
 const { RUST_CATEGORIES } = require('../utils/rustCatalog');
 const discordTranscripts = require('discord-html-transcripts');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 const activeKitBuilders = new Map(); 
 
@@ -360,22 +361,29 @@ module.exports = async (interaction, client) => {
                         .setTitle('🏷️ BuddyBot License & Tier Manager')
                         .setDescription(`Current Server Status: **${isPremium ? '⭐ PREMIUM TIER' : '🆓 FREE TIER'}**\n\n` +
                             (isPremium 
-                                ? '✅ Your server has full access to all 20 casino minigames, automated RCON auto-events, and advanced modules.'
-                                : '⚠️ You are currently on the **Free Tier**. Click the button below to subscribe via Stripe and unlock all features!'))
+                                ? `✅ Your server has full access to all 20 casino minigames, automated RCON auto-events, and advanced modules.\n*Subscription Status:* \`${config?.subscriptionStatus || 'active'}\``
+                                : '⚠️ You are currently on the **Free Tier**. Subscribe via Stripe, then click **Verify Subscription** below to activate!'))
                         .setColor(isPremium ? '#f1c40f' : '#95a5a6');
 
-                    const row = new ActionRowBuilder().addComponents(
+                    const row1 = new ActionRowBuilder().addComponents(
                         new ButtonBuilder()
                             .setLabel('Upgrade to Premium (Stripe)')
                             .setStyle(ButtonStyle.Link)
                             .setURL('https://buy.stripe.com/8x29AU3Hg3vIazV7yn9bO01'),
+                        new ButtonBuilder()
+                            .setCustomId('btn_open_verify_modal')
+                            .setLabel('Verify Subscription')
+                            .setStyle(ButtonStyle.Success)
+                            .setEmoji('✔️')
+                    );
 
+                    const row2 = new ActionRowBuilder().addComponents(
                         new ButtonBuilder()
                             .setCustomId('toggle_tier_status')
                             .setLabel(isPremium ? 'Switch to Free (Admin)' : 'Force Activate Premium (Admin)')
                             .setStyle(isPremium ? ButtonStyle.Secondary : ButtonStyle.Success)
                     );
-                    return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+                    return interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
                 }
 
                 if (module === 'setup_tickets') {
@@ -839,6 +847,22 @@ module.exports = async (interaction, client) => {
                 modal.addComponents(
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('interest_rate').setLabel("Interest Rate % (e.g. 2.5)").setStyle(TextInputStyle.Short).setRequired(true)),
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('interest_hours').setLabel("Interval in Hours").setStyle(TextInputStyle.Short).setValue('24').setRequired(true))
+                );
+                return interaction.showModal(modal);
+            }
+
+            // --- ADMIN TIER / VERIFY MODAL TRIGGER ---
+            if (interaction.customId === 'btn_open_verify_modal') {
+                const modal = new ModalBuilder().setCustomId('modal_verify_email').setTitle('Verify Stripe Subscription');
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder()
+                            .setCustomId('stripe_email')
+                            .setLabel("Stripe Checkout Email")
+                            .setStyle(TextInputStyle.Short)
+                            .setPlaceholder('your@email.com')
+                            .setRequired(true)
+                    )
                 );
                 return interaction.showModal(modal);
             }
@@ -1576,6 +1600,46 @@ module.exports = async (interaction, client) => {
                 const crates = parseInt(interaction.fields.getTextInputValue('crate_amount')) || 3;
                 await GuildConfig.upsert({ guildId: interaction.guild.id, cargoCrateCount: crates });
                 return interaction.reply({ content: `✅ Cargo ship crate quantity successfully set to **${crates} crates**!`, flags: 64 });
+            }
+
+            // --- ADMIN TIER VERIFICATION SUBMISSION ---
+            if (interaction.customId === 'modal_verify_email') {
+                await interaction.deferReply({ flags: 64 });
+                const email = interaction.fields.getTextInputValue('stripe_email').trim().toLowerCase();
+                const guildId = interaction.guild.id;
+
+                try {
+                    const customers = await stripe.customers.list({ email: email, limit: 1 });
+                    if (customers.data.length === 0) {
+                        return interaction.editReply({ content: `❌ No Stripe customer found with the email **${email}**. Please make sure you used the correct email.` });
+                    }
+
+                    const customerId = customers.data[0].id;
+                    const subscriptions = await stripe.subscriptions.list({ customer: customerId, status: 'active', limit: 1 });
+
+                    if (subscriptions.data.length === 0) {
+                        return interaction.editReply({ content: `❌ Found customer account **${email}**, but no **active subscriptions** were detected. Please complete checkout or contact support.` });
+                    }
+
+                    await GuildConfig.upsert({
+                        guildId: guildId,
+                        isPremiumServer: true,
+                        stripeCustomerId: customerId,
+                        subscriptionStatus: 'active',
+                        subscriptionExpiresAt: new Date(subscriptions.data[0].current_period_end * 1000)
+                    });
+
+                    const embed = new EmbedBuilder()
+                        .setTitle('⭐ Premium Subscription Verified!')
+                        .setDescription(`Successfully verified active subscription for **${email}**!\n\n**${interaction.guild.name}** is now upgraded to **⭐ Premium Tier**. All 20 minigames and auto-events are unlocked!`)
+                        .setColor('#f1c40f')
+                        .setTimestamp();
+
+                    return interaction.editReply({ embeds: [embed] });
+                } catch (error) {
+                    console.error('[STRIPE VERIFY ERROR]', error);
+                    return interaction.editReply({ content: `❌ Error communicating with Stripe API: ${error.message}` });
+                }
             }
 
             // --- BANKING MODAL SUBMISSIONS ---
