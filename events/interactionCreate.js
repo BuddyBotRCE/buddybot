@@ -843,7 +843,23 @@ module.exports = async (interaction, client) => {
                 return interaction.showModal(modal);
             }
 
-            // --- PLAYER HUB: LEADERBOARDS, DEPOSIT, WITHDRAW & VOTE INFO ---
+            // --- PLAYER HUB: ECONOMY SUB-MENU, LEADERBOARDS & VOTE INFO ---
+            if (interaction.customId === 'hub_economy_menu') {
+                const embed = new EmbedBuilder()
+                    .setTitle('🏦 Economy & Bank Hub')
+                    .setDescription('Manage your wallet, check your bank balance, claim your 24-hour daily reward, or deposit and withdraw funds.')
+                    .setColor('#2ecc71');
+
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('hub_balance').setLabel('Balance').setStyle(ButtonStyle.Secondary).setEmoji('💰'),
+                    new ButtonBuilder().setCustomId('hub_daily').setLabel('Daily').setStyle(ButtonStyle.Success).setEmoji('🎁'),
+                    new ButtonBuilder().setCustomId('hub_deposit').setLabel('Deposit').setStyle(ButtonStyle.Primary).setEmoji('📥'),
+                    new ButtonBuilder().setCustomId('hub_withdraw').setLabel('Withdraw').setStyle(ButtonStyle.Secondary).setEmoji('📤')
+                );
+
+                return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+            }
+
             if (interaction.customId === 'hub_leaderboards') {
                 const row = new ActionRowBuilder().addComponents(
                     new StringSelectMenuBuilder()

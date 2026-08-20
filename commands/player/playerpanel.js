@@ -13,20 +13,17 @@ module.exports = {
 
         const embed = new EmbedBuilder()
             .setTitle(`🎮 ${interaction.guild.name} — Player Hub`)
-            .setDescription(`Welcome to the community hub! Use the buttons below to manage your Rust account, check your balance, deposit/withdraw currency, claim daily rewards, view leaderboards, vote, and browse the store.`)
+            .setDescription(`Welcome to the community hub! Use the buttons below to manage your Rust account, access banking and daily rewards, play casino minigames, view leaderboards, and browse the store.`)
             .setColor('#3498db')
             .setTimestamp();
 
         const row1 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('hub_link_account').setLabel('Link Account').setStyle(ButtonStyle.Primary).setEmoji('🔗'),
-            new ButtonBuilder().setCustomId('hub_balance').setLabel('Balance').setStyle(ButtonStyle.Secondary).setEmoji('💰'),
-            new ButtonBuilder().setCustomId('hub_daily').setLabel('Daily').setStyle(ButtonStyle.Success).setEmoji('🎁'),
             new ButtonBuilder().setCustomId('hub_shop_menu').setLabel('Shop').setStyle(ButtonStyle.Secondary).setEmoji('🛒')
         );
 
         const row2 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('hub_deposit').setLabel('Deposit').setStyle(ButtonStyle.Primary).setEmoji('🏦'),
-            new ButtonBuilder().setCustomId('hub_withdraw').setLabel('Withdraw').setStyle(ButtonStyle.Secondary).setEmoji('🏧'),
+            new ButtonBuilder().setCustomId('hub_economy_menu').setLabel('Economy & Bank').setStyle(ButtonStyle.Success).setEmoji('🏦'),
             new ButtonBuilder().setCustomId('hub_casino').setLabel('Casino').setStyle(ButtonStyle.Danger).setEmoji('🎰')
         );
 
