@@ -30,13 +30,11 @@ async function connectRcon(guildId, client) {
                 const msg = parsed.Message;
                 const msgLower = msg.toLowerCase();
 
-                // Ignore standard server error echoes
                 if (msgLower.includes('invalid player') || msgLower.includes('unknown command')) return;
 
-                // DEBUG: Log RCON output to terminal
                 console.log('[RCON RAW MESSAGE]', msg);
 
-                // 1. POSITION TRACKER FOR `server.printpos` (GPortal RCE)
+                // 1. POSITION TRACKER FOR `server.printpos "Name"` (GPortal RCE)
                 if (msg.includes('X:') || msg.includes('pos') || msg.includes('Position') || msgLower.includes('vector') || /(-?\d+\.\d+)/.test(msg)) {
                     for (const [adminName, setupData] of adminPosQueue.entries()) {
                         if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
@@ -68,28 +66,26 @@ async function connectRcon(guildId, client) {
                     }
                 }
 
-                // 2. KILLFEED & COMBAT LOG PARSER (Discord & In-Game Broadcast)
+                // 2. KILLFEED & COMBAT LOG PARSER
                 if ((msgLower.includes('killed') || msgLower.includes('murdered') || msgLower.includes('suicide') || msgLower.includes('died') || msgLower.includes('slain')) && !msg.includes('[Killfeed]')) {
                     const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
                     
-                    // Broadcast in-game chat feed
                     await sendRconCommand(guildId, `say "[Killfeed] ${msg}"`);
 
                     if (currentConfig && currentConfig.killfeedChannelId) {
                         const killfeedChannel = client.channels.cache.get(currentConfig.killfeedChannelId);
                         if (killfeedChannel) {
-                            let embedColor = '#e74c3c'; // PvP red
+                            let embedColor = '#e74c3c';
                             let killType = '⚔️ PvP Combat';
 
                             if (msgLower.includes('scientist') || msgLower.includes('boar') || msgLower.includes('bear') || msgLower.includes('wolf') || msgLower.includes('fall') || msgLower.includes('drown') || msgLower.includes('fire') || msgLower.includes('radiation')) {
-                                embedColor = '#3498db'; // PvE blue
+                                embedColor = '#3498db';
                                 killType = '🐻 PvE / Environmental';
                             } else if (msgLower.includes('suicide')) {
                                 embedColor = '#95a5a6';
                                 killType = '💀 Suicide';
                             }
 
-                            // Update K/D database records
                             const players = await UserEconomy.findAll({ where: { guildId: guildId } });
                             for (const p of players) {
                                 if (p.inGameName && msg.includes(p.inGameName)) {
@@ -195,8 +191,8 @@ function queueAdminPos(adminName, guildId, adminId, channelId, type, client) {
 
     adminPosQueue.set(adminName, { guildId, adminId, channelId, type, timeoutTimer });
 
-    // Instantly query position via server.printpos for GPortal RCE
-    sendRconCommand(guildId, 'server.printpos').catch(() => {});
+    // Target the specific player name via server.printpos "Name"
+    sendRconCommand(guildId, `server.printpos "${adminName}"`).catch(() => {});
 }
 
 async function triggerCustomEvent(guildId, eventType, data = {}) {
