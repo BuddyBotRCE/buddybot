@@ -30,12 +30,11 @@ async function connectRcon(guildId, client) {
                 const msg = parsed.Message;
                 const msgLower = msg.toLowerCase();
 
-                // 1. COORDINATE TRACKER (Fixed Name Matching & Button IDs)
+                // 1. COORDINATE TRACKER
                 if (msg.trim().startsWith('[') && msg.includes('SteamID') && msg.includes('Position')) {
                     const players = JSON.parse(msg);
                     for (const p of players) {
                         
-                        // FIX 1: Loose matching for names (ignores caps and clan tags)
                         let matchedAdminName = null;
                         for (const queuedName of adminPosQueue.keys()) {
                             if (p.DisplayName.toLowerCase().includes(queuedName.toLowerCase())) {
@@ -46,15 +45,16 @@ async function connectRcon(guildId, client) {
 
                         if (matchedAdminName) {
                             const setupData = adminPosQueue.get(matchedAdminName);
+                            // Clear timeout since we got a real match
+                            if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
+
                             const channel = client.channels.cache.get(setupData.channelId);
                             if (channel && p.Position) {
-                                
                                 if (setupData.type === 'cargodock') {
                                     await GuildConfig.upsert({ guildId: guildId, cargoDockX: p.Position.x, cargoDockY: p.Position.y, cargoDockZ: p.Position.z });
                                     channel.send({ content: `✅ <@${setupData.adminId}> **Cargo Dock Position Saved!**\nCoordinates: \`X: ${p.Position.x.toFixed(2)}, Y: ${p.Position.y.toFixed(2)}, Z: ${p.Position.z.toFixed(2)}\`` });
                                 } else {
                                     const coords = `${p.Position.x.toFixed(2)}_${p.Position.y.toFixed(2)}_${p.Position.z.toFixed(2)}`;
-                                    // FIX 2: Added "tpl_" to the button ID so it connects perfectly to interactionCreate.js
                                     const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`btn_finalize_tpl_${setupData.type}_${coords}`).setLabel('📍 Finalize Setup').setStyle(ButtonStyle.Success));
                                     channel.send({ content: `<@${setupData.adminId}> 📍 Coordinates grabbed: **${p.Position.x.toFixed(2)}, ${p.Position.y.toFixed(2)}, ${p.Position.z.toFixed(2)}**\nClick below to finish!`, components: [row] });
                                 }
@@ -62,7 +62,6 @@ async function connectRcon(guildId, client) {
                             adminPosQueue.delete(matchedAdminName);
                         }
 
-                        // Loose match for TP home setting
                         let matchedHomeName = null;
                         for (const queuedName of homeSetQueue.keys()) {
                             if (p.DisplayName.toLowerCase().includes(queuedName.toLowerCase())) {
@@ -92,7 +91,6 @@ async function connectRcon(guildId, client) {
                         const chatText = chatMatch[2].toLowerCase();
                         const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
 
-                        // A. CROSS-CHAT
                         if (currentConfig && currentConfig.crossChatChannelId) {
                             const crossChatChannel = client.channels.cache.get(currentConfig.crossChatChannelId);
                             if (crossChatChannel && !playerName.includes('[Discord]')) {
@@ -100,7 +98,6 @@ async function connectRcon(guildId, client) {
                             }
                         }
 
-                        // B. PREMIUM TP BASE
                         if (currentConfig && currentConfig.isPremiumServer) {
                             if (chatText.includes('can i have a key')) {
                                 homeSetQueue.set(playerName, guildId);
@@ -115,7 +112,6 @@ async function connectRcon(guildId, client) {
                             }
                         }
 
-                        // C. CUSTOM BINDS
                         const serverBinds = await CustomBind.findAll({ where: { guildId: guildId } });
                         const activeBind = serverBinds.find(b => b.emote.toLowerCase() === chatText);
                         if (activeBind) {
@@ -139,15 +135,11 @@ async function connectRcon(guildId, client) {
 async function sendRconCommand(guildId, commandStr) {
     let ws = activeConnections.get(guildId);
     
-    // If not connected, attempt a quick auto-reconnect on the fly!
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         try {
-            // Grab client instance or wait for connection
             await connectRcon(guildId, global.discordClient); 
             ws = activeConnections.get(guildId);
-        } catch (e) {
-            // Fallback if auto-reconnect fails
-        }
+        } catch (e) {}
     }
 
     if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -158,7 +150,35 @@ async function sendRconCommand(guildId, commandStr) {
     return true;
 }
 
-// 3. AUTO-EVENTS CUSTOM SPAWNER 
+// Helper to hook into admin position queues with a 5-second anti-hang timeout safety net
+function queueAdminPos(adminName, guildId, adminId, channelId, type, client) {
+    if (adminPosQueue.has(adminName)) {
+        const old = adminPosQueue.get(adminName);
+        if (old.timeoutTimer) clearTimeout(old.timeoutTimer);
+    }
+
+    const timeoutTimer = setTimeout(async () => {
+        if (adminPosQueue.has(adminName)) {
+            adminPosQueue.delete(adminName);
+            const channel = client.channels.cache.get(channelId);
+            if (channel) {
+                // Fallback coordinates if server doesn't respond with a vector array
+                const fallbackX = 0, fallbackY = 50, fallbackZ = 0;
+                if (type === 'cargodock') {
+                    await GuildConfig.upsert({ guildId: guildId, cargoDockX: fallbackX, cargoDockY: fallbackY, cargoDockZ: fallbackZ });
+                    channel.send({ content: `⚠️ <@${adminId}> RCON position timed out. Default Cargo Dock position set (X: 0, Y: 50, Z: 0).` });
+                } else {
+                    const coords = `${fallbackX}_${fallbackY}_${fallbackZ}`;
+                    const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`btn_finalize_tpl_${type}_${coords}`).setLabel('📍 Finalize Setup').setStyle(ButtonStyle.Success));
+                    channel.send({ content: `<@${adminId}> ⚠️ RCON coordinate response timed out. Click below to use default center coordinates (0, 50, 0):`, components: [row] });
+                }
+            }
+        }
+    }, 5000); // 5-second safety timer
+
+    adminPosQueue.set(adminName, { guildId, adminId, channelId, type, timeoutTimer });
+}
+
 async function triggerCustomEvent(guildId, eventType, data = {}) {
     if (eventType === 'supply_drop') return await sendRconCommand(guildId, 'supply.drop');
     if (eventType === 'elite_crate') return await sendRconCommand(guildId, 'spawn codelockedhackablecrate');
@@ -173,4 +193,4 @@ async function triggerCustomEvent(guildId, eventType, data = {}) {
     throw new Error('Unknown custom event type.');
 }
 
-module.exports = { connectRcon, sendRconCommand, triggerCustomEvent, activeConnections, adminPosQueue };
+module.exports = { connectRcon, sendRconCommand, triggerCustomEvent, activeConnections, adminPosQueue, queueAdminPos };
