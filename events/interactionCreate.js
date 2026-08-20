@@ -610,7 +610,7 @@ module.exports = async (interaction, client) => {
                 else if (template === 'tpl_orp') {
                     const userProfile = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
                     if (!userProfile) return interaction.reply({ content: '❌ Link Rust account first using `/playerpanel`!', flags: 64 });
-                    adminPosQueue.set(userProfile.inGameName, { type: 'orp', adminId: interaction.user.id, channelId: interaction.channel.id });
+                    queueAdminPos.set(userProfile.inGameName, { type: 'orp', adminId: interaction.user.id, channelId: interaction.channel.id });
                     await sendRconCommand(interaction.guild.id, 'playerlist');
                     return interaction.reply({ content: `⏳ Stand in the middle of your base and grab coordinates for ORP setup...`, flags: 64 });
                 }
