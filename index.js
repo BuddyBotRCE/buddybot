@@ -48,7 +48,8 @@ if (fs.existsSync(eventsPath)) {
 
 client.once('clientReady', async () => {
     console.log(`[SYSTEM] BuddyBotRCE is online as ${client.user.tag}`);
-
+// To wipe all global commands instantly (run once, then remove this line)
+await rest.put(Routes.applicationCommands(client.user.id), { body: [] });
     // Instant Guild-Specific Command Sync
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     const commandData = client.commands.map(cmd => cmd.data.toJSON());
