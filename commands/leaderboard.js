@@ -1,32 +1,28 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
-const { UserEconomy, GuildConfig } = require('../../database/db');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { UserEconomy, GuildConfig } = require('../database/db');
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('leaderboard')
-        .setDescription('Check the Top 10 server leaderboards!')
-        .addStringOption(option => 
+        .setDescription('View server leaderboards for wealth, levels, and PvP K/D.')
+        .addStringOption(option =>
             option.setName('category')
-                .setDescription('Which leaderboard do you want to view?')
+                .setDescription('Leaderboard category')
                 .setRequired(true)
                 .addChoices(
-                    { name: '💰 Top 10 Richest Players', value: 'wealth' },
-                    { name: '⭐ Top 10 Highest Levels', value: 'level' },
-                    { name: '⚔️ Top 10 PvP Kills (K/D)', value: 'pvp' }
+                    { name: '💰 Wealth', value: 'wealth' },
+                    { name: '⭐ Level (BuddyPass)', value: 'level' },
+                    { name: '⚔️ PvP K/D', value: 'pvp' }
                 )
         ),
-        
+
     async execute(interaction) {
         const category = interaction.options.getString('category');
-        const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+        const guildId = interaction.guild.id;
+        const config = await GuildConfig.findOne({ where: { guildId } });
         const currency = config ? config.economyCurrency : 'Scrap';
 
-        const allPlayers = await UserEconomy.findAll({ where: { guildId: interaction.guild.id } });
-
-        if (allPlayers.length === 0) {
-            return interaction.reply({ content: '❌ No one is on the leaderboard yet! Players need to link their accounts or be active first.', flags: MessageFlags.Ephemeral });
-        }
-
+        const allPlayers = await UserEconomy.findAll({ where: { guildId } });
         let leaderboardText = '';
         let embedTitle = '';
         let embedColor = '';
@@ -42,8 +38,7 @@ module.exports = {
                 const ign = player.inGameName ? `**${player.inGameName}**` : 'Unlinked';
                 leaderboardText += `${rank} ${ign} (<@${player.userId}>) - **${totalWealth}** ${currency}\n`;
             });
-        } 
-        else if (category === 'level') {
+        } else if (category === 'level') {
             const sortedPlayers = allPlayers.sort((a, b) => {
                 if (b.level === a.level) return b.xp - a.xp;
                 return b.level - a.level;
@@ -57,8 +52,7 @@ module.exports = {
                 const ign = player.inGameName ? `**${player.inGameName}**` : 'Unlinked';
                 leaderboardText += `${rank} ${ign} (<@${player.userId}>) - **Level ${player.level || 1}** (${player.xp || 0} XP)\n`;
             });
-        }
-        else if (category === 'pvp') {
+        } else if (category === 'pvp') {
             const sortedPlayers = allPlayers.sort((a, b) => {
                 const kdRatioA = a.deaths === 0 ? a.pvpKills : (a.pvpKills / a.deaths);
                 const kdRatioB = b.deaths === 0 ? b.pvpKills : (b.pvpKills / b.deaths);
@@ -83,11 +77,10 @@ module.exports = {
             .setTitle(embedTitle)
             .setDescription(leaderboardText || 'No data recorded yet.')
             .setColor(embedColor)
-            .setFooter({ text: 'Compete in-game to climb the ranks!' })
             .setTimestamp();
 
         const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`lb_refresh_${category}`).setLabel('Refresh Leaderboard').setStyle(ButtonStyle.Secondary).setEmoji('🔄')
+            new ButtonBuilder().setCustomId(`lb_refresh_${category}`).setLabel('Refresh').setStyle(ButtonStyle.Secondary).setEmoji('🔄')
         );
 
         return interaction.reply({ embeds: [embed], components: [row] });
