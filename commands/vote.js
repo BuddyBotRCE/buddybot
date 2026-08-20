@@ -1,6 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { GuildConfig, UserEconomy } = require('../../database/db');
-const { sendRconCommand } = require('../../utils/rconManager');
+const { GuildConfig } = require('../database/db');
 
 module.exports = {
     data: new SlashCommandBuilder()

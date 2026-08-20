@@ -1,6 +1,6 @@
 const { SlashCommandBuilder } = require('discord.js');
-const { GuildConfig, UserEconomy } = require('../../database/db');
-const { sendRconCommand } = require('../../utils/rconManager');
+const { GuildConfig, UserEconomy } = require('../database/db');
+const { sendRconCommand } = require('../utils/rconManager');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -29,7 +29,7 @@ module.exports = {
         // Update cooldown
         await user.update({ lastVoteTime: now });
 
-        // Deliver reward via RCON (or Wallet balance)
+        // Deliver reward via RCON or Wallet balance
         try {
             if (currency.toLowerCase() === 'scrap') {
                 await sendRconCommand(guildId, `inventory.giveto "${user.inGameName}" scrap ${reward}`);
