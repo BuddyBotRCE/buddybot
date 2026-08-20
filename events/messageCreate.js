@@ -1,117 +1,123 @@
 const { UserEconomy, GuildConfig } = require('../database/db');
-const cooldowns = new Set();
 
 module.exports = async (message, client) => {
+    if (message.author.bot || !message.guild) return;
+
+    // =========================================================================
+    // 1. CHAT XP & LEVELING SYSTEM
+    // =========================================================================
     try {
-        // 1. Ignore messages from bots or DMs
-        if (message.author.bot || !message.guild) return;
-
-        // Fetch server config once for all features
-        const config = await GuildConfig.findOne({ where: { guildId: message.guild.id } });
-
-        // ==========================================
-        // 2. AI ASSISTANT (@BuddyBot mentions)
-        // ==========================================
-        if (message.mentions.has(client.user)) {
-            const prompt = message.content.replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '').trim();
-            if (!prompt) {
-                return message.reply('👋 Hello! How can I assist you with your Rust server today?');
-            }
-
-            if (!config || !config.aiApiKey) {
-                return message.reply('⚠️ The AI Assistant is not configured on this server yet. An admin can set it up in `/adminpanel` -> **AI Setup**.');
-            }
-
-            // Show "typing..." indicator
-            await message.channel.sendTyping();
-
-            // Build payload
-            const baseUrl = config.aiBaseUrl ? config.aiBaseUrl.replace(/\/+$/, '') : 'https://api.openai.com/v1';
-            const endpoint = `${baseUrl}/chat/completions`;
-
-            const response = await fetch(endpoint, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${config.aiApiKey}`
-                },
-                body: JSON.stringify({
-                    model: config.aiModel || 'gpt-4o-mini',
-                    messages: [
-                        {
-                            role: 'system',
-                            content: 'You are BuddyBot, a helpful and knowledgeable Rust game and server assistant. Keep your responses concise, friendly, and formatted nicely with Discord markdown.'
-                        },
-                        {
-                            role: 'user',
-                            content: prompt
-                        }
-                    ],
-                    max_tokens: 500
-                })
-            });
-
-            if (!response.ok) {
-                const errData = await response.text();
-                console.error('[AI API ERROR]', errData);
-                return message.reply(`❌ AI Error: Received status code ${response.status}. Please check your API key and model settings.`);
-            }
-
-            const data = await response.json();
-            const replyText = data.choices?.[0]?.message?.content || 'I could not generate a response.';
-
-            if (replyText.length > 2000) {
-                return message.reply({ content: replyText.substring(0, 1990) + '...' });
-            }
-            return message.reply({ content: replyText });
-        }
-
-        // ==========================================
-        // 3. CROSS-CHAT DISCORD -> RUST
-        // ==========================================
-        if (config && config.crossChatChannelId === message.channel.id) {
-            const { activeConnections, sendRconCommand } = require('../utils/rconManager');
-            if (activeConnections.has(message.guild.id)) {
-                const safeMessage = message.content.replace(/"/g, "'").replace(/\n/g, " ");
-                const authorName = message.member?.nickname || message.author.username;
-                await sendRconCommand(message.guild.id, `say "[Discord] ${authorName}: ${safeMessage}"`);
-                message.react('✅').catch(() => {});
-            } else {
-                message.react('❌').catch(() => {});
-            }
-            return; // Stop here so cross-chat messages don't generate XP
-        }
-
-        // ==========================================
-        // 4. CHAT XP (BuddyPass)
-        // ==========================================
-        if (cooldowns.has(message.author.id)) return;
-        
-        const [userWallet] = await UserEconomy.findOrCreate({
+        const [user] = await UserEconomy.findOrCreate({
             where: { guildId: message.guild.id, userId: message.author.id },
-            defaults: { wallet: 0, xp: 0, level: 1 }
+            defaults: { wallet: 0, bank: 0, xp: 0, level: 1 }
         });
 
-        let newXp = userWallet.xp + 25;
-        let newLevel = userWallet.level;
-        
-        if (newXp >= (newLevel * 100)) {
-            newLevel++;
-            newXp -= ((newLevel - 1) * 100); 
-            await userWallet.update({ xp: newXp, level: newLevel, wallet: userWallet.wallet + 50 });
-            message.channel.send(`⭐ <@${message.author.id}> leveled up to **Level ${newLevel}**!`);
+        const xpGained = Math.floor(Math.random() * 11) + 15; // 15-25 XP
+        const newXp = (user.xp || 0) + xpGained;
+        const currentLevel = user.level || 1;
+        const requiredXp = currentLevel * 100;
+
+        if (newXp >= requiredXp) {
+            await user.update({
+                xp: newXp - requiredXp,
+                level: currentLevel + 1,
+                wallet: (user.wallet || 0) + 100 // Bonus currency for leveling up
+            });
+            await message.channel.send(`🎉 Congratulations <@${message.author.id}>! You leveled up to **Level ${currentLevel + 1}** and earned **100 Scrap**!`);
         } else {
-            await userWallet.update({ xp: newXp });
+            await user.update({ xp: newXp });
+        }
+    } catch (err) {
+        console.error('[ECONOMY XP ERROR]', err);
+    }
+
+    // =========================================================================
+    // 2. AI ASSISTANT (@BuddyBot Chat)
+    // =========================================================================
+    const mentionRegex = new RegExp(`^<@!?${client.user.id}>`);
+    if (!mentionRegex.test(message.content)) return;
+
+    try {
+        const config = await GuildConfig.findOne({ where: { guildId: message.guild.id } });
+        if (!config || !config.aiApiKey) {
+            return message.reply('⚠️ The AI Assistant is not configured on this server yet. An admin can set it up in `/adminpanel` under **AI Integration Setup**.');
         }
 
-        cooldowns.add(message.author.id);
-        setTimeout(() => cooldowns.delete(message.author.id), 60000); 
+        const prompt = message.content.replace(mentionRegex, '').trim();
+        if (!prompt) {
+            return message.reply(`👋 Hey <@${message.author.id}>! How can I help you with the server or Rust Console Edition today?`);
+        }
+
+        await message.channel.sendTyping();
+
+        const baseUrl = config.aiBaseUrl ? config.aiBaseUrl.replace(/\/+$/, '') : 'https://api.openai.com/v1';
+        const endpoint = `${baseUrl}/chat/completions`;
+
+        // Specialized Rust Console Edition & BuddyBot Knowledge Base
+        const systemPrompt = `You are BuddyBot RCE, the dedicated AI assistant for this Rust Console Edition (PlayStation & Xbox) community server on Discord.
+
+KNOWLEDGE BASE & GUIDELINES:
+- Game Focus: Rust Console Edition (RCE) on PSN and Xbox. DO NOT mention Steam, PC console keys (F1), or PC-specific mods.
+- Account Linking: Tell players to run the '/playerpanel' slash command in Discord and click the "Link Account" button to enter their exact in-game PlayStation or Xbox gamertag.
+- Server Economy & Shop: Players can check balances, claim daily rewards, browse the item shop, and play casino games directly inside '/playerpanel'.
+- Server Wipes: Rust Console Official wipes happen on the last Thursday of every month. For this specific community server's wipe schedule, map wipes, and event times, politely instruct the player to check the server's announcements or wipe info channels.
+- Tone: Concise, knowledgeable, friendly, and helpful. Keep responses under 3-4 sentences whenever possible for easy reading on Discord.`;
+
+        const requestBody = {
+            model: config.aiModel || 'gemini-3.7-flash',
+            messages: [
+                {
+                    role: 'system',
+                    content: systemPrompt
+                },
+                {
+                    role: 'user',
+                    content: prompt
+                }
+            ],
+            max_tokens: 400
+        };
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000); // 15s timeout protection
+
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${config.aiApiKey}`
+            },
+            body: JSON.stringify(requestBody),
+            signal: controller.signal
+        });
+
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+            return message.reply(`❌ **AI Error:** Received status code \`${response.status}\`. Please verify your API key and model settings in \`/adminpanel\`.`);
+        }
+
+        const data = await response.json();
+        const replyText = data?.choices?.[0]?.message?.content;
+
+        if (!replyText) {
+            return message.reply('❌ No response was generated by the AI.');
+        }
+
+        // Split long responses to stay under Discord's 2000 character limit
+        if (replyText.length > 2000) {
+            for (let i = 0; i < replyText.length; i += 1900) {
+                await message.reply(replyText.slice(i, i + 1900));
+            }
+        } else {
+            await message.reply(replyText);
+        }
 
     } catch (err) {
-        console.error('[MESSAGE HANDLER ERROR]', err);
-        // Only reply with error if it was an AI request to prevent spamming normal chat
-        if (message.mentions.has(client.user)) {
-            return message.reply('❌ An error occurred while processing your message. Please try again later.').catch(()=>{});
+        if (err.name === 'AbortError') {
+            return message.reply('⏱️ **AI Error:** The request timed out. Please try asking again in a moment.');
         }
+        console.error('[AI CHAT ERROR]', err);
+        return message.reply('❌ An error occurred while processing your message. Please try again later.');
     }
 };
