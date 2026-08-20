@@ -39,6 +39,12 @@ const GuildConfig = sequelize.define('GuildConfig', {
     cargoDockZ: { type: DataTypes.FLOAT, allowNull: true },
     cargoCrateCount: { type: DataTypes.INTEGER, defaultValue: 3 },
 
+    // --- LIVE STATUS & VOTE CONFIG ---
+    statusChannelId: { type: DataTypes.STRING, allowNull: true },
+    statusMessageId: { type: DataTypes.STRING, allowNull: true },
+    voteUrl: { type: DataTypes.STRING, allowNull: true },
+    voteRewardAmount: { type: DataTypes.INTEGER, defaultValue: 250 },
+
     isPremiumServer: { type: DataTypes.BOOLEAN, defaultValue: false },
     logChannelId: { type: DataTypes.STRING, allowNull: true },
     crossChatChannelId: { type: DataTypes.STRING, allowNull: true },
@@ -76,6 +82,7 @@ const UserEconomy = sequelize.define('UserEconomy', {
     homeY: { type: DataTypes.FLOAT, allowNull: true },
     homeZ: { type: DataTypes.FLOAT, allowNull: true },
     lastTp: { type: DataTypes.DATE, allowNull: true },
+    lastVoteTime: { type: DataTypes.DATE, allowNull: true },
     pvpKills: { type: DataTypes.INTEGER, defaultValue: 0 },
     pveKills: { type: DataTypes.INTEGER, defaultValue: 0 },
     deaths: { type: DataTypes.INTEGER, defaultValue: 0 }

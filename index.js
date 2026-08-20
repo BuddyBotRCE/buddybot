@@ -1,10 +1,7 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, Collection, REST, Routes } = require('discord.js');
+const { Client, GatewayIntentBits, Collection, EmbedBuilder } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
-
-const { GuildConfig } = require('./database/db');
-const { sendRconCommand } = require('./utils/rconManager');
 
 const client = new Client({
     intents: [
@@ -15,89 +12,102 @@ const client = new Client({
     ]
 });
 
+// Attach client globally for RCON manager accessibility
 global.discordClient = client;
-
 client.commands = new Collection();
 
-// ==========================================
-// LOAD ONLY AUTHORIZED CORE SLASH COMMANDS
-// ==========================================
-const allowedCommands = ['adminpanel.js', 'playerpanel.js'];
-
-const commandFolders = fs.readdirSync(path.join(__dirname, 'commands'));
-for (const folder of commandFolders) {
-    const folderPath = path.join(__dirname, 'commands', folder);
-    if (!fs.statSync(folderPath).isDirectory()) continue;
-
-    const commandFiles = fs.readdirSync(folderPath).filter(file => file.endsWith('.js'));
+// Load Slash Commands
+const commandsPath = path.join(__dirname, 'commands');
+if (fs.existsSync(commandsPath)) {
+    const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
     for (const file of commandFiles) {
-        if (!allowedCommands.includes(file)) continue;
-
-        const command = require(path.join(folderPath, file));
+        const filePath = path.join(commandsPath, file);
+        const command = require(filePath);
         if ('data' in command && 'execute' in command) {
             client.commands.set(command.data.name, command);
         }
     }
 }
 
-// ==========================================
-// EVENT HANDLERS (FORCE CACHE OVERWRITE)
-// ==========================================
-client.once('clientReady', async () => {
-    console.log(`[SYSTEM] BuddyBotRCE is online as ${client.user.tag}`);
-    
-    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-    try {
-        const commandsData = client.commands.map(cmd => cmd.data.toJSON());
+// Load Events
+const eventsPath = path.join(__dirname, 'events');
+if (fs.existsSync(eventsPath)) {
+    const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'));
+    for (const file of eventFiles) {
+        const filePath = path.join(eventsPath, file);
+        const event = require(filePath);
+        const eventName = file.split('.')[0];
         
-        // This completely overwrites Discord's cache, deleting all old phantom commands
+        if (eventName === 'interactionCreate') {
+            client.on('interactionCreate', async interaction => {
+                await event(interaction, client);
+            });
+        }
+    }
+}
+
+client.once('ready', async () => {
+    console.log(`[SYSTEM] BuddyBotRCE is online as ${client.user.tag}`);
+
+    // Sync Discord Commands
+    const rest = require('@discordjs/rest').REST.setToken(process.env.DISCORD_TOKEN);
+    const commandData = client.commands.map(cmd => cmd.data.toJSON());
+    
+    try {
         await rest.put(
-            Routes.applicationCommands(client.user.id),
-            { body: commandsData },
+            require('discord-js').Routes.applicationCommands(client.user.id),
+            { body: commandData },
         );
         console.log('[SYSTEM] Discord command cache wiped and cleanly synced.');
     } catch (error) {
-        console.error('[COMMAND REGISTRATION ERROR]', error);
+        console.error('[COMMAND SYNC ERROR]', error);
     }
-});
 
-// LISTENS FOR BUTTONS, MENUS, AND SLASH COMMANDS
-client.on('interactionCreate', async interaction => {
-    const handleInteraction = require('./events/interactionCreate');
-    await handleInteraction(interaction, client);
-});
+    // --- LIVE RCON STATUS MONITOR LOOP (Runs every 60 seconds) ---
+    setInterval(async () => {
+        try {
+            const { GuildConfig } = require('./database/db');
+            const { sendRconCommand } = require('./utils/rconManager');
+            
+            const configs = await GuildConfig.findAll({ where: { statusChannelId: { [require('sequelize').Op.ne]: null } } });
+            
+            for (const config of configs) {
+                const guild = client.guilds.cache.get(config.guildId);
+                if (!guild) continue;
+                const channel = guild.channels.cache.get(config.statusChannelId);
+                if (!channel) continue;
 
-// LISTENS FOR @BUDDYBOT CHAT MESSAGES (FOR AI)
-client.on('messageCreate', async message => {
-    const handleMessage = require('./events/messageCreate');
-    await handleMessage(message, client);
-});
+                let isOnline = false;
+                try {
+                    await sendRconCommand(config.guildId, 'server.population');
+                    isOnline = true;
+                } catch (e) {
+                    isOnline = false;
+                }
 
-// ==========================================
-// BACKGROUND PREMIUM AUTO-EVENT LOOP
-// ==========================================
-setInterval(async () => {
-    try {
-        const servers = await GuildConfig.findAll({ where: { autoEventsEnabled: true, isPremiumServer: true } });
-        const now = new Date();
+                const statusEmbed = new EmbedBuilder()
+                    .setTitle(`🌐 GPortal Server Status — ${guild.name}`)
+                    .setDescription(`• **Connection Status:** ${isOnline ? '🟢 ONLINE & HEALTHY' : '🔴 OFFLINE / RESTARTING'}\n• **RCON IP:** \`${config.rconIp || 'Not Set'}:${config.rconPort || 'N/A'}\``)
+                    .setColor(isOnline ? '#2ecc71' : '#e74c3c')
+                    .setTimestamp();
 
-        for (const server of servers) {
-            if (!server.rconIp || !server.rconPassword) continue;
-
-            const lastEvent = server.lastAutoEvent ? new Date(server.lastAutoEvent) : new Date(0);
-            const intervalMs = (server.autoEventsInterval || 60) * 60000;
-
-            if (now - lastEvent >= intervalMs) {
-                const commandToRun = server.autoEventType || 'supply.drop';
-                await sendRconCommand(server.guildId, commandToRun);
-                await server.update({ lastAutoEvent: now });
-                console.log(`[AUTO-EVENT] Triggered "${commandToRun}" for guild ID: ${server.guildId}`);
+                if (config.statusMessageId) {
+                    const msg = await channel.messages.fetch(config.statusMessageId).catch(() => null);
+                    if (msg) {
+                        await msg.edit({ embeds: [statusEmbed] });
+                    } else {
+                        const newMsg = await channel.send({ embeds: [statusEmbed] });
+                        await config.update({ statusMessageId: newMsg.id });
+                    }
+                } else {
+                    const newMsg = await channel.send({ embeds: [statusEmbed] });
+                    await config.update({ statusMessageId: newMsg.id });
+                }
             }
+        } catch (loopErr) {
+            console.error('[STATUS LOOP ERROR]', loopErr);
         }
-    } catch (err) {
-        console.error('[AUTO-EVENT LOOP ERROR]', err);
-    }
-}, 60000);
-
+    }, 60000);
+});
 
 client.login(process.env.DISCORD_TOKEN);
