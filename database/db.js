@@ -15,7 +15,8 @@ const GuildConfig = sequelize.define('GuildConfig', {
     rconIp: { type: DataTypes.STRING, allowNull: true },
     rconPort: { type: DataTypes.STRING, allowNull: true },
     rconPassword: { type: DataTypes.STRING, allowNull: true },
-    
+    killfeedChannelId: { type: DataTypes.STRING, allowNull: true },
+   
     // --- AI CONFIGURATION COLUMNS ---
     aiApiKey: { type: DataTypes.STRING, allowNull: true },
     aiProvider: { type: DataTypes.STRING, defaultValue: 'openai' },
@@ -68,7 +69,10 @@ const UserEconomy = sequelize.define('UserEconomy', {
     homeX: { type: DataTypes.FLOAT, allowNull: true },
     homeY: { type: DataTypes.FLOAT, allowNull: true },
     homeZ: { type: DataTypes.FLOAT, allowNull: true },
-    lastTp: { type: DataTypes.DATE, allowNull: true }
+    lastTp: { type: DataTypes.DATE, allowNull: true },
+pvpKills: { type: DataTypes.INTEGER, defaultValue: 0 },
+pveKills: { type: DataTypes.INTEGER, defaultValue: 0 },
+deaths: { type: DataTypes.INTEGER, defaultValue: 0 }
 });
 
 const ShopItem = sequelize.define('ShopItem', {

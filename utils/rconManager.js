@@ -1,6 +1,6 @@
 const WebSocket = require('ws');
 const { GuildConfig, UserEconomy, CustomBind, BindCooldown } = require('../database/db');
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 
 const activeConnections = new Map();
 const homeSetQueue = new Map();
@@ -60,8 +60,7 @@ async function connectRcon(guildId, client) {
                             } else {
                                 const coords = `${posX.toFixed(2)}_${posY.toFixed(2)}_${posZ.toFixed(2)}`;
                                 const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`btn_finalize_tpl_${setupData.type}_${coords}`).setLabel('📍 Finalize Setup').setStyle(ButtonStyle.Success));
-                                channel.send({ content: `<@$
-{setupData.adminId}> 📍 Coordinates grabbed: **${posX.toFixed(2)}, ${posY.toFixed(2)}, ${posZ.toFixed(2)}**\nClick below to finish!`, components: [row] });
+                                channel.send({ content: `<@${setupData.adminId}> 📍 Coordinates grabbed: **${posX.toFixed(2)}, ${posY.toFixed(2)}, ${posZ.toFixed(2)}**\nClick below to finish!`, components: [row] });
                             }
                         }
                         adminPosQueue.delete(adminName);
@@ -74,7 +73,7 @@ async function connectRcon(guildId, client) {
                 if (msgLower.includes('[chat]')) {
                     const chatMatch = msg.match(/\[CHAT\] (.*?): (.*)/i);
                     if (chatMatch) {
-                        const playerName = chatMatch[1].replace(/\[.*?\]/g, '').trim(); 
+                        const playerName = chatMatch[1].replace(/\[.*?\]/g, '').trim();
                         const chatText = chatMatch[2].toLowerCase();
                         const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
 
@@ -97,6 +96,55 @@ async function connectRcon(guildId, client) {
                             for (const cmd of commands) {
                                 if (cmd.trim() !== '') await sendRconCommand(guildId, cmd.trim());
                             }
+                        }
+                    }
+                }
+
+               // 3. KILLFEED & COMBAT LOG PARSER (Discord & In-Game Broadcast)
+                if ((msgLower.includes('killed') || msgLower.includes('murdered') || msgLower.includes('suicide') || msgLower.includes('died') || msgLower.includes('slain')) && !msg.includes('[Killfeed]')) {
+                    const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
+
+                    // A. Broadcast into the In-Game Chat for all players to see
+                    await sendRconCommand(guildId, `say "[Killfeed] ${msg}"`);
+
+                    // B. Send to Discord Killfeed Channel if configured
+                    if (currentConfig && currentConfig.killfeedChannelId) {
+                        const killfeedChannel = client.channels.cache.get(currentConfig.killfeedChannelId);
+                        if (killfeedChannel) {
+                            let embedColor = '#e74c3c'; // PvP red
+                            let killType = '⚔️ PvP Combat';
+
+                            if (msgLower.includes('scientist') || msgLower.includes('boar') || msgLower.includes('bear') || msgLower.includes('wolf') || msgLower.includes('fall') || msgLower.includes('drown') || msgLower.includes('fire') || msgLower.includes('radiation')) {
+                                embedColor = '#3498db'; // PvE blue
+                                killType = '🐻 PvE / Environmental';
+                            } else if (msgLower.includes('suicide')) {
+                                embedColor = '#95a5a6';
+                                killType = '💀 Suicide';
+                            }
+
+                            // Update database stats for Kills/Deaths
+                            const players = await UserEconomy.findAll({ where: { guildId: guildId } });
+                            for (const p of players) {
+                                if (p.inGameName && msg.includes(p.inGameName)) {
+                                    if (msgLower.includes('killed') && msg.indexOf(p.inGameName) < msg.indexOf('killed')) {
+                                        if (killType.includes('PvP')) {
+                                            await p.update({ pvpKills: (p.pvpKills || 0) + 1 });
+                                        } else {
+                                            await p.update({ pveKills: (p.pveKills || 0) + 1 });
+                                        }
+                                    } else if (msgLower.includes('killed') || msgLower.includes('murdered')) {
+                                        await p.update({ deaths: (p.deaths || 0) + 1 });
+                                    }
+                                }
+                            }
+
+                            const killEmbed = new EmbedBuilder()
+                                .setTitle(killType)
+                                .setDescription(`\`\`\`fix\n${msg}\`\`\``)
+                                .setColor(embedColor)
+                                .setTimestamp();
+
+                            killfeedChannel.send({ embeds: [killEmbed] }).catch(() => {});
                         }
                     }
                 }
