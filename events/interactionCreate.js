@@ -1165,6 +1165,9 @@ module.exports = async (interaction, client) => {
                 const parts = interaction.customId.split('_'); 
                 const type = parts[3]; 
                 
+                // Auto-delete coordinate prompt message when clicked
+                await interaction.message.delete().catch(() => {});
+
                 if (type === 'pvezone') {
                     const row = new ActionRowBuilder().addComponents(
                         new StringSelectMenuBuilder()
@@ -1180,6 +1183,11 @@ module.exports = async (interaction, client) => {
 
                 const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(`bind_emote_${type}_${parts[4]}_${parts[5]}_${parts[6]}`).setPlaceholder('Select Quick-Chat...').addOptions(RUST_EMOTES));
                 return interaction.reply({ content: `🗣️ **Step 2:** Which Quick-Chat triggers this ${type}?`, components: [row], flags: 64 });
+            }
+
+            if (interaction.customId === 'btn_dismiss_coord') {
+                await interaction.message.delete().catch(() => {});
+                return interaction.reply({ content: '❌ Coordinate prompt dismissed.', flags: 64 });
             }
 
             if (interaction.customId === 'hub_shop_menu') {

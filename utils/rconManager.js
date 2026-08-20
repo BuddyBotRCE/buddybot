@@ -57,7 +57,10 @@ async function connectRcon(guildId, client) {
                                 channel.send({ content: `✅ <@${setupData.adminId}> **Cargo Dock Position Saved!**\nCoordinates: \`X: ${posX.toFixed(2)}, Y: ${posY.toFixed(2)}, Z: ${posZ.toFixed(2)}\`` });
                             } else {
                                 const coords = `${posX.toFixed(2)}_${posY.toFixed(2)}_${posZ.toFixed(2)}`;
-                                const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`btn_finalize_tpl_${setupData.type}_${coords}`).setLabel('📍 Finalize Setup').setStyle(ButtonStyle.Success));
+                                const row = new ActionRowBuilder().addComponents(
+                                    new ButtonBuilder().setCustomId(`btn_finalize_tpl_${setupData.type}_${coords}`).setLabel('📍 Finalize Setup').setStyle(ButtonStyle.Success),
+                                    new ButtonBuilder().setCustomId('btn_dismiss_coord').setLabel('❌ Dismiss').setStyle(ButtonStyle.Secondary)
+                                );
                                 channel.send({ content: `<@${setupData.adminId}> 📍 Coordinates grabbed: **${posX.toFixed(2)}, ${posY.toFixed(2)}, ${posZ.toFixed(2)}**\nClick below to finish!`, components: [row] });
                             }
                         }
@@ -182,7 +185,10 @@ function queueAdminPos(adminName, guildId, adminId, channelId, type, client) {
                     channel.send({ content: `⚠️ <@${adminId}> RCON position timed out. Default position set (X: 0, Y: 50, Z: 0).` });
                 } else {
                     const coords = `${fallbackX}_${fallbackY}_${fallbackZ}`;
-                    const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`btn_finalize_tpl_${type}_${coords}`).setLabel('📍 Finalize Setup').setStyle(ButtonStyle.Success));
+                    const row = new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId(`btn_finalize_tpl_${type}_${coords}`).setLabel('📍 Finalize Setup').setStyle(ButtonStyle.Success),
+                        new ButtonBuilder().setCustomId('btn_dismiss_coord').setLabel('❌ Dismiss').setStyle(ButtonStyle.Secondary)
+                    );
                     channel.send({ content: `<@${adminId}> ⚠️ RCON coordinate response timed out. Click below to use default center coordinates (0, 50, 0):`, components: [row] });
                 }
             }
@@ -191,7 +197,6 @@ function queueAdminPos(adminName, guildId, adminId, channelId, type, client) {
 
     adminPosQueue.set(adminName, { guildId, adminId, channelId, type, timeoutTimer });
 
-    // Target the specific player name via server.printpos "Name"
     sendRconCommand(guildId, `server.printpos "${adminName}"`).catch(() => {});
 }
 
