@@ -1,5 +1,5 @@
 const WebSocket = require('ws');
-const { GuildConfig, UserEconomy, CustomBind, BindCooldown } = require('../database/db');
+const { GuildConfig, UserEconomy, CustomBind, BindCooldown, ActiveBounty, BountyCooldown } = require('../database/db');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 
 const activeConnections = new Map();
@@ -33,6 +33,38 @@ async function connectRcon(guildId, client) {
                 if (msgLower.includes('invalid player') || msgLower.includes('unknown command')) return;
 
                 console.log('[RCON RAW MESSAGE]', msg);
+
+                const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
+                const guild = client.guilds.cache.get(guildId);
+
+                // ==========================================
+                // NEW: LIVE GAME FEEDS & ADMIN AUDIT LOGS
+                // ==========================================
+                if (currentConfig && guild) {
+                    // 1. Admin Commands / Spawns
+                    if (/(giving |spawned |teleport|kick |ban |inventory\.giveto)/i.test(msg)) {
+                        if (currentConfig.logAdminChannelId) {
+                            const chan = guild.channels.cache.get(currentConfig.logAdminChannelId);
+                            if (chan) chan.send({ embeds: [new EmbedBuilder().setColor('#e67e22').setDescription(`🛠️ **Admin / System Action:**\n\`\`\`${msg}\`\`\``).setTimestamp()] }).catch(()=>{});
+                        }
+                    }
+                    // 2. World Events
+                    if (/(Cargo Ship|Patrol Helicopter|Airdrop|Bradley APC|Locked Crate)/i.test(msg)) {
+                        if (currentConfig.logGameChannelId) {
+                            const chan = guild.channels.cache.get(currentConfig.logGameChannelId);
+                            if (chan) chan.send({ embeds: [new EmbedBuilder().setColor('#9b59b6').setDescription(`🌍 **World Event:**\n\`\`\`${msg}\`\`\``).setTimestamp()] }).catch(()=>{});
+                        }
+                    }
+                    // 3. Connections & Disconnections
+                    if (/ joined \[.*\]/i.test(msg) || / disconnecting:/i.test(msg)) {
+                        if (currentConfig.logGameChannelId) {
+                            const chan = guild.channels.cache.get(currentConfig.logGameChannelId);
+                            const isJoin = msg.includes('joined');
+                            if (chan) chan.send({ embeds: [new EmbedBuilder().setColor(isJoin ? '#2ecc71' : '#e74c3c').setDescription(`${isJoin ? '📥' : '📤'} **Connection Activity:**\n\`${msg}\``).setTimestamp()] }).catch(()=>{});
+                        }
+                    }
+                }
+                // ==========================================
 
                 // 1. POSITION TRACKER FOR `server.printpos "Name"` (GPortal RCE)
                 if (msg.includes('X:') || msg.includes('pos') || msg.includes('Position') || msgLower.includes('vector') || /(-?\d+\.\d+)/.test(msg)) {
@@ -69,41 +101,45 @@ async function connectRcon(guildId, client) {
                     }
                 }
 
-                // 2. KILLFEED & COMBAT LOG PARSER
+                // 2. KILLFEED, COMBAT LOG PARSER & BOUNTIES
                 if ((msgLower.includes('killed') || msgLower.includes('murdered') || msgLower.includes('suicide') || msgLower.includes('died') || msgLower.includes('slain')) && !msg.includes('[Killfeed]')) {
-                    const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
-                    
                     await sendRconCommand(guildId, `say "[Killfeed] ${msg}"`);
+
+                    let embedColor = '#e74c3c';
+                    let killType = '⚔️ PvP Combat';
+
+                    if (msgLower.includes('scientist') || msgLower.includes('boar') || msgLower.includes('bear') || msgLower.includes('wolf') || msgLower.includes('fall') || msgLower.includes('drown') || msgLower.includes('fire') || msgLower.includes('radiation')) {
+                        embedColor = '#3498db';
+                        killType = '🐻 PvE / Environmental';
+                    } else if (msgLower.includes('suicide')) {
+                        embedColor = '#95a5a6';
+                        killType = '💀 Suicide';
+                    }
+
+                    let killerDb = null;
+                    let victimDb = null;
+                    const players = await UserEconomy.findAll({ where: { guildId: guildId } });
+
+                    for (const p of players) {
+                        if (p.inGameName && msg.includes(p.inGameName)) {
+                            if (msgLower.includes('killed') && msg.indexOf(p.inGameName) < msg.indexOf('killed')) {
+                                if (killType.includes('PvP')) {
+                                    await p.update({ pvpKills: (p.pvpKills || 0) + 1 });
+                                    killerDb = p; // NEW: Track the Killer for Bounties
+                                } else {
+                                    await p.update({ pveKills: (p.pveKills || 0) + 1 });
+                                }
+                            } else if (msgLower.includes('killed') || msgLower.includes('murdered')) {
+                                // NEW: Update deaths and reset killstreak to 0
+                                await p.update({ deaths: (p.deaths || 0) + 1, currentKillstreak: 0 });
+                                victimDb = p; // NEW: Track the Victim for Bounties
+                            }
+                        }
+                    }
 
                     if (currentConfig && currentConfig.killfeedChannelId) {
                         const killfeedChannel = client.channels.cache.get(currentConfig.killfeedChannelId);
                         if (killfeedChannel) {
-                            let embedColor = '#e74c3c';
-                            let killType = '⚔️ PvP Combat';
-
-                            if (msgLower.includes('scientist') || msgLower.includes('boar') || msgLower.includes('bear') || msgLower.includes('wolf') || msgLower.includes('fall') || msgLower.includes('drown') || msgLower.includes('fire') || msgLower.includes('radiation')) {
-                                embedColor = '#3498db';
-                                killType = '🐻 PvE / Environmental';
-                            } else if (msgLower.includes('suicide')) {
-                                embedColor = '#95a5a6';
-                                killType = '💀 Suicide';
-                            }
-
-                            const players = await UserEconomy.findAll({ where: { guildId: guildId } });
-                            for (const p of players) {
-                                if (p.inGameName && msg.includes(p.inGameName)) {
-                                    if (msgLower.includes('killed') && msg.indexOf(p.inGameName) < msg.indexOf('killed')) {
-                                        if (killType.includes('PvP')) {
-                                            await p.update({ pvpKills: (p.pvpKills || 0) + 1 });
-                                        } else {
-                                            await p.update({ pveKills: (p.pveKills || 0) + 1 });
-                                        }
-                                    } else if (msgLower.includes('killed') || msgLower.includes('murdered')) {
-                                        await p.update({ deaths: (p.deaths || 0) + 1 });
-                                    }
-                                }
-                            }
-
                             const killEmbed = new EmbedBuilder()
                                 .setTitle(killType)
                                 .setDescription(`\`\`\`fix\n${msg}\`\`\``)
@@ -113,6 +149,11 @@ async function connectRcon(guildId, client) {
                             killfeedChannel.send({ embeds: [killEmbed] }).catch(() => {});
                         }
                     }
+
+                    // --- NEW BOUNTY LOGIC TRIGGER ---
+                    if (killerDb && victimDb && killerDb.userId !== victimDb.userId) {
+                        await processBountyLogic(guildId, killerDb, victimDb, client, currentConfig);
+                    }
                 }
 
                 // 3. CHAT PARSER & CUSTOM BINDS
@@ -121,7 +162,6 @@ async function connectRcon(guildId, client) {
                     if (chatMatch) {
                         const playerName = chatMatch[1].replace(/\[.*?\]/g, '').trim(); 
                         const chatText = chatMatch[2].toLowerCase();
-                        const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
 
                         if (currentConfig && currentConfig.crossChatChannelId) {
                             const crossChatChannel = client.channels.cache.get(currentConfig.crossChatChannelId);
@@ -212,6 +252,72 @@ async function triggerCustomEvent(guildId, eventType, data = {}) {
         return await sendRconCommand(guildId, 'event_cargoship');
     }
     throw new Error('Unknown custom event type.');
+}
+
+/**
+ * NEW: AUTOMATIC KILLSTREAK & BOUNTY PROCESSOR
+ */
+async function processBountyLogic(guildId, killerDb, victimDb, client, config) {
+    const currency = config.economyCurrency || 'Scrap';
+    const guild = client.guilds.cache.get(guildId);
+    const gameChannel = config.logGameChannelId ? guild?.channels.cache.get(config.logGameChannelId) : null;
+
+    // Increment Killer's Killstreak
+    await killerDb.update({ currentKillstreak: (killerDb.currentKillstreak || 0) + 1 });
+
+    // --- CHECK 1: DOES THE KILLER EARN A BOUNTY ON THEIR OWN HEAD? ---
+    if (killerDb.currentKillstreak >= (config.bountyKillsToActivate || 5)) {
+        const cd = await BountyCooldown.findOne({ where: { guildId, userId: killerDb.userId } });
+        const now = new Date();
+        
+        // Ensure they aren't on cooldown before placing a new bounty on them
+        if (!cd || cd.expiresAt < now) {
+            const existingBounty = await ActiveBounty.findOne({ where: { guildId, userId: killerDb.userId } });
+            
+            if (!existingBounty) {
+                await ActiveBounty.create({
+                    guildId,
+                    userId: killerDb.userId,
+                    inGameName: killerDb.inGameName,
+                    reward: config.bountyRewardAmount || 500
+                });
+
+                // Set Cooldown so they don't get spammed with bounties
+                const cdTime = new Date(now.getTime() + (config.bountyCooldownMinutes || 60) * 60000);
+                await BountyCooldown.upsert({ guildId, userId: killerDb.userId, expiresAt: cdTime });
+
+                // Announce the new bounty to the Game Feed
+                if (gameChannel) {
+                    gameChannel.send({ embeds: [
+                        new EmbedBuilder()
+                            .setTitle('🎯 BOUNTY PLACED!')
+                            .setDescription(`**${killerDb.inGameName}** is unstoppable on a **${killerDb.currentKillstreak} killstreak**!\n\nA bounty of **${config.bountyRewardAmount || 500} ${currency}** has been placed on their head!`)
+                            .setColor('#e74c3c')
+                    ]}).catch(()=>{});
+                }
+            }
+        }
+    }
+
+    // --- CHECK 2: DID THE KILLER JUST CLAIM AN ACTIVE BOUNTY? ---
+    const activeBounty = await ActiveBounty.findOne({ where: { guildId, userId: victimDb.userId } });
+    if (activeBounty) {
+        // Reward the killer
+        await killerDb.update({ wallet: killerDb.wallet + activeBounty.reward });
+        
+        // Announce the successful claim to the Game Feed
+        if (gameChannel) {
+            gameChannel.send({ embeds: [
+                new EmbedBuilder()
+                    .setTitle('🎯 BOUNTY CLAIMED!')
+                    .setDescription(`**${killerDb.inGameName}** has killed **${victimDb.inGameName}** and claimed the bounty of **${activeBounty.reward} ${currency}**!`)
+                    .setColor('#2ecc71')
+            ]}).catch(()=>{});
+        }
+
+        // Delete the claimed bounty
+        await activeBounty.destroy();
+    }
 }
 
 module.exports = { connectRcon, sendRconCommand, triggerCustomEvent, activeConnections, adminPosQueue, queueAdminPos };

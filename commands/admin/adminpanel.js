@@ -21,6 +21,7 @@ module.exports = {
                     { label: 'Economy Manager', value: 'setup_economy', emoji: '💰' },
                     { label: 'Minigames Casino', value: 'setup_minigames', emoji: '🎰' },
                     { label: 'BuddyPass Manager', value: 'setup_buddypass', emoji: '⭐' },
+                    { label: 'Clan System Manager', value: 'setup_clans', emoji: '🛡️' },
                     { label: 'Bounties System', value: 'setup_bounties', emoji: '🎯' },
                     { label: 'PVE Custom Zones', value: 'setup_pvezones', emoji: '🏕️' },
                     { label: 'Auto-Events (Premium)', value: 'setup_autoevents', emoji: '🚁' },
