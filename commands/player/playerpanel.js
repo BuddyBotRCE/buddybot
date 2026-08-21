@@ -19,7 +19,8 @@ module.exports = {
 
         const row1 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('hub_link_account').setLabel('Link Account').setStyle(ButtonStyle.Primary).setEmoji('🔗'),
-            new ButtonBuilder().setCustomId('hub_shop_menu').setLabel('Shop').setStyle(ButtonStyle.Secondary).setEmoji('🛒')
+            new ButtonBuilder().setCustomId('hub_shop_menu').setLabel('Shop').setStyle(ButtonStyle.Secondary).setEmoji('🛒'),
+            new ButtonBuilder().setCustomId('hub_bounties').setLabel('Bounties').setStyle(ButtonStyle.Danger).setEmoji('🎯')
         );
 
         const row2 = new ActionRowBuilder().addComponents(
