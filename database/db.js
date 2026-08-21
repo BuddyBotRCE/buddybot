@@ -69,7 +69,11 @@ const GuildConfig = sequelize.define('GuildConfig', {
     aiProvider: { type: DataTypes.STRING, defaultValue: 'openai' },
     aiModel: { type: DataTypes.STRING, defaultValue: 'gpt-4o-mini' },
     aiApiKey: { type: DataTypes.STRING, allowNull: true },
-    aiBaseUrl: { type: DataTypes.STRING, defaultValue: 'https://api.openai.com/v1' }
+    aiBaseUrl: { type: DataTypes.STRING, defaultValue: 'https://api.openai.com/v1' },
+    // --- NEW LOGGING CHANNELS ---
+    logAdminChannelId: { type: DataTypes.STRING, allowNull: true },
+    logGameChannelId: { type: DataTypes.STRING, allowNull: true },
+    logDiscordChannelId: { type: DataTypes.STRING, allowNull: true }
 });
 
 const UserEconomy = sequelize.define('UserEconomy', {

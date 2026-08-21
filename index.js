@@ -10,7 +10,9 @@ const client = new Client({
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildVoiceStates, // Added for Voice Logs
+        GatewayIntentBits.GuildModeration   // Added for Ban Logs
     ]
 });
 
@@ -66,6 +68,9 @@ app.post('/webhook/stripe', async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`[SYSTEM] Webhook listener running on port ${PORT}`));
+
+// --- START DISCORD LOGGER ---
+require('./utils/discordLogger')(client);
 
 // Load Slash Commands Recursively (Supports subfolders like admin/ and player/)
 const commandsPath = path.join(__dirname, 'commands');

@@ -28,7 +28,8 @@ module.exports = {
                     { label: 'Custom Binds', value: 'setup_binds', emoji: '🗣️' },
                     { label: 'Cross-Chat', value: 'setup_crosschat', emoji: '💬' },
                     { label: 'ORP Manager', value: 'setup_orp', emoji: '🛡️' },
-                    { label: 'AI Integration Setup', value: 'setup_ai', emoji: '🤖' }
+                    { label: 'AI Integration Setup', value: 'setup_ai', emoji: '🤖' },
+                    { label: 'Logging System', value: 'setup_logging', emoji: '📊' },
                 ])
         );
 

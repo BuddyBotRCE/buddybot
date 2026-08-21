@@ -94,6 +94,18 @@ module.exports = async (interaction, client) => {
                 await GuildConfig.upsert({ guildId: interaction.guild.id, ticketTranscriptChannelId: interaction.values[0] });
                 return interaction.update({ content: `✅ Ticket Transcript channel set!`, components: [] });
             }
+            if (interaction.customId === 'select_log_admin_channel') {
+                await GuildConfig.upsert({ guildId: interaction.guild.id, logAdminChannelId: interaction.values[0] });
+                return interaction.update({ content: `✅ Admin Logs channel successfully linked!`, components: [] });
+            }
+            if (interaction.customId === 'select_log_game_channel') {
+                await GuildConfig.upsert({ guildId: interaction.guild.id, logGameChannelId: interaction.values[0] });
+                return interaction.update({ content: `✅ Game Feeds channel successfully linked!`, components: [] });
+            }
+            if (interaction.customId === 'select_log_discord_channel') {
+                await GuildConfig.upsert({ guildId: interaction.guild.id, logDiscordChannelId: interaction.values[0] });
+                return interaction.update({ content: `✅ Discord Logs channel successfully linked!`, components: [] });
+            }
         }
         
         // ====================================================================
@@ -414,6 +426,23 @@ module.exports = async (interaction, client) => {
                     return interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
                 }
 
+                if (module === 'setup_logging') {
+                    const embed = new EmbedBuilder()
+                        .setTitle('📊 Server Logging & Audit Manager')
+                        .setDescription('Route different types of logs to specific channels to keep your server organized.\n\n• **Admin Logs:** RCON commands, item spawns, bans, teleports.\n• **Game Feeds:** Player joins/leaves, killfeed, world events.\n• **Discord Logs:** Message edits/deletes, voice chat activity, server joins/leaves.')
+                        .setColor('#3498db');
+
+                    const row = new ActionRowBuilder().addComponents(
+                        new StringSelectMenuBuilder().setCustomId('log_action_select').setPlaceholder('Select a log channel to configure...')
+                        .addOptions([
+                            { label: 'Set Admin Logs Channel', value: 'log_admin', emoji: '🛡️' },
+                            { label: 'Set Game Feeds Channel', value: 'log_game', emoji: '🎮' },
+                            { label: 'Set Discord Logs Channel', value: 'log_discord', emoji: '💬' }
+                        ])
+                    );
+                    return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+                }
+
                 if (module === 'setup_ai') {
                     const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
                     const embed = new EmbedBuilder()
@@ -466,6 +495,21 @@ module.exports = async (interaction, client) => {
                 const modal = new ModalBuilder().setCustomId(`modal_${module}`).setTitle('Configure Settings');
                 modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('setup_input').setLabel('Data').setStyle(TextInputStyle.Short).setRequired(true)));
                 return interaction.showModal(modal);
+            }
+
+            if (interaction.customId === 'log_action_select') {
+                if (module === 'log_admin') {
+                    const row = new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_log_admin_channel').setPlaceholder('Select Admin Logs Channel...').addChannelTypes(ChannelType.GuildText));
+                    return interaction.reply({ content: '🛡️ Select channel for **Admin Logs**:', components: [row], flags: 64 });
+                }
+                if (module === 'log_game') {
+                    const row = new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_log_game_channel').setPlaceholder('Select Game Feeds Channel...').addChannelTypes(ChannelType.GuildText));
+                    return interaction.reply({ content: '🎮 Select channel for **Game Feeds**:', components: [row], flags: 64 });
+                }
+                if (module === 'log_discord') {
+                    const row = new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_log_discord_channel').setPlaceholder('Select Discord Logs Channel...').addChannelTypes(ChannelType.GuildText));
+                    return interaction.reply({ content: '💬 Select channel for **Discord Logs**:', components: [row], flags: 64 });
+                }
             }
 
             if (interaction.customId === 'select_ai_provider') {
