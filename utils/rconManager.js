@@ -38,7 +38,7 @@ async function connectRcon(guildId, client) {
                 const guild = client.guilds.cache.get(guildId);
 
                 // ==========================================
-                // NEW: LIVE GAME FEEDS & ADMIN AUDIT LOGS
+                // LIVE GAME FEEDS & ADMIN AUDIT LOGS
                 // ==========================================
                 if (currentConfig && guild) {
                     // 1. Admin Commands / Spawns
@@ -125,14 +125,13 @@ async function connectRcon(guildId, client) {
                             if (msgLower.includes('killed') && msg.indexOf(p.inGameName) < msg.indexOf('killed')) {
                                 if (killType.includes('PvP')) {
                                     await p.update({ pvpKills: (p.pvpKills || 0) + 1 });
-                                    killerDb = p; // NEW: Track the Killer for Bounties
+                                    killerDb = p; 
                                 } else {
                                     await p.update({ pveKills: (p.pveKills || 0) + 1 });
                                 }
                             } else if (msgLower.includes('killed') || msgLower.includes('murdered')) {
-                                // NEW: Update deaths and reset killstreak to 0
                                 await p.update({ deaths: (p.deaths || 0) + 1, currentKillstreak: 0 });
-                                victimDb = p; // NEW: Track the Victim for Bounties
+                                victimDb = p; 
                             }
                         }
                     }
@@ -150,7 +149,7 @@ async function connectRcon(guildId, client) {
                         }
                     }
 
-                    // --- NEW BOUNTY LOGIC TRIGGER ---
+                    // --- BOUNTY LOGIC TRIGGER ---
                     if (killerDb && victimDb && killerDb.userId !== victimDb.userId) {
                         await processBountyLogic(guildId, killerDb, victimDb, client, currentConfig);
                     }
@@ -162,6 +161,7 @@ async function connectRcon(guildId, client) {
                     if (chatMatch) {
                         const playerName = chatMatch[1].replace(/\[.*?\]/g, '').trim(); 
                         const chatText = chatMatch[2].toLowerCase();
+                        const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
 
                         if (currentConfig && currentConfig.crossChatChannelId) {
                             const crossChatChannel = client.channels.cache.get(currentConfig.crossChatChannelId);
@@ -245,32 +245,23 @@ async function triggerCustomEvent(guildId, eventType, data = {}) {
     if (eventType === 'elite_crate') return await sendRconCommand(guildId, 'spawn codelockedhackablecrate');
     if (eventType === 'timed_crate') return await sendRconCommand(guildId, 'spawn hackablelockedcrate');
     if (eventType === 'docked_cargo') {
-        const config = await GuildConfig.findOne({ where: { guildId } });
-        if (config && config.cargoDockX !== null && config.cargoDockY !== null && config.cargoDockZ !== null) {
-            return await sendRconCommand(guildId, `spawn cargoship ${config.cargoDockX} ${config.cargoDockY} ${config.cargoDockZ}`);
-        }
-        return await sendRconCommand(guildId, 'event_cargoship');
+        // Correct RCE community command to spawn cargo
+        return await sendRconCommand(guildId, 'cargoships.spawncargoship');
     }
     throw new Error('Unknown custom event type.');
 }
 
-/**
- * NEW: AUTOMATIC KILLSTREAK & BOUNTY PROCESSOR
- */
 async function processBountyLogic(guildId, killerDb, victimDb, client, config) {
     const currency = config.economyCurrency || 'Scrap';
     const guild = client.guilds.cache.get(guildId);
     const gameChannel = config.logGameChannelId ? guild?.channels.cache.get(config.logGameChannelId) : null;
 
-    // Increment Killer's Killstreak
     await killerDb.update({ currentKillstreak: (killerDb.currentKillstreak || 0) + 1 });
 
-    // --- CHECK 1: DOES THE KILLER EARN A BOUNTY ON THEIR OWN HEAD? ---
     if (killerDb.currentKillstreak >= (config.bountyKillsToActivate || 5)) {
         const cd = await BountyCooldown.findOne({ where: { guildId, userId: killerDb.userId } });
         const now = new Date();
         
-        // Ensure they aren't on cooldown before placing a new bounty on them
         if (!cd || cd.expiresAt < now) {
             const existingBounty = await ActiveBounty.findOne({ where: { guildId, userId: killerDb.userId } });
             
@@ -282,11 +273,9 @@ async function processBountyLogic(guildId, killerDb, victimDb, client, config) {
                     reward: config.bountyRewardAmount || 500
                 });
 
-                // Set Cooldown so they don't get spammed with bounties
                 const cdTime = new Date(now.getTime() + (config.bountyCooldownMinutes || 60) * 60000);
                 await BountyCooldown.upsert({ guildId, userId: killerDb.userId, expiresAt: cdTime });
 
-                // Announce the new bounty to the Game Feed
                 if (gameChannel) {
                     gameChannel.send({ embeds: [
                         new EmbedBuilder()
@@ -299,13 +288,10 @@ async function processBountyLogic(guildId, killerDb, victimDb, client, config) {
         }
     }
 
-    // --- CHECK 2: DID THE KILLER JUST CLAIM AN ACTIVE BOUNTY? ---
     const activeBounty = await ActiveBounty.findOne({ where: { guildId, userId: victimDb.userId } });
     if (activeBounty) {
-        // Reward the killer
         await killerDb.update({ wallet: killerDb.wallet + activeBounty.reward });
         
-        // Announce the successful claim to the Game Feed
         if (gameChannel) {
             gameChannel.send({ embeds: [
                 new EmbedBuilder()
@@ -315,9 +301,20 @@ async function processBountyLogic(guildId, killerDb, victimDb, client, config) {
             ]}).catch(()=>{});
         }
 
-        // Delete the claimed bounty
         await activeBounty.destroy();
     }
 }
 
-module.exports = { connectRcon, sendRconCommand, triggerCustomEvent, activeConnections, adminPosQueue, queueAdminPos };
+module.exports = { 
+    connectRcon, 
+    sendRconCommand, 
+    triggerCustomEvent, 
+    activeConnections, 
+    adminPosQueue, 
+    queueAdminPos,
+    // Exporting the test button listener hook reference for interactionCreate
+    async handleTestCargoButton(interaction) {
+        await sendRconCommand(interaction.guild.id, 'cargoships.spawncargoship');
+        return interaction.reply({ content: `✅ Successfully force-spawned a Cargo Ship on the map!`, flags: 64 });
+    }
+};
