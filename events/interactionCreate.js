@@ -984,6 +984,24 @@ module.exports = async (interaction, client) => {
                 );
                 return interaction.showModal(modal);
             }
+            if (interaction.customId === 'hub_buddypass_view') {
+    const challenges = await BuddyPassChallenge.findAll({ where: { guildId: interaction.guild.id } });
+    const challengeList = challenges.length 
+        ? challenges.map(c => `• **${c.title}** — Target: *${c.targetAmount} ${c.targetType}* | Reward: **+${c.rewardXp} XP**`).join('\n') 
+        : 'No active BuddyPass challenges configured on this server yet.';
+
+    const user = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
+    const lvl = user?.level || 1;
+    const xp = user?.xp || 0;
+
+    const embed = new EmbedBuilder()
+        .setTitle('⭐ Server BuddyPass & Challenges')
+        .setDescription(`Complete seasonal objectives to earn XP and unlock tier rewards!\n\n**Your Progress:** Level **${lvl}** (${xp} XP)\n\n**Active Season Challenges:**\n${challengeList}`)
+        .setColor('#f39c12')
+        .setTimestamp();
+
+    return interaction.reply({ embeds: [embed], flags: 64 });
+}
 
             if (interaction.customId === 'hub_bounties') {
                 const bounties = await ActiveBounty.findAll({ where: { guildId: interaction.guild.id } });
