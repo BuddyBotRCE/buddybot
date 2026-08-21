@@ -150,30 +150,6 @@ module.exports = async (interaction, client) => {
         if (interaction.isStringSelectMenu()) {
             const module = interaction.values[0];
 
-  if (interaction.customId === 'modal_link_account') {
-    const ign = interaction.fields.getTextInputValue('ign').trim();
-    const guildId = interaction.guild.id;
-    const userId = interaction.user.id;
-
-    // Direct search and update/create to avoid composite primary key ambiguity
-    let userRecord = await UserEconomy.findOne({ where: { guildId, userId } });
-
-    if (userRecord) {
-        await userRecord.update({ inGameName: ign });
-    } else {
-        await UserEconomy.create({
-            guildId,
-            userId,
-            inGameName: ign,
-            wallet: 0,
-            bank: 0,
-            xp: 0,
-            level: 1
-        });
-    }
-
-    return interaction.reply({ content: `✅ Successfully linked your Discord to Rust account: **${ign}**!`, flags: 64 });
-}
             if (interaction.customId === 'select_pve_delete_exec') {
                 await interaction.deferUpdate();
                 const zoneId = module;
@@ -358,21 +334,21 @@ module.exports = async (interaction, client) => {
                     );
                     return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
                 }
-                // Under admin_menu_select router:
-if (module === 'setup_multiserver') {
-    const servers = await GameServer.findAll({ where: { guildId: interaction.guild.id } });
-    const serverList = servers.length ? servers.map(s => `• **${s.serverName}** (\`${s.rconIp}:${s.rconPort}\`)`).join('\n') : 'No additional game servers configured.';
 
-    const embed = new EmbedBuilder()
-        .setTitle('🖥️ Multi-Server RCON Manager')
-        .setDescription(`Manage multiple game servers hosted from this Discord server.\n\n**Configured Servers:**\n${serverList}`)
-        .setColor('#3498db');
+                if (module === 'setup_multiserver') {
+                    const servers = await GameServer.findAll({ where: { guildId: interaction.guild.id } });
+                    const serverList = servers.length ? servers.map(s => `• **${s.serverName}** (\`${s.rconIp}:${s.rconPort}\`)`).join('\n') : 'No additional game servers configured.';
 
-    const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('btn_multiserver_add').setLabel('Add Game Server').setStyle(ButtonStyle.Success).setEmoji('➕')
-    );
-    return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
-}
+                    const embed = new EmbedBuilder()
+                        .setTitle('🖥️ Multi-Server RCON Manager')
+                        .setDescription(`Manage multiple game servers hosted from this Discord server.\n\n**Configured Servers:**\n${serverList}`)
+                        .setColor('#3498db');
+
+                    const row = new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('btn_multiserver_add').setLabel('Add Game Server').setStyle(ButtonStyle.Success).setEmoji('➕')
+                    );
+                    return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+                }
 
                 if (module === 'setup_buddypass') {
                     const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
@@ -1024,33 +1000,33 @@ if (module === 'setup_multiserver') {
                 return interaction.showModal(modal);
             }
             if (interaction.customId === 'hub_buddypass_view') {
-    const challenges = await BuddyPassChallenge.findAll({ where: { guildId: interaction.guild.id } });
-    const challengeList = challenges.length 
-        ? challenges.map(c => `• **${c.title}** — Target: *${c.targetAmount} ${c.targetType}* | Reward: **+${c.rewardXp} XP**`).join('\n') 
-        : 'No active BuddyPass challenges configured on this server yet.';
+                const challenges = await BuddyPassChallenge.findAll({ where: { guildId: interaction.guild.id } });
+                const challengeList = challenges.length 
+                    ? challenges.map(c => `• **${c.title}** — Target: *${c.targetAmount} ${c.targetType}* | Reward: **+${c.rewardXp} XP**`).join('\n') 
+                    : 'No active BuddyPass challenges configured on this server yet.';
 
-    const user = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
-    const lvl = user?.level || 1;
-    const xp = user?.xp || 0;
+                const user = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
+                const lvl = user?.level || 1;
+                const xp = user?.xp || 0;
 
-    const embed = new EmbedBuilder()
-        .setTitle('⭐ Server BuddyPass & Challenges')
-        .setDescription(`Complete seasonal objectives to earn XP and unlock tier rewards!\n\n**Your Progress:** Level **${lvl}** (${xp} XP)\n\n**Active Season Challenges:**\n${challengeList}`)
-        .setColor('#f39c12')
-        .setTimestamp();
+                const embed = new EmbedBuilder()
+                    .setTitle('⭐ Server BuddyPass & Challenges')
+                    .setDescription(`Complete seasonal objectives to earn XP and unlock tier rewards!\n\n**Your Progress:** Level **${lvl}** (${xp} XP)\n\n**Active Season Challenges:**\n${challengeList}`)
+                    .setColor('#f39c12')
+                    .setTimestamp();
 
-    return interaction.reply({ embeds: [embed], flags: 64 });
-}
-if (interaction.customId === 'btn_multiserver_add') {
-    const modal = new ModalBuilder().setCustomId('modal_multiserver_add').setTitle('Add Game Server');
-    modal.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('server_name').setLabel("Server Name (e.g. Main 2X)").setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_ip').setLabel("RCON IP Address").setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_port').setLabel("RCON Port").setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_pass').setLabel("RCON Password").setStyle(TextInputStyle.Short).setRequired(true))
-    );
-    return interaction.showModal(modal);
-}
+                return interaction.reply({ embeds: [embed], flags: 64 });
+            }
+            if (interaction.customId === 'btn_multiserver_add') {
+                const modal = new ModalBuilder().setCustomId('modal_multiserver_add').setTitle('Add Game Server');
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('server_name').setLabel("Server Name (e.g. Main 2X)").setStyle(TextInputStyle.Short).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_ip').setLabel("RCON IP Address").setStyle(TextInputStyle.Short).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_port').setLabel("RCON Port").setStyle(TextInputStyle.Short).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_pass').setLabel("RCON Password").setStyle(TextInputStyle.Short).setRequired(true))
+                );
+                return interaction.showModal(modal);
+            }
 
             if (interaction.customId === 'hub_bounties') {
                 const bounties = await ActiveBounty.findAll({ where: { guildId: interaction.guild.id } });
@@ -1752,33 +1728,12 @@ if (interaction.customId === 'btn_multiserver_add') {
             }
 
             if (interaction.customId === 'hub_link_account') {
-    // Fetch your game servers from the database (assuming you have a GameServer model or similar)
-    const servers = await GameServer.findAll({ where: { guildId: interaction.guild.id } });
-    
-    if (!servers || servers.length === 0) {
-        // Fallback if no servers are registered yet, just show the standard modal
-        const modal = new ModalBuilder().setCustomId('modal_link_account_global').setTitle('Link Rust Account');
-        modal.addComponents(new ActionRowBuilder().addComponents(
-            new TextInputBuilder().setCustomId('ign').setLabel("Your exact in-game Rust name").setStyle(TextInputStyle.Short).setRequired(true)
-        ));
-        return interaction.showModal(modal);
-    }
-
-    const options = servers.map(s => ({
-        label: s.serverName,
-        value: `link_server_${s.id}`,
-        emoji: '🖥️'
-    }));
-
-    const row = new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder()
-            .setCustomId('select_link_server_target')
-            .setPlaceholder('Select which server to link your account to...')
-            .addOptions(options)
-    );
-
-    return interaction.reply({ content: '🔗 **Account Linking:** Please select the specific server you play on:', components: [row], flags: 64 });
-}
+                const modal = new ModalBuilder().setCustomId('modal_link_account').setTitle('Link Rust Account');
+                modal.addComponents(new ActionRowBuilder().addComponents(
+                    new TextInputBuilder().setCustomId('ign').setLabel("Your exact in-game Rust name").setStyle(TextInputStyle.Short).setRequired(true)
+                ));
+                return interaction.showModal(modal);
+            }
 
             if (interaction.customId === 'hub_balance') {
                 const user = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
@@ -1908,21 +1863,22 @@ if (interaction.customId === 'btn_multiserver_add') {
         if (interaction.isModalSubmit()) {
 
             if (interaction.customId === 'modal_multiserver_add') {
-    const serverName = interaction.fields.getTextInputValue('server_name').trim();
-    const rconIp = interaction.fields.getTextInputValue('rcon_ip').trim();
-    const rconPort = interaction.fields.getTextInputValue('rcon_port').trim();
-    const rconPassword = interaction.fields.getTextInputValue('rcon_pass').trim();
+                const serverName = interaction.fields.getTextInputValue('server_name').trim();
+                const rconIp = interaction.fields.getTextInputValue('rcon_ip').trim();
+                const rconPort = interaction.fields.getTextInputValue('rcon_port').trim();
+                const rconPassword = interaction.fields.getTextInputValue('rcon_pass').trim();
 
-    await GameServer.create({
-        guildId: interaction.guild.id,
-        serverName,
-        rconIp,
-        rconPort,
-        rconPassword
-    });
+                await GameServer.create({
+                    guildId: interaction.guild.id,
+                    serverName,
+                    rconIp,
+                    rconPort,
+                    rconPassword
+                });
 
-    return interaction.reply({ content: `✅ Successfully added game server **${serverName}** (\`${rconIp}:${rconPort}\`)!`, flags: 64 });
-}
+                return interaction.reply({ content: `✅ Successfully added game server **${serverName}** (\`${rconIp}:${rconPort}\`)!`, flags: 64 });
+            }
+
             if (interaction.customId === 'modal_setup_rcon') {
                 const ip = interaction.fields.getTextInputValue('rcon_ip').trim();
                 const port = interaction.fields.getTextInputValue('rcon_port').trim();
@@ -2115,9 +2071,26 @@ if (interaction.customId === 'btn_multiserver_add') {
             }
 
             if (interaction.customId === 'modal_link_account') {
-                const ign = interaction.fields.getTextInputValue('ign');
-                let [user] = await UserEconomy.findOrCreate({ where: { guildId: interaction.guild.id, userId: interaction.user.id }, defaults: { wallet: 0 } });
-                await user.update({ inGameName: ign });
+                const ign = interaction.fields.getTextInputValue('ign').trim();
+                const guildId = interaction.guild.id;
+                const userId = interaction.user.id;
+
+                let userRecord = await UserEconomy.findOne({ where: { guildId, userId } });
+
+                if (userRecord) {
+                    await userRecord.update({ inGameName: ign });
+                } else {
+                    await UserEconomy.create({
+                        guildId,
+                        userId,
+                        inGameName: ign,
+                        wallet: 0,
+                        bank: 0,
+                        xp: 0,
+                        level: 1
+                    });
+                }
+
                 return interaction.reply({ content: `✅ Successfully linked your Discord to Rust account: **${ign}**!\nYou can now use the shop, kits, and teleports.`, flags: 64 });
             }
 
