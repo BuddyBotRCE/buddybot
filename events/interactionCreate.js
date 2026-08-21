@@ -1047,44 +1047,7 @@ module.exports = async (interaction, client) => {
                 return interaction.showModal(modal);
             }
 
-            // --- AUTO-EVENT TEST SPRAYS ---
-            if (interaction.customId === 'btn_ae_test_cargo') {
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-                if (config && config.cargoDockX !== null && config.cargoDockY !== null && config.cargoDockZ !== null) {
-                    const coords = `${config.cargoDockX},${config.cargoDockY},${config.cargoDockZ}`;
-                    await sendRconCommand(interaction.guild.id, `spawn cargoshipdynamic1 ${coords}`);
-                    
-                    const crates = config.cargoCrateCount || 3;
-                    for(let i=0; i<crates; i++) {
-                        let cX = config.cargoDockX + (i * 8);
-                        let cY = config.cargoDockY + 14; 
-                        let cZ = config.cargoDockZ;
-                        await sendRconCommand(interaction.guild.id, `spawn codelockedhackablecrate ${cX},${cY},${cZ}`);
-                    }
-
-                    const duration = config.cargoDurationMinutes || 30;
-                    setTimeout(() => {
-                        sendRconCommand(interaction.guild.id, 'del cargoshipdynamic1').catch(()=>{});
-                    }, duration * 60000);
-
-                    return interaction.reply({ content: `✅ Spawned Docked Cargo Ship with ${crates} crates! It will despawn in ${duration} minutes.`, flags: 64 });
-                } else {
-                    await sendRconCommand(interaction.guild.id, 'cargoships.spawncargoship');
-                    return interaction.reply({ content: `⚠️ No custom dock position set. Triggered standard roaming cargo event test!`, flags: 64 });
-                }
-            }
-            if (interaction.customId === 'btn_ae_test_supply') {
-                await sendRconCommand(interaction.guild.id, 'supply.drop');
-                return interaction.reply({ content: `✅ Test supply drop triggered successfully!`, flags: 64 });
-            }
-            if (interaction.customId === 'btn_ae_test_elite') {
-                await sendRconCommand(interaction.guild.id, 'spawn codelockedhackablecrate');
-                return interaction.reply({ content: `✅ Test elite crate spawned successfully!`, flags: 64 });
-            }
-            if (interaction.customId === 'btn_ae_test_timed') {
-                await sendRconCommand(interaction.guild.id, 'spawn hackablelockedcrate');
-                return interaction.reply({ content: `✅ Test timed crate spawned successfully!`, flags: 64 });
-            }
+            
 
             if (interaction.customId.startsWith('lb_refresh_')) {
                 const category = interaction.customId.replace('lb_refresh_', '');
