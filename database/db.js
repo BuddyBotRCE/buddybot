@@ -4,15 +4,26 @@ const path = require('path');
 let sequelize;
 
 if (process.env.DATABASE_URL) {
+    // Production: Use PostgreSQL (Railway persistent database)
     sequelize = new Sequelize(process.env.DATABASE_URL, {
         dialect: 'postgres',
         logging: false,
-        dialectOptions: { ssl: { require: true, rejectUnauthorized: false } }
+        dialectOptions: {
+            ssl: {
+                require: true,
+                rejectUnauthorized: false
+            }
+        }
     });
     console.log('[DATABASE] Connected to production PostgreSQL database.');
 } else {
+    // Local Testing: Fallback to local SQLite file
     const storagePath = process.env.DATABASE_STORAGE || path.join(__dirname, '../database.sqlite');
-    sequelize = new Sequelize({ dialect: 'sqlite', storage: storagePath, logging: false });
+    sequelize = new Sequelize({
+        dialect: 'sqlite',
+        storage: storagePath,
+        logging: false
+    });
     console.log('[DATABASE] Connected to local SQLite database.');
 }
 
@@ -67,13 +78,27 @@ const GuildConfig = sequelize.define('GuildConfig', {
     bountyKillsToActivate: { type: DataTypes.INTEGER, defaultValue: 5 },
     bountyRewardAmount: { type: DataTypes.INTEGER, defaultValue: 500 },
     bountyCooldownMinutes: { type: DataTypes.INTEGER, defaultValue: 60 },
-    // --- NEW CLAN CONFIG ---
     clanCreationCost: { type: DataTypes.INTEGER, defaultValue: 1000 },
     clanDefaultMaxMembers: { type: DataTypes.INTEGER, defaultValue: 4 },
     clanDiscordSyncEnabled: { type: DataTypes.BOOLEAN, defaultValue: false }
 });
 
-const UserEconomy = sequelize.define('UserEconomy', { guildId: { type: DataTypes.STRING, primaryKey: true }, userId: { type: DataTypes.STRING, primaryKey: true }, wallet: { type: DataTypes.INTEGER, defaultValue: 0 }, bank: { type: DataTypes.INTEGER, defaultValue: 0 }, inGameName: { type: DataTypes.STRING, allowNull: true }, lastDaily: { type: DataTypes.DATE, allowNull: true }, lastVoteTime: { type: DataTypes.DATE, allowNull: true }, xp: { type: DataTypes.INTEGER, defaultValue: 0 }, level: { type: DataTypes.INTEGER, defaultValue: 1 }, pvpKills: { type: DataTypes.INTEGER, defaultValue: 0 }, pveKills: { type: DataTypes.INTEGER, defaultValue: 0 }, deaths: { type: DataTypes.INTEGER, defaultValue: 0 }, currentKillstreak: { type: DataTypes.INTEGER, defaultValue: 0 } });
+const UserEconomy = sequelize.define('UserEconomy', { 
+    guildId: { type: DataTypes.STRING, primaryKey: true }, 
+    userId: { type: DataTypes.STRING, primaryKey: true }, 
+    wallet: { type: DataTypes.INTEGER, defaultValue: 0 }, 
+    bank: { type: DataTypes.INTEGER, defaultValue: 0 }, 
+    inGameName: { type: DataTypes.STRING, allowNull: true }, 
+    lastDaily: { type: DataTypes.DATE, allowNull: true }, 
+    lastVoteTime: { type: DataTypes.DATE, allowNull: true }, 
+    xp: { type: DataTypes.INTEGER, defaultValue: 0 }, 
+    level: { type: DataTypes.INTEGER, defaultValue: 1 }, 
+    pvpKills: { type: DataTypes.INTEGER, defaultValue: 0 }, 
+    pveKills: { type: DataTypes.INTEGER, defaultValue: 0 }, 
+    deaths: { type: DataTypes.INTEGER, defaultValue: 0 }, 
+    currentKillstreak: { type: DataTypes.INTEGER, defaultValue: 0 } 
+});
+
 const Giveaway = sequelize.define('Giveaway', { messageId: { type: DataTypes.STRING, primaryKey: true }, guildId: { type: DataTypes.STRING }, channelId: { type: DataTypes.STRING }, prize: { type: DataTypes.STRING }, endTime: { type: DataTypes.DATE }, winnersCount: { type: DataTypes.INTEGER, defaultValue: 1 }, entries: { type: DataTypes.TEXT, defaultValue: '[]' }, isActive: { type: DataTypes.BOOLEAN, defaultValue: true } });
 const CustomBind = sequelize.define('CustomBind', { guildId: { type: DataTypes.STRING }, emote: { type: DataTypes.STRING }, command: { type: DataTypes.TEXT }, cooldown: { type: DataTypes.INTEGER, defaultValue: 0 }, cost: { type: DataTypes.INTEGER, defaultValue: 0 }, roleId: { type: DataTypes.STRING, allowNull: true } });
 const BindCooldown = sequelize.define('BindCooldown', { guildId: { type: DataTypes.STRING, primaryKey: true }, userId: { type: DataTypes.STRING, primaryKey: true }, bindId: { type: DataTypes.INTEGER, primaryKey: true }, expiresAt: { type: DataTypes.DATE } });
@@ -90,7 +115,6 @@ const PveZone = sequelize.define('PveZone', { guildId: { type: DataTypes.STRING 
 const ActiveBounty = sequelize.define('ActiveBounty', { guildId: { type: DataTypes.STRING }, userId: { type: DataTypes.STRING }, inGameName: { type: DataTypes.STRING }, reward: { type: DataTypes.INTEGER } });
 const BountyCooldown = sequelize.define('BountyCooldown', { guildId: { type: DataTypes.STRING, primaryKey: true }, userId: { type: DataTypes.STRING, primaryKey: true }, expiresAt: { type: DataTypes.DATE } });
 
-// --- NEW CLAN TABLES ---
 const Clan = sequelize.define('Clan', {
     id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
     guildId: { type: DataTypes.STRING, allowNull: false },
@@ -110,7 +134,7 @@ const ClanMember = sequelize.define('ClanMember', {
     guildId: { type: DataTypes.STRING, primaryKey: true },
     userId: { type: DataTypes.STRING, primaryKey: true },
     clanId: { type: DataTypes.INTEGER, allowNull: false },
-    role: { type: DataTypes.STRING, defaultValue: 'Member' } // 'Leader', 'Officer', 'Member'
+    role: { type: DataTypes.STRING, defaultValue: 'Member' }
 });
 
 const ClanInvite = sequelize.define('ClanInvite', {
@@ -128,7 +152,18 @@ const ClanWar = sequelize.define('ClanWar', {
     status: { type: DataTypes.STRING, defaultValue: 'active' }
 });
 
-async function initDb() { await sequelize.authenticate(); await sequelize.sync(); console.log('[DATABASE] Tables synchronized successfully.'); }
+async function initDb() { 
+    await sequelize.authenticate(); 
+    // This alter: true ensures new columns/tables sync safely without crashing
+    await sequelize.sync({ alter: true }); 
+    console.log('[DATABASE] Tables synchronized successfully.'); 
+}
+
 initDb();
 
-module.exports = { sequelize, GuildConfig, UserEconomy, Giveaway, CustomBind, BindCooldown, ServerKit, ShopItem, ShopCooldown, CasinoCooldown, OrpConfig, PlayerOrpBase, BuddyPassChallenge, BuddyPassReward, TicketCategory, PveZone, ActiveBounty, BountyCooldown, Clan, ClanMember, ClanInvite, ClanWar };
+module.exports = { 
+    sequelize, GuildConfig, UserEconomy, Giveaway, CustomBind, BindCooldown, 
+    ServerKit, ShopItem, ShopCooldown, CasinoCooldown, OrpConfig, PlayerOrpBase, 
+    BuddyPassChallenge, BuddyPassReward, TicketCategory, PveZone, 
+    ActiveBounty, BountyCooldown, Clan, ClanMember, ClanInvite, ClanWar 
+};
