@@ -669,24 +669,25 @@ module.exports = async (interaction, client) => {
             }
 
             if (interaction.customId.startsWith('pve_shape_')) {
-                const parts = interaction.customId.split('_');
-                const shape = module; 
-                const x = parts[2]; const y = parts[3]; const z = parts[4];
-                const defaultSize = shape === 'box' ? '250,250,250' : '50';
+    const parts = interaction.customId.split('_');
+    const shape = module; 
+    const x = parts[2]; const y = parts[3]; const z = parts[4];
+    const defaultSize = shape === 'box' ? '250,250,250' : '50';
 
-                const modal = new ModalBuilder()
-                    .setCustomId(`modal_pve_final_${shape}_${x}_${y}_${z}`)
-                    .setTitle(`Configure PVE ${shape.toUpperCase()} Zone`);
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('zone_name').setLabel("Zone Name (e.g. Trader Town)").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('zone_size').setLabel(shape === 'box' ? "Box Dimensions (X,Y,Z)" : "Sphere Radius (meters)").setStyle(TextInputStyle.Short).setValue(defaultSize).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('zone_color').setLabel("Visual Color (e.g. green, blue)").setStyle(TextInputStyle.Short).setValue('green').setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('zone_enabled').setLabel("Zone Enabled? (1 for On, 0 for Off)").setStyle(TextInputStyle.Short).setValue('1').setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('enter_msg').setLabel("Enter Message").setStyle(TextInputStyle.Short).setValue('You have entered a PVE Safe Zone.').setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('exit_msg').setLabel("Exit Message").setStyle(TextInputStyle.Short).setValue('You have left the PVE Safe Zone.').setRequired(true))
-                );
-                return interaction.showModal(modal);
-            }
+    const modal = new ModalBuilder()
+        .setCustomId(`modal_pve_final_${shape}_${x}_${y}_${z}`)
+        .setTitle(`Configure PVE ${shape.toUpperCase()} Zone`);
+    
+    // Exactly 5 components (Discord's max limit)
+    modal.addComponents(
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('zone_name').setLabel("Zone Name (e.g. Trader Town)").setStyle(TextInputStyle.Short).setRequired(true)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('zone_size').setLabel(shape === 'box' ? "Box Dimensions (X,Y,Z)" : "Sphere Radius (meters)").setStyle(TextInputStyle.Short).setValue(defaultSize).setRequired(true)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('zone_color').setLabel("Visual Color (green, blue, red)").setStyle(TextInputStyle.Short).setValue('green').setRequired(true)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('zone_enabled').setLabel("Zone Enabled? (1 for On, 0 for Off)").setStyle(TextInputStyle.Short).setValue('1').setRequired(true)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('enter_msg').setLabel("Enter & Exit Msgs (Enter | Exit)").setStyle(TextInputStyle.Short).setValue('Entered Safe Zone. | Left Safe Zone.').setRequired(true))
+    );
+    return interaction.showModal(modal);
+}
 
             if (interaction.customId === 'casino_game_select') {
                 const gameKey = module;
@@ -2173,55 +2174,58 @@ module.exports = async (interaction, client) => {
                 return interaction.reply({ content: `✅ Casino limits updated! Max Bet: **${maxBet} Scrap** | Cooldown: **${cooldown} seconds**`, flags: 64 });
             }
 
-            if (interaction.customId.startsWith('modal_pve_final_')) {
-                const parts = interaction.customId.split('_');
-                const shape = parts[3];
-                const x = parseFloat(parts[4]);
-                const y = parseFloat(parts[5]);
-                const z = parseFloat(parts[6]);
+           if (interaction.customId.startsWith('modal_pve_final_')) {
+    const parts = interaction.customId.split('_');
+    const shape = parts[3];
+    const x = parseFloat(parts[4]);
+    const y = parseFloat(parts[5]);
+    const z = parseFloat(parts[6]);
 
-                const zoneName = interaction.fields.getTextInputValue('zone_name');
-                const sizeInput = interaction.fields.getTextInputValue('zone_size');
-                const colorInput = interaction.fields.getTextInputValue('zone_color').toLowerCase();
-                const zoneEnabled = interaction.fields.getTextInputValue('zone_enabled') || '1';
-                const enterMessage = interaction.fields.getTextInputValue('enter_msg');
-                const exitMessage = interaction.fields.getTextInputValue('exit_msg');
+    const zoneName = interaction.fields.getTextInputValue('zone_name');
+    const sizeInput = interaction.fields.getTextInputValue('zone_size');
+    const colorInput = interaction.fields.getTextInputValue('zone_color').toLowerCase();
+    const zoneEnabled = interaction.fields.getTextInputValue('zone_enabled') || '1';
+    
+    // Split the combined message input by the pipe symbol '|'
+    const rawMsgs = interaction.fields.getTextInputValue('enter_msg').split('|');
+    const enterMessage = rawMsgs[0]?.trim() || 'You have entered a PVE Safe Zone.';
+    const exitMessage = rawMsgs[1]?.trim() || 'You have left the PVE Safe Zone.';
 
-                let finalSize = sizeInput;
-                if (shape === 'sphere') {
-                    finalSize = parseFloat(sizeInput) || 50;
-                }
+    let finalSize = sizeInput;
+    if (shape === 'sphere') {
+        finalSize = parseFloat(sizeInput) || 50;
+    }
 
-                await PveZone.create({
-                    guildId: interaction.guild.id,
-                    zoneName,
-                    shape,
-                    x, y, z,
-                    size: finalSize,
-                    color: colorInput,
-                    enterMessage,
-                    exitMessage
-                });
+    await PveZone.create({
+        guildId: interaction.guild.id,
+        zoneName,
+        shape,
+        x, y, z,
+        size: finalSize,
+        color: colorInput,
+        enterMessage,
+        exitMessage
+    });
 
-                let rgbColor = "0,255,0";
-                if (colorInput.includes('blue')) rgbColor = "0,0,255";
-                else if (colorInput.includes('red')) rgbColor = "255,0,0";
-                else if (colorInput.includes('yellow')) rgbColor = "255,255,0";
-                else if (colorInput.includes('purple')) rgbColor = "128,0,128";
-                else if (colorInput.includes('cyan')) rgbColor = "0,255,255";
+    let rgbColor = "0,255,0";
+    if (colorInput.includes('blue')) rgbColor = "0,0,255";
+    else if (colorInput.includes('red')) rgbColor = "255,0,0";
+    else if (colorInput.includes('yellow')) rgbColor = "255,255,0";
+    else if (colorInput.includes('purple')) rgbColor = "128,0,128";
+    else if (colorInput.includes('cyan')) rgbColor = "0,255,255";
 
-                const rconShape = shape === 'box' ? 'Box' : 'Sphere';
-                const formattedSize = shape === 'box' ? `(${finalSize})` : finalSize;
-                
-                await sendRconCommand(interaction.guild.id, `zones.createcustomzone "${zoneName}" (${x},${y},${z}) 0 ${rconShape} ${formattedSize} 0 0 0 0 1`);
-                await sendRconCommand(interaction.guild.id, `zones.editcustomzone "${zoneName}" "enabled" "${zoneEnabled}"`);
-                await sendRconCommand(interaction.guild.id, `zones.editcustomzone "${zoneName}" "showarea" 1`);
-                await sendRconCommand(interaction.guild.id, `zones.editcustomzone "${zoneName}" "color" "(${rgbColor})"`);
-                await sendRconCommand(interaction.guild.id, `zones.editcustomzone "${zoneName}" "entermessage" "${enterMessage}"`);
-                await sendRconCommand(interaction.guild.id, `zones.editcustomzone "${zoneName}" "leavemessage" "${exitMessage}"`);
+    const rconShape = shape === 'box' ? 'Box' : 'Sphere';
+    const formattedSize = shape === 'box' ? `(${finalSize})` : finalSize;
+    
+    await sendRconCommand(interaction.guild.id, `zones.createcustomzone "${zoneName}" (${x},${y},${z}) 0 ${rconShape} ${formattedSize} 0 0 0 0 1`);
+    await sendRconCommand(interaction.guild.id, `zones.editcustomzone "${zoneName}" "enabled" "${zoneEnabled}"`);
+    await sendRconCommand(interaction.guild.id, `zones.editcustomzone "${zoneName}" "showarea" 1`);
+    await sendRconCommand(interaction.guild.id, `zones.editcustomzone "${zoneName}" "color" "(${rgbColor})"`);
+    await sendRconCommand(interaction.guild.id, `zones.editcustomzone "${zoneName}" "entermessage" "${enterMessage}"`);
+    await sendRconCommand(interaction.guild.id, `zones.editcustomzone "${zoneName}" "leavemessage" "${exitMessage}"`);
 
-                return interaction.reply({ content: `✅ Custom PVE Zone **"${zoneName}"** created and outlined in-game (Enabled: \`${zoneEnabled}\`)!\n• Shape: \`${shape}\` | Size: \`${finalSize}\` | Color: \`${colorInput}\`\n• Center Position: \`X: ${x}, Y: ${y}, Z: ${z}\``, flags: 64 });
-            }
+    return interaction.reply({ content: `✅ Custom PVE Zone **"${zoneName}"** created and outlined in-game!`, flags: 64 });
+}
 
             if (interaction.customId.startsWith('modal_play_')) {
                 const gameType = interaction.customId.replace('modal_play_', '');
