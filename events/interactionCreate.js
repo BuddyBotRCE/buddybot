@@ -1198,7 +1198,7 @@ module.exports = async (interaction, client) => {
                     const z = config.cargoDockZ;
 
                     // 1. Spawn the dynamic cargo ship at your exact captured dock position
-                    await sendRconCommand(interaction.guild.id, `spawn cargoshipdynamic ${x},${y},${z}`);
+                    await sendRconCommand(interaction.guild.id, `spawn cargoshipdynamic2 ${x},${y},${z}`);
 
                     const duration = config.cargoDurationMinutes || 30;
                     const guildId = interaction.guild.id;
@@ -1207,7 +1207,7 @@ module.exports = async (interaction, client) => {
                     // by re-applying its position every 3 seconds for the duration of the event
                     const anchorInterval = setInterval(async () => {
                         try {
-                            await sendRconCommand(guildId, `entity.setposition cargoshipdynamic ${x},${y},${z}`);
+                            await sendRconCommand(guildId, `entity.setposition cargoshipdynamic2 ${x},${y},${z}`);
                             await sendRconCommand(guildId, 'cargoship.allstops');
                         } catch (err) {}
                     }, 3000);
@@ -1218,7 +1218,7 @@ module.exports = async (interaction, client) => {
                         try {
                             await sendRconCommand(guildId, 'cargoships.startegressing');
                             setTimeout(() => {
-                                sendRconCommand(guildId, 'del cargoshipdynamic').catch(()=>{});
+                                sendRconCommand(guildId, 'del cargoshipdynamic2').catch(()=>{});
                             }, 120000); // 2 minutes to sail off before deleting entity
                         } catch (e) {}
                     }, duration * 60000);
