@@ -16,6 +16,7 @@ module.exports = {
             new StringSelectMenuBuilder().setCustomId('admin_menu_select').setPlaceholder('Select a module to configure...')
                 .addOptions([
                     { label: 'RCON Server', value: 'setup_rcon', emoji: '🌐' },
+                    { label: 'Multi-Server RCON Manager', value: 'setup_multiserver', emoji: '🖥️' },
                     { label: 'Live Admin Tools', value: 'admin_tools', emoji: '🧰' },
                     { label: 'Shop & Store Manager', value: 'setup_shop', emoji: '🛒' },
                     { label: 'Economy Manager', value: 'setup_economy', emoji: '💰' },

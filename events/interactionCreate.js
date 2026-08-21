@@ -349,6 +349,21 @@ module.exports = async (interaction, client) => {
                     );
                     return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
                 }
+                // Under admin_menu_select router:
+if (module === 'setup_multiserver') {
+    const servers = await GameServer.findAll({ where: { guildId: interaction.guild.id } });
+    const serverList = servers.length ? servers.map(s => `• **${s.serverName}** (\`${s.rconIp}:${s.rconPort}\`)`).join('\n') : 'No additional game servers configured.';
+
+    const embed = new EmbedBuilder()
+        .setTitle('🖥️ Multi-Server RCON Manager')
+        .setDescription(`Manage multiple game servers hosted from this Discord server.\n\n**Configured Servers:**\n${serverList}`)
+        .setColor('#3498db');
+
+    const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('btn_multiserver_add').setLabel('Add Game Server').setStyle(ButtonStyle.Success).setEmoji('➕')
+    );
+    return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+}
 
                 if (module === 'setup_buddypass') {
                     const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
@@ -1016,6 +1031,16 @@ module.exports = async (interaction, client) => {
         .setTimestamp();
 
     return interaction.reply({ embeds: [embed], flags: 64 });
+}
+if (interaction.customId === 'btn_multiserver_add') {
+    const modal = new ModalBuilder().setCustomId('modal_multiserver_add').setTitle('Add Game Server');
+    modal.addComponents(
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('server_name').setLabel("Server Name (e.g. Main 2X)").setStyle(TextInputStyle.Short).setRequired(true)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_ip').setLabel("RCON IP Address").setStyle(TextInputStyle.Short).setRequired(true)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_port').setLabel("RCON Port").setStyle(TextInputStyle.Short).setRequired(true)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_pass').setLabel("RCON Password").setStyle(TextInputStyle.Short).setRequired(true))
+    );
+    return interaction.showModal(modal);
 }
 
             if (interaction.customId === 'hub_bounties') {
@@ -1873,6 +1898,22 @@ module.exports = async (interaction, client) => {
         // ====================================================================
         if (interaction.isModalSubmit()) {
 
+            if (interaction.customId === 'modal_multiserver_add') {
+    const serverName = interaction.fields.getTextInputValue('server_name').trim();
+    const rconIp = interaction.fields.getTextInputValue('rcon_ip').trim();
+    const rconPort = interaction.fields.getTextInputValue('rcon_port').trim();
+    const rconPassword = interaction.fields.getTextInputValue('rcon_pass').trim();
+
+    await GameServer.create({
+        guildId: interaction.guild.id,
+        serverName,
+        rconIp,
+        rconPort,
+        rconPassword
+    });
+
+    return interaction.reply({ content: `✅ Successfully added game server **${serverName}** (\`${rconIp}:${rconPort}\`)!`, flags: 64 });
+}
             if (interaction.customId === 'modal_setup_rcon') {
                 const ip = interaction.fields.getTextInputValue('rcon_ip').trim();
                 const port = interaction.fields.getTextInputValue('rcon_port').trim();
