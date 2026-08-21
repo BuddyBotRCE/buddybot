@@ -1197,26 +1197,28 @@ module.exports = async (interaction, client) => {
                     const y = config.cargoDockY;
                     const z = config.cargoDockZ;
 
-                    // 1. Spawn dynamic cargo ship at precise captured dock coordinates
-                    await sendRconCommand(interaction.guild.id, `spawn cargoshipdynamic2 ${x},${y},${z}`);
+                    // 1. Trigger the native event spawner which respects map coordinates better than raw entity spawns
+                    await sendRconCommand(interaction.guild.id, 'cargoships.spawncargoship');
                     
-                    // 2. Kill velocity and waypoint AI instantly to lock it in place
+                    // 2. Immediately lock movement parameters and disable roaming AI loops
+                    await sendRconCommand(interaction.guild.id, 'cargoship.event_enabled false');
                     await sendRconCommand(interaction.guild.id, 'cargoship.allstops');
-                    await sendRconCommand(interaction.guild.id, 'entity.rigidbody.velocity 0,0,0'); // Halts movement physics
 
                     const duration = config.cargoDurationMinutes || 30;
                     
-                    // 3. After duration expires, trigger egress and cleanup
+                    // 3. After the duration expires, re-enable egress and clean up
                     setTimeout(async () => {
                         try {
+                            await sendRconCommand(interaction.guild.id, 'cargoship.event_enabled true');
                             await sendRconCommand(interaction.guild.id, 'cargoships.startegressing');
                             setTimeout(() => {
                                 sendRconCommand(interaction.guild.id, 'del cargoshipdynamic2').catch(()=>{});
-                            }, 120000); // 2 minutes to sail off before entity deletion
+                                sendRconCommand(interaction.guild.id, 'del cargoshipdynamic1').catch(()=>{});
+                            }, 120000);
                         } catch (e) {}
                     }, duration * 60000);
 
-                    return interaction.editReply({ content: `✅ Docked Cargo Ship event successfully spawned and anchored at \`X: ${x}, Y: ${y}, Z: ${z}\`! It will hold position for ${duration} minutes before departing.` });
+                    return interaction.editReply({ content: `✅ Docked Cargo Ship event successfully triggered! Event AI locked in place for ${duration} minutes before scheduled departure.` });
                 } else {
                     await sendRconCommand(interaction.guild.id, 'cargoships.spawncargoship');
                     return interaction.editReply({ content: `⚠️ No custom dock position set. Triggered standard roaming cargo event test!` });
