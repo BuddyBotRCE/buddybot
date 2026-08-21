@@ -1777,49 +1777,58 @@ if (module === 'setup_multiserver') {
             }
 
             if (interaction.customId === 'hub_shop_pricelist') {
-                const dbItems = await ShopItem.findAll({ where: { guildId: interaction.guild.id } });
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-                const currency = config?.economyCurrency || 'Scrap';
-                const multiplier = (config?.shopMultiplier || 100) / 100;
+    const dbItems = await ShopItem.findAll({ where: { guildId: interaction.guild.id } });
+    const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+    const currency = config?.economyCurrency || 'Scrap';
+    const multiplier = (config?.shopMultiplier || 100) / 100;
 
-                if (dbItems.length === 0) {
-                    const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('hub_shop_menu').setLabel('Go Back').setStyle(ButtonStyle.Secondary).setEmoji('🔙'));
-                    return interaction.update({ content: '❌ There are currently no items for sale in the shop.', embeds: [], components: [row] });
-                }
+    if (dbItems.length === 0) {
+        const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('hub_shop_menu').setLabel('Go Back').setStyle(ButtonStyle.Secondary).setEmoji('🔙'));
+        return interaction.update({ content: '❌ There are currently no items for sale in the shop.', embeds: [], components: [row] });
+    }
 
-                const embed = new EmbedBuilder()
-                    .setTitle('📋 Categorized Store Price List')
-                    .setDescription('Here are all items currently available for purchase across all categories:')
-                    .setColor('#3498db')
-                    .setFooter({ text: 'Prices reflect real-time global multipliers.' });
+    const embed = new EmbedBuilder()
+        .setTitle('📋 Categorized Store Price List')
+        .setDescription('Here are all items currently available for purchase across all categories:')
+        .setColor('#3498db')
+        .setFooter({ text: 'Prices reflect real-time global multipliers.' });
 
-                for (const catKey in RUST_CATEGORIES) {
-                    const catData = RUST_CATEGORIES[catKey];
-                    const itemsInCat = dbItems.filter(i => i.category === catKey);
+    for (const catKey in RUST_CATEGORIES) {
+        const catData = RUST_CATEGORIES[catKey];
+        const itemsInCat = dbItems.filter(i => i.category === catKey);
 
-                    if (itemsInCat.length > 0) {
-                        const itemListText = itemsInCat.map(i => {
-                            const finalPrice = Math.round(i.price * multiplier);
-                            return `• **${i.name}** — 💰 **${finalPrice} ${currency}** *(CD: ${i.cooldownSeconds}s)*`;
-                        }).join('\n');
+        if (itemsInCat.length > 0) {
+            let itemListText = itemsInCat.map(i => {
+                const finalPrice = Math.round(i.price * multiplier);
+                return `• **${i.name}** — 💰 **${finalPrice} ${currency}** *(CD: ${i.cooldownSeconds}s)*`;
+            }).join('\n');
 
-                        embed.addFields({ name: `${catData.emoji} ${catData.label}`, value: itemListText, inline: false });
-                    }
-                }
-
-                const customItems = dbItems.filter(i => i.category === 'custom');
-                if (customItems.length > 0) {
-                    const customListText = customItems.map(i => {
-                        const finalPrice = Math.round(i.price * multiplier);
-                        return `• **${i.name}** — 💰 **${finalPrice} ${currency}** *(CD: ${i.cooldownSeconds}s)*`;
-                    }).join('\n');
-
-                    embed.addFields({ name: '✨ Custom / Server Items', value: customListText, inline: false });
-                }
-
-                const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('hub_shop_menu').setLabel('Go Back').setStyle(ButtonStyle.Secondary).setEmoji('🔙'));
-                return interaction.update({ embeds: [embed], components: [row] });
+            // Safety truncation if field exceeds Discord's 1024 character limit
+            if (itemListText.length > 1024) {
+                itemListText = itemListText.substring(0, 1021) + '...';
             }
+
+            embed.addFields({ name: `${catData.emoji} ${catData.label}`, value: itemListText, inline: false });
+        }
+    }
+
+    const customItems = dbItems.filter(i => i.category === 'custom');
+    if (customItems.length > 0) {
+        let customListText = customItems.map(i => {
+            const finalPrice = Math.round(i.price * multiplier);
+            return `• **${i.name}** — 💰 **${finalPrice} ${currency}** *(CD: ${i.cooldownSeconds}s)*`;
+        }).join('\n');
+
+        if (customListText.length > 1024) {
+            customListText = customListText.substring(0, 1021) + '...';
+        }
+
+        embed.addFields({ name: '✨ Custom / Server Items', value: customListText, inline: false });
+    }
+
+    const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('hub_shop_menu').setLabel('Go Back').setStyle(ButtonStyle.Secondary).setEmoji('🔙'));
+    return interaction.update({ embeds: [embed], components: [row] });
+}
 
             // --- UPDATED MULTI-SERVER LINK ACCOUNT BUTTON ---
             if (interaction.customId === 'hub_link_account') {
