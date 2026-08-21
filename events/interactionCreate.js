@@ -109,29 +109,28 @@ module.exports = async (interaction, client) => {
         
         if (interaction.isUserSelectMenu()) {
             if (interaction.customId === 'admin_item_select_player') {
-    const targetUserId = interaction.values[0];
-    const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
-    
-    if (!targetUser || !targetUser.inGameName) {
-        return interaction.reply({ content: `❌ This user has not linked their Rust account yet!`, flags: 64 });
-    }
+                const targetUserId = interaction.values[0];
+                const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
+                
+                if (!targetUser || !targetUser.inGameName) {
+                    return interaction.reply({ content: `❌ This user has not linked their Rust account yet!`, flags: 64 });
+                }
 
-    // Build category options from your RUST_CATEGORIES catalog
-    const catOptions = Object.keys(RUST_CATEGORIES).map(catKey => ({
-        label: RUST_CATEGORIES[catKey].label,
-        value: `admin_item_cat_${targetUserId}_${catKey}`,
-        emoji: RUST_CATEGORIES[catKey].emoji
-    }));
+                const catOptions = Object.keys(RUST_CATEGORIES).map(catKey => ({
+                    label: RUST_CATEGORIES[catKey].label,
+                    value: `admin_item_cat_${targetUserId}_${catKey}`,
+                    emoji: RUST_CATEGORIES[catKey].emoji
+                }));
 
-    const row = new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder()
-            .setCustomId('admin_item_category_select')
-            .setPlaceholder('Step 2: Select item category...')
-            .addOptions(catOptions)
-    );
+                const row = new ActionRowBuilder().addComponents(
+                    new StringSelectMenuBuilder()
+                        .setCustomId('admin_item_category_select')
+                        .setPlaceholder('Step 2: Select item category...')
+                        .addOptions(catOptions)
+                );
 
-    return interaction.update({ content: `🎁 **Admin Item Wizard:** Target player set to **${targetUser.inGameName}**. Now select an item category:`, components: [row] });
-}
+                return interaction.update({ content: `🎁 **Admin Item Wizard:** Target player set to **${targetUser.inGameName}**. Now select an item category:`, components: [row] });
+            }
             if (interaction.customId === 'select_give_item_target') {
                 const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.values[0] } });
                 if (!targetUser || !targetUser.inGameName) return interaction.reply({ content: `❌ User hasn't linked their Rust account!`, flags: 64 });
@@ -174,7 +173,6 @@ module.exports = async (interaction, client) => {
         if (interaction.isStringSelectMenu()) {
             const module = interaction.values[0];
 
-            // --- MULTI-SERVER ACCOUNT LINKING SELECTOR ---
             if (interaction.customId === 'select_link_server_target') {
                 const serverId = module.replace('link_server_', '');
                 const server = await GameServer.findByPk(serverId);
@@ -186,9 +184,8 @@ module.exports = async (interaction, client) => {
                 ));
                 return interaction.showModal(modal);
             }
+
             if (interaction.customId === 'admin_item_category_select') {
-                // module format is: admin_item_cat_{userId}_{catKey}
-                // Since catKey might be simple (e.g. 'weapons') or multi-word, let's extract it safely:
                 const parts = module.replace('admin_item_cat_', '').split('_');
                 const targetUserId = parts[0];
                 const catKey = parts.slice(1).join('_');
@@ -216,7 +213,10 @@ module.exports = async (interaction, client) => {
             }
 
             if (interaction.customId === 'admin_item_final_select') {
-                const [_, __, ___, targetUserId, shortname] = module.split('_'); // format: admin_give_final_{userId}_{shortname}
+                const cleanVal = module.replace('admin_give_final_', '');
+                const firstUnderscore = cleanVal.indexOf('_');
+                const targetUserId = cleanVal.substring(0, firstUnderscore);
+                const shortname = cleanVal.substring(firstUnderscore + 1);
 
                 const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
                 const ign = targetUser ? targetUser.inGameName : 'Player';
@@ -324,6 +324,12 @@ module.exports = async (interaction, client) => {
             }
 
             if (interaction.customId === 'admin_menu_select') {
+                // Auto-cleanup any lingering coordinate prompt messages in the channel when switching tabs
+                await interaction.channel.messages.fetch({ limit: 10 }).then(messages => {
+                    const prompts = messages.filter(m => m.content.includes('Grabbing coordinates') || m.content.includes('Stand at your desired'));
+                    for (const [_, msg] of prompts) { msg.delete().catch(() => {}); }
+                });
+
                 if (module === 'setup_shop') {
                     const embed = new EmbedBuilder().setTitle('🛒 Server Shop Manager').setDescription('Add prebuilt catalog items, custom gear, or adjust pricing multipliers.').setColor('#e67e22');
                     const row = new ActionRowBuilder().addComponents(
@@ -423,23 +429,25 @@ module.exports = async (interaction, client) => {
                     );
                     return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
                 }
-if (module === 'setup_multiserver') {
-    const servers = await GameServer.findAll({ where: { guildId: interaction.guild.id } });
-    const serverList = servers.length 
-        ? servers.map(s => `• **${s.serverName}** (\`${s.rconIp}:${s.rconPort}\`)`).join('\n') 
-        : 'No game servers configured yet. Add your first server below!';
 
-    const embed = new EmbedBuilder()
-        .setTitle('🌐 RCON Connect & Server Manager')
-        .setDescription(`Manage your game server RCON connections.\n\n*Note: You can add multiple game servers here to host and manage them all from the same Discord server!*\n\n**Configured Servers:**\n${serverList}`)
-        .setColor('#3498db');
+                if (module === 'setup_multiserver') {
+                    const servers = await GameServer.findAll({ where: { guildId: interaction.guild.id } });
+                    const serverList = servers.length 
+                        ? servers.map(s => `• **${s.serverName}** (\`${s.rconIp}:${s.rconPort}\`)`).join('\n') 
+                        : 'No game servers configured yet. Add your first server below!';
 
-    const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('btn_multiserver_add').setLabel('Add Game Server').setStyle(ButtonStyle.Success).setEmoji('➕'),
-        new ButtonBuilder().setCustomId('rcon_quick_connect').setLabel('Connect RCON').setStyle(ButtonStyle.Primary).setEmoji('🔌')
-    );
-    return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
-}
+                    const embed = new EmbedBuilder()
+                        .setTitle('🌐 RCON Connect & Server Manager')
+                        .setDescription(`Manage your game server RCON connections.\n\n*Note: You can add multiple game servers here to host and manage them all from the same Discord server!*\n\n**Configured Servers:**\n${serverList}`)
+                        .setColor('#3498db');
+
+                    const row = new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('btn_multiserver_add').setLabel('Add Game Server').setStyle(ButtonStyle.Success).setEmoji('➕'),
+                        new ButtonBuilder().setCustomId('rcon_quick_connect').setLabel('Connect RCON').setStyle(ButtonStyle.Primary).setEmoji('🔌')
+                    );
+                    return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+                }
+
                 if (module === 'setup_buddypass') {
                     const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
                     const challenges = await BuddyPassChallenge.findAll({ where: { guildId: interaction.guild.id } });
@@ -1181,54 +1189,38 @@ if (module === 'setup_multiserver') {
             }
 
             if (interaction.customId === 'btn_ae_test_cargo') {
-    await interaction.deferReply({ flags: 64 });
-    const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-    
-    if (config && config.cargoDockX !== null && config.cargoDockY !== null && config.cargoDockZ !== null) {
-        const x = config.cargoDockX;
-        const y = config.cargoDockY;
-        const z = config.cargoDockZ;
-        const coords = `${x},${y},${z}`;
+                await interaction.deferReply({ flags: 64 });
+                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+                
+                if (config && config.cargoDockX !== null && config.cargoDockY !== null && config.cargoDockZ !== null) {
+                    const x = config.cargoDockX;
+                    const y = config.cargoDockY;
+                    const z = config.cargoDockZ;
 
-        // 1. Spawn the dynamic cargo ship at the dock
-        await sendRconCommand(interaction.guild.id, `spawn cargoshipdynamic1 ${coords}`);
-        
-        // 2. Stop its movement/momentum so it stays locked in place at the dock
-        await sendRconCommand(interaction.guild.id, 'cargoship.allstops'); // Stops waypoint navigation if supported, or we use velocity reset
-        await sendRconCommand(interaction.guild.id, 'entity.enableserverframemovement 0'); // Fallback to freeze dynamic physics entities if needed
+                    // Trigger native cargo ship event at the precise captured dock coordinates
+                    await sendRconCommand(interaction.guild.id, `spawn cargoshipdynamic2 ${x},${y},${z}`);
+                    
+                    // Lock movement/anchoring by disabling ship pathfinding during the event window
+                    await sendRconCommand(interaction.guild.id, 'cargoship.allstops');
 
-        // 3. Spawn crates inside the bottom hull and on the upper deck
-        const cratesCount = config.cargoCrateCount || 3;
-        
-        for(let i = 0; i < cratesCount; i++) {
-            // Lower deck / bottom interior of the ship
-            let bottomX = x + (i * 3);
-            let bottomY = y + 3.5; // Inside bottom hull level
-            let bottomZ = z;
-            await sendRconCommand(interaction.guild.id, `spawn codelockedhackablecrate ${bottomX},${bottomY},${bottomZ}`);
+                    const duration = config.cargoDurationMinutes || 30;
+                    
+                    // After the set duration expires, force the cargo ship to egress/sail away
+                    setTimeout(async () => {
+                        try {
+                            await sendRconCommand(interaction.guild.id, 'cargoships.startegressing');
+                            setTimeout(() => {
+                                sendRconCommand(interaction.guild.id, 'del cargoshipdynamic2').catch(()=>{});
+                            }, 120000); // Give it 2 minutes to sail off before deleting entity
+                        } catch (e) {}
+                    }, duration * 60000);
 
-            // Upper deck surface
-            let deckX = x + (i * 5);
-            let deckY = y + 16.5; // Top deck surface height
-            let deckZ = z;
-            await sendRconCommand(interaction.guild.id, `spawn codelockedhackablecrate ${deckX},${deckY},${deckZ}`);
-        }
-
-        const duration = config.cargoDurationMinutes || 30;
-        
-        // 4. Clean up ship and lingering crates after the set duration expires
-        setTimeout(async () => {
-            try {
-                await sendRconCommand(interaction.guild.id, 'del cargoshipdynamic1');
-            } catch (e) {}
-        }, duration * 60000);
-
-        return interaction.editReply({ content: `✅ Spawned Locked Docked Cargo Ship at \`X: ${x}, Y: ${y}, Z: ${z}\`! Crates are placed in the lower hull and upper deck. It will despawn in ${duration} minutes.` });
-    } else {
-        await sendRconCommand(interaction.guild.id, 'cargoships.spawncargoship');
-        return interaction.editReply({ content: `⚠️ No custom dock position set. Triggered standard roaming cargo event test!` });
-    }
-}
+                    return interaction.editReply({ content: `✅ Docked Cargo Ship event spawned at \`X: ${x}, Y: ${y}, Z: ${z}\` with native event crates! It will hold position for ${duration} minutes before departing.` });
+                } else {
+                    await sendRconCommand(interaction.guild.id, 'cargoships.spawncargoship');
+                    return interaction.editReply({ content: `⚠️ No custom dock position set. Triggered standard roaming cargo event test!` });
+                }
+            }
             if (interaction.customId === 'btn_ae_test_supply') {
                 await interaction.deferReply({ flags: 64 });
                 await sendRconCommand(interaction.guild.id, 'supply.drop');
@@ -1510,13 +1502,14 @@ if (module === 'setup_multiserver') {
                 if (!userProfile || !userProfile.inGameName) {
                     return interaction.reply({ content: '❌ Link your Rust account first using `/playerpanel` before grabbing coordinates!', flags: 64 });
                 }
+                
+                await interaction.channel.messages.fetch({ limit: 10 }).then(messages => {
+                    const oldPrompts = messages.filter(m => m.content.includes('Stand at your desired Cargo Ship dock location'));
+                    for (const [_, msg] of oldPrompts) { msg.delete().catch(() => {}); }
+                });
+
                 queueAdminPos(userProfile.inGameName, interaction.guild.id, interaction.user.id, interaction.channel.id, 'cargodock', client);
-                return interaction.reply({ content: `⏳ Stand at your desired Cargo Ship dock location... grabbing your coordinates via RCON.`, flags: 64 });
-            }
-            if (interaction.customId === 'btn_ae_set_crates') {
-                const modal = new ModalBuilder().setCustomId('modal_ae_crates').setTitle('Set Cargo Crate Quantity');
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('crate_amount').setLabel("Number of Crates on Cargo").setStyle(TextInputStyle.Short).setValue('3').setRequired(true)));
-                return interaction.showModal(modal);
+                return interaction.reply({ content: `⏳ Stand at your desired Cargo Ship dock location... capturing coordinates via RCON.`, flags: 64 });
             }
 
             if (interaction.customId === 'btn_casino_settings') {
@@ -1708,13 +1701,13 @@ if (module === 'setup_multiserver') {
             }
 
             if (interaction.customId === 'btn_admin_item') {
-    const row = new ActionRowBuilder().addComponents(
-        new UserSelectMenuBuilder()
-            .setCustomId('admin_item_select_player')
-            .setPlaceholder('Step 1: Select the player to give items to...')
-    );
-    return interaction.reply({ content: '🎁 **Admin Item Wizard:** Choose the target player below:', components: [row], flags: 64 });
-}
+                const row = new ActionRowBuilder().addComponents(
+                    new UserSelectMenuBuilder()
+                        .setCustomId('admin_item_select_player')
+                        .setPlaceholder('Step 1: Select the player to give items to...')
+                );
+                return interaction.reply({ content: '🎁 **Admin Item Wizard:** Choose the target player below:', components: [row], flags: 64 });
+            }
             if (interaction.customId === 'btn_admin_rcon') {
                 const modal = new ModalBuilder().setCustomId('modal_admin_rcon').setTitle('Send RCON');
                 modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_command').setLabel("Command").setStyle(TextInputStyle.Paragraph).setRequired(true)));
@@ -1799,61 +1792,6 @@ if (module === 'setup_multiserver') {
                 return interaction.reply({ content: '🛒 **Server Shop Categories:** Select a category below to view items and make purchases:', components: [row], flags: 64 });
             }
 
-            if (interaction.customId === 'hub_shop_pricelist') {
-    const dbItems = await ShopItem.findAll({ where: { guildId: interaction.guild.id } });
-    const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-    const currency = config?.economyCurrency || 'Scrap';
-    const multiplier = (config?.shopMultiplier || 100) / 100;
-
-    if (dbItems.length === 0) {
-        const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('hub_shop_menu').setLabel('Go Back').setStyle(ButtonStyle.Secondary).setEmoji('🔙'));
-        return interaction.update({ content: '❌ There are currently no items for sale in the shop.', embeds: [], components: [row] });
-    }
-
-    const embed = new EmbedBuilder()
-        .setTitle('📋 Categorized Store Price List')
-        .setDescription('Here are all items currently available for purchase across all categories:')
-        .setColor('#3498db')
-        .setFooter({ text: 'Prices reflect real-time global multipliers.' });
-
-    for (const catKey in RUST_CATEGORIES) {
-        const catData = RUST_CATEGORIES[catKey];
-        const itemsInCat = dbItems.filter(i => i.category === catKey);
-
-        if (itemsInCat.length > 0) {
-            let itemListText = itemsInCat.map(i => {
-                const finalPrice = Math.round(i.price * multiplier);
-                return `• **${i.name}** — 💰 **${finalPrice} ${currency}** *(CD: ${i.cooldownSeconds}s)*`;
-            }).join('\n');
-
-            // Safety truncation if field exceeds Discord's 1024 character limit
-            if (itemListText.length > 1024) {
-                itemListText = itemListText.substring(0, 1021) + '...';
-            }
-
-            embed.addFields({ name: `${catData.emoji} ${catData.label}`, value: itemListText, inline: false });
-        }
-    }
-
-    const customItems = dbItems.filter(i => i.category === 'custom');
-    if (customItems.length > 0) {
-        let customListText = customItems.map(i => {
-            const finalPrice = Math.round(i.price * multiplier);
-            return `• **${i.name}** — 💰 **${finalPrice} ${currency}** *(CD: ${i.cooldownSeconds}s)*`;
-        }).join('\n');
-
-        if (customListText.length > 1024) {
-            customListText = customListText.substring(0, 1021) + '...';
-        }
-
-        embed.addFields({ name: '✨ Custom / Server Items', value: customListText, inline: false });
-    }
-
-    const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('hub_shop_menu').setLabel('Go Back').setStyle(ButtonStyle.Secondary).setEmoji('🔙'));
-    return interaction.update({ embeds: [embed], components: [row] });
-}
-
-            // --- UPDATED MULTI-SERVER LINK ACCOUNT BUTTON ---
             if (interaction.customId === 'hub_link_account') {
                 const servers = await GameServer.findAll({ where: { guildId: interaction.guild.id } });
                 
@@ -2008,25 +1946,26 @@ if (module === 'setup_multiserver') {
         // ====================================================================
         if (interaction.isModalSubmit()) {
 
-           if (interaction.customId.startsWith('modal_admin_give_item_exec_')) {
-    const parts = interaction.customId.replace('modal_admin_give_item_exec_', '').split('_');
-    const targetUserId = parts[0];
-    const shortname = parts.slice(1).join('_'); // Handles shortnames safely
-    
-    const amount = parseInt(interaction.fields.getTextInputValue('amount')) || 1;
-    const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
+            if (interaction.customId.startsWith('modal_admin_give_item_exec_')) {
+                const parts = interaction.customId.replace('modal_admin_give_item_exec_', '').split('_');
+                const targetUserId = parts[0];
+                const shortname = parts.slice(1).join('_'); 
+                
+                const amount = parseInt(interaction.fields.getTextInputValue('amount')) || 1;
+                const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
 
-    if (!targetUser || !targetUser.inGameName) {
-        return interaction.reply({ content: '❌ Player unlinked or not found.', flags: 64 });
-    }
+                if (!targetUser || !targetUser.inGameName) {
+                    return interaction.reply({ content: '❌ Player unlinked or not found.', flags: 64 });
+                }
 
-    try {
-        await sendRconCommand(interaction.guild.id, `inventory.giveto "${targetUser.inGameName}" ${shortname} ${amount}`);
-        return interaction.reply({ content: `✅ Successfully sent **${amount}x ${shortname}** to **${targetUser.inGameName}** in-game!`, flags: 64 });
-    } catch (e) {
-        return interaction.reply({ content: `❌ RCON Error: ${e.message}`, flags: 64 });
-    }
-}
+                try {
+                    await sendRconCommand(interaction.guild.id, `inventory.giveto "${targetUser.inGameName}" ${shortname} ${amount}`);
+                    return interaction.reply({ content: `✅ Successfully sent **${amount}x ${shortname}** to **${targetUser.inGameName}** in-game!`, flags: 64 });
+                } catch (e) {
+                    return interaction.reply({ content: `❌ RCON Error: ${e.message}`, flags: 64 });
+                }
+            }
+
             if (interaction.customId === 'modal_multiserver_add') {
                 const serverName = interaction.fields.getTextInputValue('server_name').trim();
                 const rconIp = interaction.fields.getTextInputValue('rcon_ip').trim();
@@ -2235,7 +2174,6 @@ if (module === 'setup_multiserver') {
                 return interaction.reply({ content: `✅ **AI Assistant Configured!**\n• Model: \`${model}\`\n• Base URL: \`${baseUrl}\`\nMembers can now mention <@${client.user.id}> to ask questions!`, flags: 64 });
             }
 
-            // --- UPDATED MULTI-SERVER / GLOBAL ACCOUNT LINKING MODAL SUBMISSION ---
             if (interaction.customId === 'modal_link_account_global' || interaction.customId.startsWith('modal_link_account_')) {
                 const ign = interaction.fields.getTextInputValue('ign').trim();
                 const guildId = interaction.guild.id;

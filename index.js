@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const { initAutoEventLoop } = require('./utils/autoEventManager');
 
 const client = new Client({
     intents: [
@@ -106,6 +107,9 @@ if (fs.existsSync(eventsPath)) {
 
 client.once('clientReady', async () => {
     console.log(`[SYSTEM] BuddyBotRCE is online as ${client.user.tag}`);
+
+    // --- INITIALIZE BACKGROUND AUTO-EVENT MANAGER LOOP ---
+    initAutoEventLoop(client);
 
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     const commandData = client.commands.map(cmd => cmd.data.toJSON());
