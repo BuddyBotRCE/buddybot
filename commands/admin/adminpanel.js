@@ -9,7 +9,7 @@ module.exports = {
     async execute(interaction) {
         const adminEmbed = new EmbedBuilder()
             .setTitle('🛠️ Admin Panel & Dashboard')
-            .setDescription('Configure bot modules, shops, custom embeds, and server economies.')
+            .setDescription('Configure bot modules, automated moderation, reaction roles, and community tools.')
             .setColor('#2b2d31');
         
         const row1 = new ActionRowBuilder().addComponents(
@@ -23,6 +23,8 @@ module.exports = {
                     { label: 'BuddyPass Manager', value: 'setup_buddypass', emoji: '⭐' },
                     { label: 'Clan System Manager', value: 'setup_clans', emoji: '🛡️' },
                     { label: 'Bounties System', value: 'setup_bounties', emoji: '🎯' },
+                    { label: 'Reaction Roles & Verify', value: 'setup_reaction_roles', emoji: '🔘' },
+                    { label: 'Auto-Moderation Suite', value: 'setup_automod', emoji: '🛡️' },
                     { label: 'PVE Custom Zones', value: 'setup_pvezones', emoji: '🏕️' },
                     { label: 'Auto-Events (Premium)', value: 'setup_autoevents', emoji: '🚁' },
                     { label: 'License & Tier Manager', value: 'setup_tier', emoji: '🏷️' },
