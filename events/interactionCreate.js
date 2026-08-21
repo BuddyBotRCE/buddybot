@@ -187,52 +187,57 @@ module.exports = async (interaction, client) => {
                 return interaction.showModal(modal);
             }
             if (interaction.customId === 'admin_item_category_select') {
-    const [_, __, targetUserId, catKey] = module.split('_'); // format: admin_item_cat_{userId}_{catKey}
-    const categoryData = RUST_CATEGORIES[catKey];
+                // module format is: admin_item_cat_{userId}_{catKey}
+                // Since catKey might be simple (e.g. 'weapons') or multi-word, let's extract it safely:
+                const parts = module.replace('admin_item_cat_', '').split('_');
+                const targetUserId = parts[0];
+                const catKey = parts.slice(1).join('_');
 
-    if (!categoryData || !categoryData.items.length) {
-        return interaction.reply({ content: '❌ Invalid item category.', flags: 64 });
-    }
+                const categoryData = RUST_CATEGORIES[catKey];
 
-    // Discord select menus support up to 25 options maximum per menu
-    const itemOptions = categoryData.items.slice(0, 25).map(item => ({
-        label: item.name,
-        description: `Shortname: ${item.shortname}`,
-        value: `admin_give_final_${targetUserId}_${item.shortname}`
-    }));
+                if (!categoryData || !categoryData.items || categoryData.items.length === 0) {
+                    return interaction.reply({ content: `❌ Invalid item category key: \`${catKey}\`. Please try again.`, flags: 64 });
+                }
 
-    const row = new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder()
-            .setCustomId('admin_item_final_select')
-            .setPlaceholder(`Step 3: Choose item from ${categoryData.label}...`)
-            .addOptions(itemOptions)
-    );
+                const itemOptions = categoryData.items.slice(0, 25).map(item => ({
+                    label: item.name,
+                    description: `Shortname: ${item.shortname}`,
+                    value: `admin_give_final_${targetUserId}_${item.shortname}`
+                }));
 
-    return interaction.update({ content: `📦 **Admin Item Wizard:** Choose the exact item from **${categoryData.label}**:`, components: [row] });
-}
-if (interaction.customId === 'admin_item_final_select') {
-    const [_, __, ___, targetUserId, shortname] = module.split('_'); // format: admin_give_final_{userId}_{shortname}
-    
-    const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
-    const ign = targetUser ? targetUser.inGameName : 'Player';
+                const row = new ActionRowBuilder().addComponents(
+                    new StringSelectMenuBuilder()
+                        .setCustomId('admin_item_final_select')
+                        .setPlaceholder(`Step 3: Choose item from ${categoryData.label}...`)
+                        .addOptions(itemOptions)
+                );
 
-    const modal = new ModalBuilder()
-        .setCustomId(`modal_admin_give_item_exec_${targetUserId}_${shortname}`)
-        .setTitle(`Give ${shortname} to ${ign}`);
+                return interaction.update({ content: `📦 **Admin Item Wizard:** Choose the exact item from **${categoryData.label}**:`, components: [row] });
+            }
 
-    modal.addComponents(
-        new ActionRowBuilder().addComponents(
-            new TextInputBuilder()
-                .setCustomId('amount')
-                .setLabel("Enter Amount to Send")
-                .setStyle(TextInputStyle.Short)
-                .setValue('1')
-                .setRequired(true)
-        )
-    );
+            if (interaction.customId === 'admin_item_final_select') {
+                const [_, __, ___, targetUserId, shortname] = module.split('_'); // format: admin_give_final_{userId}_{shortname}
 
-    return interaction.showModal(modal);
-}
+                const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
+                const ign = targetUser ? targetUser.inGameName : 'Player';
+
+                const modal = new ModalBuilder()
+                    .setCustomId(`modal_admin_give_item_exec_${targetUserId}_${shortname}`)
+                    .setTitle(`Give ${shortname} to ${ign}`);
+
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder()
+                            .setCustomId('amount')
+                            .setLabel("Enter Amount to Send")
+                            .setStyle(TextInputStyle.Short)
+                            .setValue('1')
+                            .setRequired(true)
+                    )
+                );
+
+                return interaction.showModal(modal);
+            }
 
             if (interaction.customId === 'select_pve_delete_exec') {
                 await interaction.deferUpdate();
