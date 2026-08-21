@@ -108,6 +108,30 @@ module.exports = async (interaction, client) => {
         }
         
         if (interaction.isUserSelectMenu()) {
+            if (interaction.customId === 'admin_item_select_player') {
+    const targetUserId = interaction.values[0];
+    const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
+    
+    if (!targetUser || !targetUser.inGameName) {
+        return interaction.reply({ content: `❌ This user has not linked their Rust account yet!`, flags: 64 });
+    }
+
+    // Build category options from your RUST_CATEGORIES catalog
+    const catOptions = Object.keys(RUST_CATEGORIES).map(catKey => ({
+        label: RUST_CATEGORIES[catKey].label,
+        value: `admin_item_cat_${targetUserId}_${catKey}`,
+        emoji: RUST_CATEGORIES[catKey].emoji
+    }));
+
+    const row = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId('admin_item_category_select')
+            .setPlaceholder('Step 2: Select item category...')
+            .addOptions(catOptions)
+    );
+
+    return interaction.update({ content: `🎁 **Admin Item Wizard:** Target player set to **${targetUser.inGameName}**. Now select an item category:`, components: [row] });
+}
             if (interaction.customId === 'select_give_item_target') {
                 const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.values[0] } });
                 if (!targetUser || !targetUser.inGameName) return interaction.reply({ content: `❌ User hasn't linked their Rust account!`, flags: 64 });
@@ -162,6 +186,53 @@ module.exports = async (interaction, client) => {
                 ));
                 return interaction.showModal(modal);
             }
+            if (interaction.customId === 'admin_item_category_select') {
+    const [_, __, targetUserId, catKey] = module.split('_'); // format: admin_item_cat_{userId}_{catKey}
+    const categoryData = RUST_CATEGORIES[catKey];
+
+    if (!categoryData || !categoryData.items.length) {
+        return interaction.reply({ content: '❌ Invalid item category.', flags: 64 });
+    }
+
+    // Discord select menus support up to 25 options maximum per menu
+    const itemOptions = categoryData.items.slice(0, 25).map(item => ({
+        label: item.name,
+        description: `Shortname: ${item.shortname}`,
+        value: `admin_give_final_${targetUserId}_${item.shortname}`
+    }));
+
+    const row = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId('admin_item_final_select')
+            .setPlaceholder(`Step 3: Choose item from ${categoryData.label}...`)
+            .addOptions(itemOptions)
+    );
+
+    return interaction.update({ content: `📦 **Admin Item Wizard:** Choose the exact item from **${categoryData.label}**:`, components: [row] });
+}
+if (interaction.customId === 'admin_item_final_select') {
+    const [_, __, ___, targetUserId, shortname] = module.split('_'); // format: admin_give_final_{userId}_{shortname}
+    
+    const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
+    const ign = targetUser ? targetUser.inGameName : 'Player';
+
+    const modal = new ModalBuilder()
+        .setCustomId(`modal_admin_give_item_exec_${targetUserId}_${shortname}`)
+        .setTitle(`Give ${shortname} to ${ign}`);
+
+    modal.addComponents(
+        new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+                .setCustomId('amount')
+                .setLabel("Enter Amount to Send")
+                .setStyle(TextInputStyle.Short)
+                .setValue('1')
+                .setRequired(true)
+        )
+    );
+
+    return interaction.showModal(modal);
+}
 
             if (interaction.customId === 'select_pve_delete_exec') {
                 await interaction.deferUpdate();
@@ -1609,9 +1680,13 @@ if (module === 'setup_multiserver') {
             }
 
             if (interaction.customId === 'btn_admin_item') {
-                const row = new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId('select_give_item_target').setPlaceholder('Select a Discord player...'));
-                return interaction.reply({ content: '🎁 Select player:', components: [row], flags: 64 });
-            }
+    const row = new ActionRowBuilder().addComponents(
+        new UserSelectMenuBuilder()
+            .setCustomId('admin_item_select_player')
+            .setPlaceholder('Step 1: Select the player to give items to...')
+    );
+    return interaction.reply({ content: '🎁 **Admin Item Wizard:** Choose the target player below:', components: [row], flags: 64 });
+}
             if (interaction.customId === 'btn_admin_rcon') {
                 const modal = new ModalBuilder().setCustomId('modal_admin_rcon').setTitle('Send RCON');
                 modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_command').setLabel("Command").setStyle(TextInputStyle.Paragraph).setRequired(true)));
@@ -1896,6 +1971,25 @@ if (module === 'setup_multiserver') {
         // ====================================================================
         if (interaction.isModalSubmit()) {
 
+           if (interaction.customId.startsWith('modal_admin_give_item_exec_')) {
+    const parts = interaction.customId.replace('modal_admin_give_item_exec_', '').split('_');
+    const targetUserId = parts[0];
+    const shortname = parts.slice(1).join('_'); // Handles shortnames safely
+    
+    const amount = parseInt(interaction.fields.getTextInputValue('amount')) || 1;
+    const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
+
+    if (!targetUser || !targetUser.inGameName) {
+        return interaction.reply({ content: '❌ Player unlinked or not found.', flags: 64 });
+    }
+
+    try {
+        await sendRconCommand(interaction.guild.id, `inventory.giveto "${targetUser.inGameName}" ${shortname} ${amount}`);
+        return interaction.reply({ content: `✅ Successfully sent **${amount}x ${shortname}** to **${targetUser.inGameName}** in-game!`, flags: 64 });
+    } catch (e) {
+        return interaction.reply({ content: `❌ RCON Error: ${e.message}`, flags: 64 });
+    }
+}
             if (interaction.customId === 'modal_multiserver_add') {
                 const serverName = interaction.fields.getTextInputValue('server_name').trim();
                 const rconIp = interaction.fields.getTextInputValue('rcon_ip').trim();
