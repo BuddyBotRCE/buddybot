@@ -41,21 +41,18 @@ async function connectRcon(guildId, client) {
                 // LIVE GAME FEEDS & ADMIN AUDIT LOGS
                 // ==========================================
                 if (currentConfig && guild) {
-                    // 1. Admin Commands / Spawns
                     if (/(giving |spawned |teleport|kick |ban |inventory\.giveto)/i.test(msg)) {
                         if (currentConfig.logAdminChannelId) {
                             const chan = guild.channels.cache.get(currentConfig.logAdminChannelId);
                             if (chan) chan.send({ embeds: [new EmbedBuilder().setColor('#e67e22').setDescription(`🛠️ **Admin / System Action:**\n\`\`\`${msg}\`\`\``).setTimestamp()] }).catch(()=>{});
                         }
                     }
-                    // 2. World Events
                     if (/(Cargo Ship|Patrol Helicopter|Airdrop|Bradley APC|Locked Crate)/i.test(msg)) {
                         if (currentConfig.logGameChannelId) {
                             const chan = guild.channels.cache.get(currentConfig.logGameChannelId);
                             if (chan) chan.send({ embeds: [new EmbedBuilder().setColor('#9b59b6').setDescription(`🌍 **World Event:**\n\`\`\`${msg}\`\`\``).setTimestamp()] }).catch(()=>{});
                         }
                     }
-                    // 3. Connections & Disconnections
                     if (/ joined \[.*\]/i.test(msg) || / disconnecting:/i.test(msg)) {
                         if (currentConfig.logGameChannelId) {
                             const chan = guild.channels.cache.get(currentConfig.logGameChannelId);
@@ -64,9 +61,8 @@ async function connectRcon(guildId, client) {
                         }
                     }
                 }
-                // ==========================================
 
-                // 1. POSITION TRACKER FOR `server.printpos "Name"` (GPortal RCE)
+                // 1. POSITION TRACKER
                 if (msg.includes('X:') || msg.includes('pos') || msg.includes('Position') || msgLower.includes('vector') || /(-?\d+\.\d+)/.test(msg)) {
                     for (const [adminName, setupData] of adminPosQueue.entries()) {
                         if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
@@ -101,7 +97,7 @@ async function connectRcon(guildId, client) {
                     }
                 }
 
-                // 2. KILLFEED, COMBAT LOG PARSER & BOUNTIES
+                // 2. KILLFEED & BOUNTIES
                 if ((msgLower.includes('killed') || msgLower.includes('murdered') || msgLower.includes('suicide') || msgLower.includes('died') || msgLower.includes('slain')) && !msg.includes('[Killfeed]')) {
                     await sendRconCommand(guildId, `say "[Killfeed] ${msg}"`);
 
@@ -149,7 +145,6 @@ async function connectRcon(guildId, client) {
                         }
                     }
 
-                    // --- BOUNTY LOGIC TRIGGER ---
                     if (killerDb && victimDb && killerDb.userId !== victimDb.userId) {
                         await processBountyLogic(guildId, killerDb, victimDb, client, currentConfig);
                     }
@@ -161,7 +156,6 @@ async function connectRcon(guildId, client) {
                     if (chatMatch) {
                         const playerName = chatMatch[1].replace(/\[.*?\]/g, '').trim(); 
                         const chatText = chatMatch[2].toLowerCase();
-                        const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
 
                         if (currentConfig && currentConfig.crossChatChannelId) {
                             const crossChatChannel = client.channels.cache.get(currentConfig.crossChatChannelId);
@@ -245,7 +239,12 @@ async function triggerCustomEvent(guildId, eventType, data = {}) {
     if (eventType === 'elite_crate') return await sendRconCommand(guildId, 'spawn codelockedhackablecrate');
     if (eventType === 'timed_crate') return await sendRconCommand(guildId, 'spawn hackablelockedcrate');
     if (eventType === 'docked_cargo') {
-        // Correct RCE community command to spawn cargo
+        const config = await GuildConfig.findOne({ where: { guildId } });
+        if (config && config.cargoDockX !== null && config.cargoDockY !== null && config.cargoDockZ !== null) {
+            // RCE command with proper comma-separated coordinates
+            const coords = `${config.cargoDockX},${config.cargoDockY},${config.cargoDockZ}`;
+            return await sendRconCommand(guildId, `spawn cargoshipdynamic1 ${coords}`);
+        }
         return await sendRconCommand(guildId, 'cargoships.spawncargoship');
     }
     throw new Error('Unknown custom event type.');
@@ -305,16 +304,4 @@ async function processBountyLogic(guildId, killerDb, victimDb, client, config) {
     }
 }
 
-module.exports = { 
-    connectRcon, 
-    sendRconCommand, 
-    triggerCustomEvent, 
-    activeConnections, 
-    adminPosQueue, 
-    queueAdminPos,
-    // Exporting the test button listener hook reference for interactionCreate
-    async handleTestCargoButton(interaction) {
-        await sendRconCommand(interaction.guild.id, 'cargoships.spawncargoship');
-        return interaction.reply({ content: `✅ Successfully force-spawned a Cargo Ship on the map!`, flags: 64 });
-    }
-};
+module.exports = { connectRcon, sendRconCommand, triggerCustomEvent, activeConnections, adminPosQueue, queueAdminPos };
