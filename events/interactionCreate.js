@@ -1197,28 +1197,33 @@ module.exports = async (interaction, client) => {
                     const y = config.cargoDockY;
                     const z = config.cargoDockZ;
 
-                    // 1. Trigger the native event spawner which respects map coordinates better than raw entity spawns
-                    await sendRconCommand(interaction.guild.id, 'cargoships.spawncargoship');
-                    
-                    // 2. Immediately lock movement parameters and disable roaming AI loops
-                    await sendRconCommand(interaction.guild.id, 'cargoship.event_enabled false');
-                    await sendRconCommand(interaction.guild.id, 'cargoship.allstops');
+                    // 1. Spawn the dynamic cargo ship at your exact captured dock position
+                    await sendRconCommand(interaction.guild.id, `spawn cargoshipdynamic ${x},${y},${z}`);
 
                     const duration = config.cargoDurationMinutes || 30;
-                    
-                    // 3. After the duration expires, re-enable egress and clean up
-                    setTimeout(async () => {
+                    const guildId = interaction.guild.id;
+
+                    // 2. Because vanilla Rust cargo tries to sail away, lock it in place 
+                    // by re-applying its position every 3 seconds for the duration of the event
+                    const anchorInterval = setInterval(async () => {
                         try {
-                            await sendRconCommand(interaction.guild.id, 'cargoship.event_enabled true');
-                            await sendRconCommand(interaction.guild.id, 'cargoships.startegressing');
+                            await sendRconCommand(guildId, `entity.setposition cargoshipdynamic ${x},${y},${z}`);
+                            await sendRconCommand(guildId, 'cargoship.allstops');
+                        } catch (err) {}
+                    }, 3000);
+
+                    // 3. After the duration expires, clear the position-lock loop and sail away
+                    setTimeout(async () => {
+                        clearInterval(anchorInterval);
+                        try {
+                            await sendRconCommand(guildId, 'cargoships.startegressing');
                             setTimeout(() => {
-                                sendRconCommand(interaction.guild.id, 'del cargoshipdynamic2').catch(()=>{});
-                                sendRconCommand(interaction.guild.id, 'del cargoshipdynamic1').catch(()=>{});
-                            }, 120000);
+                                sendRconCommand(guildId, 'del cargoshipdynamic').catch(()=>{});
+                            }, 120000); // 2 minutes to sail off before deleting entity
                         } catch (e) {}
                     }, duration * 60000);
 
-                    return interaction.editReply({ content: `✅ Docked Cargo Ship event successfully triggered! Event AI locked in place for ${duration} minutes before scheduled departure.` });
+                    return interaction.editReply({ content: `✅ Docked Cargo Ship event successfully spawned and anchored at \`X: ${x}, Y: ${y}, Z: ${z}\`! It will hold position for ${duration} minutes before departing.` });
                 } else {
                     await sendRconCommand(interaction.guild.id, 'cargoships.spawncargoship');
                     return interaction.editReply({ content: `⚠️ No custom dock position set. Triggered standard roaming cargo event test!` });
