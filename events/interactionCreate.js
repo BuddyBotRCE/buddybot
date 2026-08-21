@@ -150,6 +150,19 @@ module.exports = async (interaction, client) => {
         if (interaction.isStringSelectMenu()) {
             const module = interaction.values[0];
 
+            // --- MULTI-SERVER ACCOUNT LINKING SELECTOR ---
+            if (interaction.customId === 'select_link_server_target') {
+                const serverId = module.replace('link_server_', '');
+                const server = await GameServer.findByPk(serverId);
+                const serverName = server ? server.serverName : 'Server';
+
+                const modal = new ModalBuilder().setCustomId(`modal_link_account_${serverId}`).setTitle(`Link Account (${serverName})`);
+                modal.addComponents(new ActionRowBuilder().addComponents(
+                    new TextInputBuilder().setCustomId('ign').setLabel("Your exact in-game Rust name").setStyle(TextInputStyle.Short).setRequired(true)
+                ));
+                return interaction.showModal(modal);
+            }
+
             if (interaction.customId === 'select_pve_delete_exec') {
                 await interaction.deferUpdate();
                 const zoneId = module;
@@ -1727,12 +1740,32 @@ module.exports = async (interaction, client) => {
                 return interaction.update({ embeds: [embed], components: [row] });
             }
 
+            // --- UPDATED MULTI-SERVER LINK ACCOUNT BUTTON ---
             if (interaction.customId === 'hub_link_account') {
-                const modal = new ModalBuilder().setCustomId('modal_link_account').setTitle('Link Rust Account');
-                modal.addComponents(new ActionRowBuilder().addComponents(
-                    new TextInputBuilder().setCustomId('ign').setLabel("Your exact in-game Rust name").setStyle(TextInputStyle.Short).setRequired(true)
-                ));
-                return interaction.showModal(modal);
+                const servers = await GameServer.findAll({ where: { guildId: interaction.guild.id } });
+                
+                if (!servers || servers.length === 0) {
+                    const modal = new ModalBuilder().setCustomId('modal_link_account_global').setTitle('Link Rust Account');
+                    modal.addComponents(new ActionRowBuilder().addComponents(
+                        new TextInputBuilder().setCustomId('ign').setLabel("Your exact in-game Rust name").setStyle(TextInputStyle.Short).setRequired(true)
+                    ));
+                    return interaction.showModal(modal);
+                }
+
+                const options = servers.map(s => ({
+                    label: s.serverName,
+                    value: `link_server_${s.id}`,
+                    emoji: '🖥️'
+                }));
+
+                const row = new ActionRowBuilder().addComponents(
+                    new StringSelectMenuBuilder()
+                        .setCustomId('select_link_server_target')
+                        .setPlaceholder('Select which server to link your account to...')
+                        .addOptions(options)
+                );
+
+                return interaction.reply({ content: '🔗 **Account Linking:** Please select the specific server you want to link your gamertag to:', components: [row], flags: 64 });
             }
 
             if (interaction.customId === 'hub_balance') {
@@ -2070,10 +2103,12 @@ module.exports = async (interaction, client) => {
                 return interaction.reply({ content: `✅ **AI Assistant Configured!**\n• Model: \`${model}\`\n• Base URL: \`${baseUrl}\`\nMembers can now mention <@${client.user.id}> to ask questions!`, flags: 64 });
             }
 
-            if (interaction.customId === 'modal_link_account') {
+            // --- UPDATED MULTI-SERVER / GLOBAL ACCOUNT LINKING MODAL SUBMISSION ---
+            if (interaction.customId === 'modal_link_account_global' || interaction.customId.startsWith('modal_link_account_')) {
                 const ign = interaction.fields.getTextInputValue('ign').trim();
                 const guildId = interaction.guild.id;
                 const userId = interaction.user.id;
+                const serverId = interaction.customId === 'modal_link_account_global' ? null : interaction.customId.replace('modal_link_account_', '');
 
                 let userRecord = await UserEconomy.findOne({ where: { guildId, userId } });
 
@@ -2091,7 +2126,8 @@ module.exports = async (interaction, client) => {
                     });
                 }
 
-                return interaction.reply({ content: `✅ Successfully linked your Discord to Rust account: **${ign}**!\nYou can now use the shop, kits, and teleports.`, flags: 64 });
+                const serverInfo = serverId ? ` to this server` : '';
+                return interaction.reply({ content: `✅ Successfully linked your Discord account to **${ign}**${serverInfo}!\nYou can now use the shop, kits, and teleports.`, flags: 64 });
             }
 
             if (interaction.customId === 'modal_setup_economy') {
