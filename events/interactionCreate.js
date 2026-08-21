@@ -152,17 +152,28 @@ module.exports = async (interaction, client) => {
 
   if (interaction.customId === 'modal_link_account') {
     const ign = interaction.fields.getTextInputValue('ign').trim();
-    
-    // Use upsert to safely update or create the record without primary key clashes
-    await UserEconomy.upsert({
-        guildId: interaction.guild.id,
-        userId: interaction.user.id,
-        inGameName: ign
-    });
+    const guildId = interaction.guild.id;
+    const userId = interaction.user.id;
+
+    // Direct search and update/create to avoid composite primary key ambiguity
+    let userRecord = await UserEconomy.findOne({ where: { guildId, userId } });
+
+    if (userRecord) {
+        await userRecord.update({ inGameName: ign });
+    } else {
+        await UserEconomy.create({
+            guildId,
+            userId,
+            inGameName: ign,
+            wallet: 0,
+            bank: 0,
+            xp: 0,
+            level: 1
+        });
+    }
 
     return interaction.reply({ content: `✅ Successfully linked your Discord to Rust account: **${ign}**!`, flags: 64 });
 }
-
             if (interaction.customId === 'select_pve_delete_exec') {
                 await interaction.deferUpdate();
                 const zoneId = module;
