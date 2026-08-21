@@ -1,7 +1,83 @@
 const { UserEconomy, GuildConfig } = require('../database/db');
+const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 
 module.exports = async (message, client) => {
     if (message.author.bot || !message.guild) return;
+
+    // =========================================================================
+    // 0. AUTO-MODERATION ENGINE
+    // =========================================================================
+    try {
+        const config = await GuildConfig.findOne({ where: { guildId: message.guild.id } });
+        if (config && config.autoModEnabled) {
+            // Bypass Auto-Mod for Admins
+            if (!message.member?.permissions.has(PermissionFlagsBits.Administrator)) {
+                let violationReason = null;
+                const content = message.content;
+
+                // A. Check Caps Lock Percentage
+                if (content.length > 5) {
+                    const letters = content.replace(/[^a-zA-Z]/g, '');
+                    if (letters.length > 5) {
+                        const uppercaseCount = letters.replace(/[^A-Z]/g, '').length;
+                        const capsPercentage = (uppercaseCount / letters.length) * 100;
+                        if (capsPercentage >= (config.autoModCapsLimit || 70)) {
+                            violationReason = 'Excessive Caps Lock';
+                        }
+                    }
+                }
+
+                // B. Check Bad Words / Muted Words Filter
+                if (!violationReason && config.autoModMutedWords) {
+                    try {
+                        const mutedWords = JSON.parse(config.autoModMutedWords);
+                        const lowerContent = content.toLowerCase();
+                        for (const word of mutedWords) {
+                            if (lowerContent.includes(word.toLowerCase())) {
+                                violationReason = `Prohibited Word/Phrase (${word})`;
+                                break;
+                            }
+                        }
+                    } catch (e) {}
+                }
+
+                // If a violation was triggered, execute punishment
+                if (violationReason) {
+                    await message.delete().catch(() => {});
+
+                    const action = config.autoModAction || 'timeout';
+                    const member = message.member;
+
+                    if (action === 'ban' && member?.bannable) {
+                        await member.ban({ reason: `[Auto-Mod] ${violationReason}` }).catch(() => {});
+                        await message.channel.send(`🛡️ **Auto-Mod:** <@${message.author.id}> was banned for: **${violationReason}**.`);
+                    } else if (action === 'timeout' && member?.moderatable) {
+                        await member.timeout(10 * 60 * 1000, `[Auto-Mod] ${violationReason}`).catch(() => {}); // 10 min timeout
+                        await message.channel.send(`🛡️ **Auto-Mod:** <@${message.author.id}> received a 10-minute timeout for: **${violationReason}**.`);
+                    } else {
+                        // Warn action
+                        await message.channel.send(`⚠️ **Auto-Mod Warning:** <@${message.author.id}>, please watch your language/caps. Reason: *${violationReason}*.`);
+                    }
+
+                    // Route to Admin Log Channel if configured
+                    if (config.logAdminChannelId) {
+                        const logChan = message.guild.channels.cache.get(config.logAdminChannelId);
+                        if (logChan) {
+                            const modEmbed = new EmbedBuilder()
+                                .setTitle('🛡️ Auto-Mod Action Triggered')
+                                .setDescription(`**User:** <@${message.author.id}> (${message.author.id})\n**Action Taken:** ${action.toUpperCase()}\n**Reason:** ${violationReason}\n**Channel:** <#${message.channel.id}>\n\n**Original Message:**\n\`\`\`${content}\`\`\``)
+                                .setColor('#e74c3c')
+                                .setTimestamp();
+                            logChan.send({ embeds: [modEmbed] }).catch(() => {});
+                        }
+                    }
+                    return; // Stop processing XP/AI if message was deleted for breaking rules
+                }
+            }
+        }
+    } catch (amErr) {
+        console.error('[AUTO-MOD ERROR]', amErr);
+    }
 
     // =========================================================================
     // 1. CHAT XP & LEVELING SYSTEM
@@ -53,7 +129,6 @@ module.exports = async (message, client) => {
         const baseUrl = config.aiBaseUrl ? config.aiBaseUrl.replace(/\/+$/, '') : 'https://api.openai.com/v1';
         const endpoint = `${baseUrl}/chat/completions`;
 
-        // Specialized Rust Console Edition & BuddyBot Knowledge Base
         const systemPrompt = `You are BuddyBot RCE, the dedicated AI assistant for this Rust Console Edition (PlayStation & Xbox) community server on Discord.
 
 KNOWLEDGE BASE & GUIDELINES:
@@ -66,20 +141,14 @@ KNOWLEDGE BASE & GUIDELINES:
         const requestBody = {
             model: config.aiModel || 'gemini-3.7-flash',
             messages: [
-                {
-                    role: 'system',
-                    content: systemPrompt
-                },
-                {
-                    role: 'user',
-                    content: prompt
-                }
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: prompt }
             ],
             max_tokens: 400
         };
 
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 15000); // 15s timeout protection
+        const timeout = setTimeout(() => controller.abort(), 15000);
 
         const response = await fetch(endpoint, {
             method: 'POST',
@@ -104,7 +173,6 @@ KNOWLEDGE BASE & GUIDELINES:
             return message.reply('❌ No response was generated by the AI.');
         }
 
-        // Split long responses to stay under Discord's 2000 character limit
         if (replyText.length > 2000) {
             for (let i = 0; i < replyText.length; i += 1900) {
                 await message.reply(replyText.slice(i, i + 1900));

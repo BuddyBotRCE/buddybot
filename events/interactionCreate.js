@@ -3,7 +3,7 @@
 // ============================================================================
 
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelSelectMenuBuilder, RoleSelectMenuBuilder, UserSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType, PermissionFlagsBits } = require('discord.js');
-const { GuildConfig, UserEconomy, Giveaway, CustomBind, BindCooldown, ServerKit, ShopItem, ShopCooldown, CasinoCooldown, OrpConfig, PlayerOrpBase, BuddyPassChallenge, BuddyPassReward, TicketCategory, PveZone, ActiveBounty, BountyCooldown, Clan, ClanMember, ClanInvite, ClanWar } = require('../database/db');
+const { GuildConfig, UserEconomy, Giveaway, CustomBind, BindCooldown, ServerKit, ShopItem, ShopCooldown, CasinoCooldown, OrpConfig, PlayerOrpBase, BuddyPassChallenge, BuddyPassReward, TicketCategory, PveZone, ActiveBounty, BountyCooldown, Clan, ClanMember, ClanInvite, ClanWar, ReactionRole } = require('../database/db');
 const { Op } = require('sequelize'); 
 const { connectRcon, sendRconCommand, adminPosQueue, queueAdminPos } = require('../utils/rconManager');
 const { RUST_CATEGORIES } = require('../utils/rustCatalog');
@@ -307,6 +307,36 @@ module.exports = async (interaction, client) => {
                     return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
                 }
 
+                if (module === 'setup_reaction_roles') {
+                    const embed = new EmbedBuilder()
+                        .setTitle('🔘 Reaction Roles & Verification Manager')
+                        .setDescription('Create interactive reaction role panels or a strict non-toggle "Verify" button.')
+                        .setColor('#3498db');
+
+                    const row = new ActionRowBuilder().addComponents(
+                        new StringSelectMenuBuilder().setCustomId('rr_action_select').setPlaceholder('Select reaction role action...')
+                            .addOptions([
+                                { label: 'Create Reaction Role Panel', value: 'rr_create', emoji: '➕' },
+                                { label: 'Remove Reaction Role', value: 'rr_remove', emoji: '🗑️' }
+                            ])
+                    );
+                    return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+                }
+
+                if (module === 'setup_automod') {
+                    const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+                    const embed = new EmbedBuilder()
+                        .setTitle('🛡️ Auto-Moderation Suite')
+                        .setDescription(`Configure automated chat filters and punishments.\n\n• **Status:** ${config?.autoModEnabled ? '🟢 Enabled' : '🔴 Disabled'}\n• **Action Type:** \`${config?.autoModAction || 'timeout'}\` (warn, timeout, ban)\n• **Caps Limit:** ${config?.autoModCapsLimit || 70}%`)
+                        .setColor('#e74c3c');
+
+                    const row = new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('btn_automod_toggle').setLabel(config?.autoModEnabled ? 'Disable Auto-Mod' : 'Enable Auto-Mod').setStyle(config?.autoModEnabled ? ButtonStyle.Danger : ButtonStyle.Success).setEmoji('⚡'),
+                        new ButtonBuilder().setCustomId('btn_automod_settings').setLabel('Configure Limits & Actions').setStyle(ButtonStyle.Primary).setEmoji('⚙️')
+                    );
+                    return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+                }
+
                 if (module === 'setup_minigames') {
                     const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
                     const embed = new EmbedBuilder()
@@ -595,6 +625,26 @@ module.exports = async (interaction, client) => {
                 if (module === 'log_discord') {
                     const row = new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_log_discord_channel').setPlaceholder('Select Discord Logs Channel...').addChannelTypes(ChannelType.GuildText));
                     return interaction.reply({ content: '💬 Select channel for **Discord Logs**:', components: [row], flags: 64 });
+                }
+            }
+
+            // --- REACTION ROLE SELECTOR ROUTER ---
+            if (interaction.customId === 'rr_action_select') {
+                if (module === 'rr_create') {
+                    const modal = new ModalBuilder().setCustomId('modal_rr_create').setTitle('Create Reaction Role Panel');
+                    modal.addComponents(
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('channel_id').setLabel("Target Channel ID").setStyle(TextInputStyle.Short).setRequired(true)),
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('emoji').setLabel("Emoji (e.g. 🎮 or custom id)").setStyle(TextInputStyle.Short).setRequired(true)),
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('role_id').setLabel("Role ID to Assign").setStyle(TextInputStyle.Short).setRequired(true)),
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('is_verify').setLabel("Verify Only? (1 for Yes, 0 for No)").setStyle(TextInputStyle.Short).setValue('0').setRequired(true)),
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('panel_text').setLabel("Embed Description Text").setStyle(TextInputStyle.Paragraph).setRequired(true))
+                    );
+                    return interaction.showModal(modal);
+                }
+                if (module === 'rr_remove') {
+                    const modal = new ModalBuilder().setCustomId('modal_rr_remove').setTitle('Remove Reaction Role');
+                    modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('message_id').setLabel("Discord Message ID of Panel").setStyle(TextInputStyle.Short).setRequired(true)));
+                    return interaction.showModal(modal);
                 }
             }
 
@@ -989,6 +1039,24 @@ module.exports = async (interaction, client) => {
                 modal.addComponents(
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('suggestion_title').setLabel("Brief Title").setStyle(TextInputStyle.Short).setRequired(true)),
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('suggestion_desc').setLabel("Describe your suggestion").setStyle(TextInputStyle.Paragraph).setRequired(true))
+                );
+                return interaction.showModal(modal);
+            }
+
+            // --- AUTOMOD TOGGLE & SETTINGS BUTTONS ---
+            if (interaction.customId === 'btn_automod_toggle') {
+                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+                const newState = !(config?.autoModEnabled || false);
+                await GuildConfig.upsert({ guildId: interaction.guild.id, autoModEnabled: newState });
+                return interaction.reply({ content: `✅ Auto-Moderation has been turned **${newState ? 'ON 🟢' : 'OFF 🔴'}**!`, flags: 64 });
+            }
+
+            if (interaction.customId === 'btn_automod_settings') {
+                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+                const modal = new ModalBuilder().setCustomId('modal_automod_config').setTitle('Configure Auto-Mod Parameters');
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('action').setLabel("Punishment ('warn', 'timeout', 'ban')").setStyle(TextInputStyle.Short).setValue(config?.autoModAction || 'timeout').setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('caps').setLabel("Max Caps % Allowed (e.g. 70)").setStyle(TextInputStyle.Short).setValue(`${config?.autoModCapsLimit || 70}`).setRequired(true))
                 );
                 return interaction.showModal(modal);
             }
@@ -1843,6 +1911,60 @@ module.exports = async (interaction, client) => {
                 return interaction.reply({ content: `✅ Bounty system configured!\n• Activates at: **${kills} Kills**\n• Reward: **${reward} Scrap**\n• Cooldown: **${cooldown} mins**`, flags: 64 });
             }
 
+            // --- REACTION ROLE MODAL EXECUTIONS ---
+            if (interaction.customId === 'modal_rr_create') {
+                const channelId = interaction.fields.getTextInputValue('channel_id');
+                const emoji = interaction.fields.getTextInputValue('emoji');
+                const roleId = interaction.fields.getTextInputValue('role_id');
+                const isVerify = interaction.fields.getTextInputValue('is_verify') === '1';
+                const panelText = interaction.fields.getTextInputValue('panel_text');
+
+                const targetChannel = interaction.guild.channels.cache.get(channelId);
+                if (!targetChannel) return interaction.reply({ content: '❌ Invalid Channel ID provided.', flags: 64 });
+
+                const embed = new EmbedBuilder()
+                    .setTitle(isVerify ? '✅ Server Verification' : '🔘 Reaction Roles')
+                    .setDescription(panelText)
+                    .setColor(isVerify ? '#2ecc71' : '#3498db')
+                    .setTimestamp();
+
+                const msg = await targetChannel.send({ embeds: [embed] });
+                await msg.react(emoji).catch(() => {});
+
+                await ReactionRole.create({
+                    guildId: interaction.guild.id,
+                    messageId: msg.id,
+                    emoji: emoji,
+                    roleId: roleId,
+                    isVerifyOnly: isVerify
+                });
+
+                return interaction.reply({ content: `✅ Reaction role panel successfully posted in <#${targetChannel.id}>!`, flags: 64 });
+            }
+
+            if (interaction.customId === 'modal_rr_remove') {
+                const msgId = interaction.fields.getTextInputValue('message_id');
+                const deleted = await ReactionRole.destroy({ where: { guildId: interaction.guild.id, messageId: msgId } });
+                if (deleted) {
+                    return interaction.reply({ content: `✅ Successfully removed reaction role configurations for message ID \`${msgId}\`.`, flags: 64 });
+                } else {
+                    return interaction.reply({ content: `❌ No reaction role found with that message ID.`, flags: 64 });
+                }
+            }
+
+            // --- AUTOMOD CONFIG MODAL ---
+            if (interaction.customId === 'modal_automod_config') {
+                const action = interaction.fields.getTextInputValue('action').trim().toLowerCase();
+                const caps = parseInt(interaction.fields.getTextInputValue('caps')) || 70;
+                
+                if (!['warn', 'timeout', 'ban'].includes(action)) {
+                    return interaction.reply({ content: '❌ Action must be either `warn`, `timeout`, or `ban`.', flags: 64 });
+                }
+
+                await GuildConfig.upsert({ guildId: interaction.guild.id, autoModAction: action, autoModCapsLimit: caps });
+                return interaction.reply({ content: `✅ Auto-Mod settings updated!\n• Punishment: \`${action}\`\n• Caps Limit: \`${caps}%\``, flags: 64 });
+            }
+
             // --- NEW SUGGESTION MODAL SUBMISSION ---
             if (interaction.customId === 'modal_hub_suggestion') {
                 const title = interaction.fields.getTextInputValue('suggestion_title');
@@ -1992,6 +2114,26 @@ module.exports = async (interaction, client) => {
 
                 await user.update({ bank: user.bank - amount, wallet: user.wallet + amount });
                 return interaction.reply({ content: `🏧 Successfully withdrew **${amount} ${currency}** to your wallet!\n• Wallet: **${user.wallet}**\n• Bank: **${user.bank}**`, flags: 64 });
+            }
+
+            // --- ADMIN EMBED MODAL SUBMISSION ---
+            if (interaction.customId === 'modal_admin_embed') {
+                const channelId = interaction.fields.getTextInputValue('channel_id');
+                const title = interaction.fields.getTextInputValue('title');
+                const description = interaction.fields.getTextInputValue('description');
+                const color = interaction.fields.getTextInputValue('color') || '#2b2d31';
+
+                const targetChannel = interaction.guild.channels.cache.get(channelId);
+                if (!targetChannel) return interaction.reply({ content: '❌ Invalid Channel ID provided.', flags: 64 });
+
+                const embed = new EmbedBuilder()
+                    .setTitle(title)
+                    .setDescription(description.replace(/\\n/g, '\n'))
+                    .setColor(color)
+                    .setTimestamp();
+
+                await targetChannel.send({ embeds: [embed] });
+                return interaction.reply({ content: `✅ Custom embed successfully posted in <#${targetChannel.id}>!`, flags: 64 });
             }
 
             // --- AUTO-EVENT INTERVAL MODAL SUBMISSIONS ---
