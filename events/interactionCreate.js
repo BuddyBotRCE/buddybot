@@ -1197,37 +1197,38 @@ module.exports = async (interaction, client) => {
                     const y = config.cargoDockY;
                     const z = config.cargoDockZ;
 
-                    // 1. Spawn the dynamic cargo ship at your exact captured dock position
+                    // 1. Spawn dynamic cargo ship 2 at the exact captured dock coordinates
                     await sendRconCommand(interaction.guild.id, `spawn cargoshipdynamic2 ${x},${y},${z}`);
 
                     const duration = config.cargoDurationMinutes || 30;
                     const guildId = interaction.guild.id;
 
-                    // 2. Because vanilla Rust cargo tries to sail away, lock it in place 
-                    // by re-applying its position every 3 seconds for the duration of the event
+                    // 2. Aggressive position-lock loop: forces coordinates and zeroes physics velocity every second
                     const anchorInterval = setInterval(async () => {
                         try {
                             await sendRconCommand(guildId, `entity.setposition cargoshipdynamic2 ${x},${y},${z}`);
+                            await sendRconCommand(guildId, 'entity.rigidbody.velocity 0,0,0');
                             await sendRconCommand(guildId, 'cargoship.allstops');
                         } catch (err) {}
-                    }, 3000);
+                    }, 1000);
 
-                    // 3. After the duration expires, clear the position-lock loop and sail away
+                    // 3. After the duration expires, clear the anchor loop and trigger egress
                     setTimeout(async () => {
                         clearInterval(anchorInterval);
                         try {
                             await sendRconCommand(guildId, 'cargoships.startegressing');
                             setTimeout(() => {
                                 sendRconCommand(guildId, 'del cargoshipdynamic2').catch(()=>{});
-                            }, 120000); // 2 minutes to sail off before deleting entity
+                            }, 120000); // 2 minutes to sail off before entity deletion
                         } catch (e) {}
                     }, duration * 60000);
 
-                    return interaction.editReply({ content: `✅ Docked Cargo Ship event successfully spawned and anchored at \`X: ${x}, Y: ${y}, Z: ${z}\`! It will hold position for ${duration} minutes before departing.` });
+                    return interaction.editReply({ content: `✅ Docked Cargo Ship event successfully spawned and hard-anchored at \`X: ${x}, Y: ${y}, Z: ${z}\`! It will hold position for ${duration} minutes before departing.` });
                 } else {
                     await sendRconCommand(interaction.guild.id, 'cargoships.spawncargoship');
                     return interaction.editReply({ content: `⚠️ No custom dock position set. Triggered standard roaming cargo event test!` });
                 }
+            }
             }
             if (interaction.customId === 'btn_ae_test_supply') {
                 await interaction.deferReply({ flags: 64 });
