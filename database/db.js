@@ -40,6 +40,7 @@ const GuildConfig = sequelize.define('GuildConfig', {
     buddyPassXpRate: { type: DataTypes.INTEGER, defaultValue: 10 },
     autoEventsEnabled: { type: DataTypes.BOOLEAN, defaultValue: false },
     cargoInterval: { type: DataTypes.INTEGER, defaultValue: 60 },
+    cargoDurationMinutes: { type: DataTypes.INTEGER, defaultValue: 30 },
     supplyInterval: { type: DataTypes.INTEGER, defaultValue: 60 },
     eliteInterval: { type: DataTypes.INTEGER, defaultValue: 60 },
     timedInterval: { type: DataTypes.INTEGER, defaultValue: 60 },
@@ -70,11 +71,9 @@ const GuildConfig = sequelize.define('GuildConfig', {
     clanCreationCost: { type: DataTypes.INTEGER, defaultValue: 1000 },
     clanDefaultMaxMembers: { type: DataTypes.INTEGER, defaultValue: 4 },
     clanDiscordSyncEnabled: { type: DataTypes.BOOLEAN, defaultValue: false },
-    
-    // --- AUTO-MOD SETTINGS ---
     autoModEnabled: { type: DataTypes.BOOLEAN, defaultValue: false },
-    autoModCapsLimit: { type: DataTypes.INTEGER, defaultValue: 70 }, // % of message
-    autoModAction: { type: DataTypes.STRING, defaultValue: 'timeout' }, // 'warn', 'timeout', 'ban'
+    autoModCapsLimit: { type: DataTypes.INTEGER, defaultValue: 70 },
+    autoModAction: { type: DataTypes.STRING, defaultValue: 'timeout' },
     autoModMutedWords: { type: DataTypes.TEXT, defaultValue: '[]' }
 });
 
@@ -94,21 +93,11 @@ const TicketCategory = sequelize.define('TicketCategory', { guildId: { type: Dat
 const PveZone = sequelize.define('PveZone', { guildId: { type: DataTypes.STRING }, zoneName: { type: DataTypes.STRING }, shape: { type: DataTypes.STRING, defaultValue: 'sphere' }, x: { type: DataTypes.FLOAT }, y: { type: DataTypes.FLOAT }, z: { type: DataTypes.FLOAT }, size: { type: DataTypes.STRING }, color: { type: DataTypes.STRING, defaultValue: 'green' }, enterMessage: { type: DataTypes.STRING }, exitMessage: { type: DataTypes.STRING } });
 const ActiveBounty = sequelize.define('ActiveBounty', { guildId: { type: DataTypes.STRING }, userId: { type: DataTypes.STRING }, inGameName: { type: DataTypes.STRING }, reward: { type: DataTypes.INTEGER } });
 const BountyCooldown = sequelize.define('BountyCooldown', { guildId: { type: DataTypes.STRING, primaryKey: true }, userId: { type: DataTypes.STRING, primaryKey: true }, expiresAt: { type: DataTypes.DATE } });
-
 const Clan = sequelize.define('Clan', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, name: { type: DataTypes.STRING, allowNull: false }, tag: { type: DataTypes.STRING, allowNull: false }, leaderId: { type: DataTypes.STRING, allowNull: false }, bankBalance: { type: DataTypes.INTEGER, defaultValue: 0 }, taxRate: { type: DataTypes.INTEGER, defaultValue: 0 }, maxMembers: { type: DataTypes.INTEGER, defaultValue: 4 }, baseCodes: { type: DataTypes.STRING, allowNull: true }, discordRoleId: { type: DataTypes.STRING, allowNull: true }, discordTextChannelId: { type: DataTypes.STRING, allowNull: true }, discordVoiceChannelId: { type: DataTypes.STRING, allowNull: true } });
 const ClanMember = sequelize.define('ClanMember', { guildId: { type: DataTypes.STRING, primaryKey: true }, userId: { type: DataTypes.STRING, primaryKey: true }, clanId: { type: DataTypes.INTEGER, allowNull: false }, role: { type: DataTypes.STRING, defaultValue: 'Member' } });
 const ClanInvite = sequelize.define('ClanInvite', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, clanId: { type: DataTypes.INTEGER, allowNull: false }, userId: { type: DataTypes.STRING, allowNull: false } });
 const ClanWar = sequelize.define('ClanWar', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, challengerClanId: { type: DataTypes.INTEGER, allowNull: false }, targetClanId: { type: DataTypes.INTEGER, allowNull: false }, status: { type: DataTypes.STRING, defaultValue: 'active' } });
-
-// --- NEW REACTION ROLE TABLE ---
-const ReactionRole = sequelize.define('ReactionRole', {
-    id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-    guildId: { type: DataTypes.STRING, allowNull: false },
-    messageId: { type: DataTypes.STRING, allowNull: false },
-    emoji: { type: DataTypes.STRING, allowNull: false },
-    roleId: { type: DataTypes.STRING, allowNull: false },
-    isVerifyOnly: { type: DataTypes.BOOLEAN, defaultValue: false } // True = Cannot remove/toggle once clicked
-});
+const ReactionRole = sequelize.define('ReactionRole', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, messageId: { type: DataTypes.STRING, allowNull: false }, emoji: { type: DataTypes.STRING, allowNull: false }, roleId: { type: DataTypes.STRING, allowNull: false }, isVerifyOnly: { type: DataTypes.BOOLEAN, defaultValue: false } });
 
 async function initDb() { await sequelize.authenticate(); await sequelize.sync({ alter: true }); console.log('[DATABASE] Tables synchronized successfully.'); }
 initDb();
