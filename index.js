@@ -71,7 +71,7 @@ app.listen(PORT, () => console.log(`[SYSTEM] Webhook listener running on port ${
 
 // --- START DISCORD LOGGER ---
 require('./utils/discordLogger')(client);
-
+client.on('messageCreate', async message => require('./events/messageCreate')(message, client));
 // Load Slash Commands Recursively (Supports subfolders like admin/ and player/)
 const commandsPath = path.join(__dirname, 'commands');
 function loadCommandsRecursively(dir) {
