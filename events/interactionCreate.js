@@ -150,19 +150,17 @@ module.exports = async (interaction, client) => {
         if (interaction.isStringSelectMenu()) {
             const module = interaction.values[0];
 
-       if (interaction.customId === 'modal_link_account_global' || interaction.customId.startsWith('modal_link_account_')) {
+  if (interaction.customId === 'modal_link_account') {
     const ign = interaction.fields.getTextInputValue('ign').trim();
-    const serverId = interaction.customId.replace('modal_link_account_', '');
+    
+    // Use upsert to safely update or create the record without primary key clashes
+    await UserEconomy.upsert({
+        guildId: interaction.guild.id,
+        userId: interaction.user.id,
+        inGameName: ign
+    });
 
-    let queryCondition = { guildId: interaction.guild.id, userId: interaction.user.id };
-    if (serverId && serverId !== 'global') {
-        queryCondition.serverId = serverId; // If you scope UserEconomy by serverId
-    }
-
-    let [user] = await UserEconomy.findOrCreate({ where: queryCondition, defaults: { wallet: 0 } });
-    await user.update({ inGameName: ign });
-
-    return interaction.reply({ content: `✅ Successfully linked your Discord account to **${ign}**!`, flags: 64 });
+    return interaction.reply({ content: `✅ Successfully linked your Discord to Rust account: **${ign}**!`, flags: 64 });
 }
 
             if (interaction.customId === 'select_pve_delete_exec') {
