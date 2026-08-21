@@ -347,22 +347,23 @@ module.exports = async (interaction, client) => {
                     );
                     return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
                 }
+if (module === 'setup_multiserver') {
+    const servers = await GameServer.findAll({ where: { guildId: interaction.guild.id } });
+    const serverList = servers.length 
+        ? servers.map(s => `• **${s.serverName}** (\`${s.rconIp}:${s.rconPort}\`)`).join('\n') 
+        : 'No game servers configured yet. Add your first server below!';
 
-                if (module === 'setup_multiserver') {
-                    const servers = await GameServer.findAll({ where: { guildId: interaction.guild.id } });
-                    const serverList = servers.length ? servers.map(s => `• **${s.serverName}** (\`${s.rconIp}:${s.rconPort}\`)`).join('\n') : 'No additional game servers configured.';
+    const embed = new EmbedBuilder()
+        .setTitle('🌐 RCON Connect & Server Manager')
+        .setDescription(`Manage your game server RCON connections.\n\n*Note: You can add multiple game servers here to host and manage them all from the same Discord server!*\n\n**Configured Servers:**\n${serverList}`)
+        .setColor('#3498db');
 
-                    const embed = new EmbedBuilder()
-                        .setTitle('🖥️ Multi-Server RCON Manager')
-                        .setDescription(`Manage multiple game servers hosted from this Discord server.\n\n**Configured Servers:**\n${serverList}`)
-                        .setColor('#3498db');
-
-                    const row = new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('btn_multiserver_add').setLabel('Add Game Server').setStyle(ButtonStyle.Success).setEmoji('➕')
-                    );
-                    return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
-                }
-
+    const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('btn_multiserver_add').setLabel('Add Game Server').setStyle(ButtonStyle.Success).setEmoji('➕'),
+        new ButtonBuilder().setCustomId('rcon_quick_connect').setLabel('Connect RCON').setStyle(ButtonStyle.Primary).setEmoji('🔌')
+    );
+    return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+}
                 if (module === 'setup_buddypass') {
                     const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
                     const challenges = await BuddyPassChallenge.findAll({ where: { guildId: interaction.guild.id } });
