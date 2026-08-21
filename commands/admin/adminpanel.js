@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, PermissionFlagsBits } = require('discord.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -27,21 +27,18 @@ module.exports = {
                     { label: 'Auto-Events (Premium)', value: 'setup_autoevents', emoji: '🚁' },
                     { label: 'License & Tier Manager', value: 'setup_tier', emoji: '🏷️' },
                     { label: 'Ticket System', value: 'setup_tickets', emoji: '🎫' },
+                    { label: 'Giveaways Manager', value: 'setup_giveaways', emoji: '🎉' },
                     { label: 'Custom Binds', value: 'setup_binds', emoji: '🗣️' },
                     { label: 'Cross-Chat', value: 'setup_crosschat', emoji: '💬' },
                     { label: 'ORP Manager', value: 'setup_orp', emoji: '🛡️' },
+                    { label: 'Server Wipe Panel', value: 'setup_wipe', emoji: '☢️' },
+                    { label: 'Post Custom Embed', value: 'setup_embed', emoji: '📢' },
                     { label: 'AI Integration Setup', value: 'setup_ai', emoji: '🤖' },
                     { label: 'Logging System', value: 'setup_logging', emoji: '📊' },
                     { label: 'Suggestions System', value: 'setup_suggestions', emoji: '💡' }
                 ])
         );
 
-        const row2 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('btn_giveaway_panel').setLabel('Giveaways').setStyle(ButtonStyle.Secondary).setEmoji('🎉'),
-            new ButtonBuilder().setCustomId('wipe_panel_open').setLabel('Wipe Panel').setStyle(ButtonStyle.Danger).setEmoji('☢️'),
-            new ButtonBuilder().setCustomId('btn_admin_embed_helper').setLabel('Post Custom Embed').setStyle(ButtonStyle.Primary).setEmoji('📢')
-        );
-
-        await interaction.reply({ embeds: [adminEmbed], components: [row1, row2], flags: 64 });
+        await interaction.reply({ embeds: [adminEmbed], components: [row1], flags: 64 });
     }
 };

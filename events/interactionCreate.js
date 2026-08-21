@@ -275,7 +275,6 @@ module.exports = async (interaction, client) => {
                     return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
                 }
 
-                // --- NEW CLANS ADMIN CONFIG ---
                 if (module === 'setup_clans') {
                     const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
                     const activeClans = await Clan.count({ where: { guildId: interaction.guild.id } });
@@ -292,7 +291,6 @@ module.exports = async (interaction, client) => {
                     return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
                 }
 
-                // --- NEW BOUNTIES ADMIN PANEL ---
                 if (module === 'setup_bounties') {
                     const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
                     const activeBounties = await ActiveBounty.count({ where: { guildId: interaction.guild.id } });
@@ -494,6 +492,41 @@ module.exports = async (interaction, client) => {
                     const row1 = new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_suggestion_channel').setPlaceholder('Select Suggestions Channel...').addChannelTypes(ChannelType.GuildText));
                     const row2 = new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder().setCustomId('select_suggestion_role').setPlaceholder('Select Admin Role to Ping (Optional)...'));
                     return interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
+                }
+
+                if (module === 'setup_giveaways') {
+                    const embed = new EmbedBuilder().setTitle('🎉 Giveaway Manager').setDescription('Manage your server giveaways.').setColor('#9b59b6');
+                    const row = new ActionRowBuilder().addComponents(
+                        new StringSelectMenuBuilder().setCustomId('giveaway_action_select').setPlaceholder('Select a giveaway action...')
+                        .addOptions([
+                            { label: 'Start Giveaway', value: 'ga_start', emoji: '🚀' },
+                            { label: 'Set Default Channel', value: 'ga_channel', emoji: '📺' },
+                            { label: 'Set Default Banner', value: 'ga_banner', emoji: '🖼️' },
+                            { label: 'Reroll Winner', value: 'ga_reroll', emoji: '🎲' },
+                            { label: 'View Participants', value: 'ga_players', emoji: '👥' },
+                            { label: 'Cancel Giveaway', value: 'ga_cancel', emoji: '❌' }
+                        ])
+                    );
+                    return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+                }
+
+                if (module === 'setup_wipe') {
+                    const row = new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('btn_wipe_full').setLabel('Full Wipe').setStyle(ButtonStyle.Danger), 
+                        new ButtonBuilder().setCustomId('btn_wipe_selective').setLabel('Selective Wipe').setStyle(ButtonStyle.Primary)
+                    );
+                    return interaction.reply({ content: '☢️ Server Wipe Manager', components: [row], flags: 64 });
+                }
+
+                if (module === 'setup_embed') {
+                    const modal = new ModalBuilder().setCustomId('modal_admin_embed').setTitle('Create Custom Embed');
+                    modal.addComponents(
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('channel_id').setLabel("Target Channel ID").setStyle(TextInputStyle.Short).setRequired(true)),
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel("Embed Title").setStyle(TextInputStyle.Short).setRequired(true)),
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('description').setLabel("Description (supports \\n)").setStyle(TextInputStyle.Paragraph).setRequired(true)),
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('color').setLabel("Hex Color (e.g. #3498db)").setStyle(TextInputStyle.Short).setValue('#2b2d31').setRequired(false))
+                    );
+                    return interaction.showModal(modal);
                 }
 
                 if (module === 'setup_ai') {
@@ -732,33 +765,7 @@ module.exports = async (interaction, client) => {
                     return interaction.reply({ content: `📩 **User Transcripts:** DMs are now **${newState ? 'ON' : 'OFF'}**.`, flags: 64 });
                 }
             }
-
-            if (interaction.customId === 'giveaway_action_select') {
-                if (module === 'ga_start') {
-                    const modal = new ModalBuilder().setCustomId('modal_giveaway_start').setTitle('Start Giveaway');
-                    modal.addComponents(
-                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('prize').setLabel("Prize").setStyle(TextInputStyle.Short).setRequired(true)), 
-                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('minutes').setLabel("Minutes").setStyle(TextInputStyle.Short).setRequired(true)), 
-                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('winners').setLabel("Winners").setStyle(TextInputStyle.Short).setValue('1').setRequired(true))
-                    );
-                    return interaction.showModal(modal);
-                }
-                if (module === 'ga_channel') {
-                    const row = new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_giveaway_channel').setPlaceholder('Select channel...').addChannelTypes(ChannelType.GuildText));
-                    return interaction.reply({ content: '📺 Select giveaway channel:', components: [row], flags: 64 });
-                }
-                if (module === 'ga_banner') {
-                    const modal = new ModalBuilder().setCustomId('modal_ga_banner').setTitle('Set Banner');
-                    modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('banner_url').setLabel("Image URL").setStyle(TextInputStyle.Short).setRequired(true)));
-                    return interaction.showModal(modal);
-                }
-                if (module === 'ga_reroll' || module === 'ga_players' || module === 'ga_cancel') {
-                    const modal = new ModalBuilder().setCustomId(`modal_${module}`).setTitle('Giveaway Manager');
-                    modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('msg_id').setLabel("Message ID").setStyle(TextInputStyle.Short).setRequired(true)));
-                    return interaction.showModal(modal);
-                }
-            }
-
+            
             if (interaction.customId === 'player_shop_cat_select') {
                 const catKey = module;
                 const categoryData = RUST_CATEGORIES[catKey];
@@ -1165,18 +1172,6 @@ module.exports = async (interaction, client) => {
                 return interaction.reply({ embeds: [embed], flags: 64 });
             }
 
-            // --- ADMIN: CUSTOM EMBED BUILDER TRIGGER ---
-            if (interaction.customId === 'btn_admin_embed_helper') {
-                const modal = new ModalBuilder().setCustomId('modal_admin_embed').setTitle('Create Custom Embed');
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('channel_id').setLabel("Target Channel ID").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel("Embed Title").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('description').setLabel("Description (supports \\n)").setStyle(TextInputStyle.Paragraph).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('color').setLabel("Hex Color (e.g. #3498db)").setStyle(TextInputStyle.Short).setValue('#2b2d31').setRequired(false))
-                );
-                return interaction.showModal(modal);
-            }
-
             // --- AUTO-EVENT SUB-MENUS ---
             if (interaction.customId === 'ae_sub_cargo') {
                 const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
@@ -1455,39 +1450,6 @@ module.exports = async (interaction, client) => {
                 return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🛡️ Registered ORP Bases').setDescription(list).setColor('#3498db')], flags: 64 });
             }
 
-            if (interaction.customId === 'btn_giveaway_panel') {
-                const embed = new EmbedBuilder().setTitle('🎉 Giveaway Manager').setDescription('Manage your server giveaways.').setColor('#9b59b6');
-                const row = new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder().setCustomId('giveaway_action_select').setPlaceholder('Select a giveaway action...')
-                    .addOptions([
-                        { label: 'Start Giveaway', value: 'ga_start', emoji: '🚀' },
-                        { label: 'Set Default Channel', value: 'ga_channel', emoji: '📺' },
-                        { label: 'Set Default Banner', value: 'ga_banner', emoji: '🖼️' },
-                        { label: 'Reroll Winner', value: 'ga_reroll', emoji: '🎲' },
-                        { label: 'View Participants', value: 'ga_players', emoji: '👥' },
-                        { label: 'Cancel Giveaway', value: 'ga_cancel', emoji: '❌' }
-                    ])
-                );
-                return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
-            }
-            if (interaction.customId === 'wipe_panel_open') {
-                const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_wipe_full').setLabel('Full Wipe').setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId('btn_wipe_selective').setLabel('Selective Wipe').setStyle(ButtonStyle.Primary));
-                return interaction.reply({ content: '☢️ Server Wipe Manager', components: [row], flags: 64 });
-            }
-            if (interaction.customId === 'btn_wipe_full') {
-                const modal = new ModalBuilder().setCustomId('modal_wipe_full').setTitle('Confirm Wipe');
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('confirm_text').setLabel('Type WIPE').setStyle(TextInputStyle.Short).setRequired(true)));
-                return interaction.showModal(modal);
-            }
-            if (interaction.customId === 'btn_wipe_selective') {
-                const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('select_wipe_custom').setPlaceholder('Select...').setMinValues(1).setMaxValues(4).addOptions([
-                    { label: 'Economy', value: 'wipe_econ' }, 
-                    { label: 'Bases & TPs', value: 'wipe_tp' }, 
-                    { label: 'BuddyPass', value: 'wipe_bp' },
-                    { label: 'PVE Zones', value: 'wipe_zones' }
-                ]));
-                return interaction.reply({ content: 'Select modules to wipe:', components: [row], flags: 64 });
-            }
             if (interaction.customId === 'rcon_quick_connect') {
                 await interaction.reply({ content: '⏳ Connecting...', flags: 64 });
                 try {
@@ -2030,26 +1992,6 @@ module.exports = async (interaction, client) => {
 
                 await user.update({ bank: user.bank - amount, wallet: user.wallet + amount });
                 return interaction.reply({ content: `🏧 Successfully withdrew **${amount} ${currency}** to your wallet!\n• Wallet: **${user.wallet}**\n• Bank: **${user.bank}**`, flags: 64 });
-            }
-
-            // --- ADMIN EMBED MODAL SUBMISSION ---
-            if (interaction.customId === 'modal_admin_embed') {
-                const channelId = interaction.fields.getTextInputValue('channel_id');
-                const title = interaction.fields.getTextInputValue('title');
-                const description = interaction.fields.getTextInputValue('description');
-                const color = interaction.fields.getTextInputValue('color') || '#2b2d31';
-
-                const targetChannel = interaction.guild.channels.cache.get(channelId);
-                if (!targetChannel) return interaction.reply({ content: '❌ Invalid Channel ID provided.', flags: 64 });
-
-                const embed = new EmbedBuilder()
-                    .setTitle(title)
-                    .setDescription(description.replace(/\\n/g, '\n'))
-                    .setColor(color)
-                    .setTimestamp();
-
-                await targetChannel.send({ embeds: [embed] });
-                return interaction.reply({ content: `✅ Custom embed successfully posted in <#${targetChannel.id}>!`, flags: 64 });
             }
 
             // --- AUTO-EVENT INTERVAL MODAL SUBMISSIONS ---
