@@ -1181,31 +1181,54 @@ if (module === 'setup_multiserver') {
             }
 
             if (interaction.customId === 'btn_ae_test_cargo') {
-                await interaction.deferReply({ flags: 64 });
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-                if (config && config.cargoDockX !== null && config.cargoDockY !== null && config.cargoDockZ !== null) {
-                    const coords = `${config.cargoDockX},${config.cargoDockY},${config.cargoDockZ}`;
-                    await sendRconCommand(interaction.guild.id, `spawn cargoshipdynamic1 ${coords}`);
-                    
-                    const crates = config.cargoCrateCount || 3;
-                    for(let i=0; i<crates; i++) {
-                        let cX = config.cargoDockX + (i * 8);
-                        let cY = config.cargoDockY + 14; 
-                        let cZ = config.cargoDockZ;
-                        await sendRconCommand(interaction.guild.id, `spawn codelockedhackablecrate ${cX},${cY},${cZ}`);
-                    }
+    await interaction.deferReply({ flags: 64 });
+    const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+    
+    if (config && config.cargoDockX !== null && config.cargoDockY !== null && config.cargoDockZ !== null) {
+        const x = config.cargoDockX;
+        const y = config.cargoDockY;
+        const z = config.cargoDockZ;
+        const coords = `${x},${y},${z}`;
 
-                    const duration = config.cargoDurationMinutes || 30;
-                    setTimeout(() => {
-                        sendRconCommand(interaction.guild.id, 'del cargoshipdynamic1').catch(()=>{});
-                    }, duration * 60000);
+        // 1. Spawn the dynamic cargo ship at the dock
+        await sendRconCommand(interaction.guild.id, `spawn cargoshipdynamic1 ${coords}`);
+        
+        // 2. Stop its movement/momentum so it stays locked in place at the dock
+        await sendRconCommand(interaction.guild.id, 'cargoship.allstops'); // Stops waypoint navigation if supported, or we use velocity reset
+        await sendRconCommand(interaction.guild.id, 'entity.enableserverframemovement 0'); // Fallback to freeze dynamic physics entities if needed
 
-                    return interaction.editReply({ content: `✅ Spawned Docked Cargo Ship with ${crates} crates! It will despawn in ${duration} minutes.` });
-                } else {
-                    await sendRconCommand(interaction.guild.id, 'cargoships.spawncargoship');
-                    return interaction.editReply({ content: `⚠️ No custom dock position set. Triggered standard roaming cargo event test!` });
-                }
-            }
+        // 3. Spawn crates inside the bottom hull and on the upper deck
+        const cratesCount = config.cargoCrateCount || 3;
+        
+        for(let i = 0; i < cratesCount; i++) {
+            // Lower deck / bottom interior of the ship
+            let bottomX = x + (i * 3);
+            let bottomY = y + 3.5; // Inside bottom hull level
+            let bottomZ = z;
+            await sendRconCommand(interaction.guild.id, `spawn codelockedhackablecrate ${bottomX},${bottomY},${bottomZ}`);
+
+            // Upper deck surface
+            let deckX = x + (i * 5);
+            let deckY = y + 16.5; // Top deck surface height
+            let deckZ = z;
+            await sendRconCommand(interaction.guild.id, `spawn codelockedhackablecrate ${deckX},${deckY},${deckZ}`);
+        }
+
+        const duration = config.cargoDurationMinutes || 30;
+        
+        // 4. Clean up ship and lingering crates after the set duration expires
+        setTimeout(async () => {
+            try {
+                await sendRconCommand(interaction.guild.id, 'del cargoshipdynamic1');
+            } catch (e) {}
+        }, duration * 60000);
+
+        return interaction.editReply({ content: `✅ Spawned Locked Docked Cargo Ship at \`X: ${x}, Y: ${y}, Z: ${z}\`! Crates are placed in the lower hull and upper deck. It will despawn in ${duration} minutes.` });
+    } else {
+        await sendRconCommand(interaction.guild.id, 'cargoships.spawncargoship');
+        return interaction.editReply({ content: `⚠️ No custom dock position set. Triggered standard roaming cargo event test!` });
+    }
+}
             if (interaction.customId === 'btn_ae_test_supply') {
                 await interaction.deferReply({ flags: 64 });
                 await sendRconCommand(interaction.guild.id, 'supply.drop');
