@@ -98,7 +98,14 @@ const ClanMember = sequelize.define('ClanMember', { guildId: { type: DataTypes.S
 const ClanInvite = sequelize.define('ClanInvite', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, clanId: { type: DataTypes.INTEGER, allowNull: false }, userId: { type: DataTypes.STRING, allowNull: false } });
 const ClanWar = sequelize.define('ClanWar', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, challengerClanId: { type: DataTypes.INTEGER, allowNull: false }, targetClanId: { type: DataTypes.INTEGER, allowNull: false }, status: { type: DataTypes.STRING, defaultValue: 'active' } });
 const ReactionRole = sequelize.define('ReactionRole', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, messageId: { type: DataTypes.STRING, allowNull: false }, emoji: { type: DataTypes.STRING, allowNull: false }, roleId: { type: DataTypes.STRING, allowNull: false }, isVerifyOnly: { type: DataTypes.BOOLEAN, defaultValue: false } });
-
+const GameServer = sequelize.define('GameServer', {
+    id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+    guildId: { type: DataTypes.STRING, allowNull: false },
+    serverName: { type: DataTypes.STRING, allowNull: false }, // e.g. "Main 2X", "Solo Weekly"
+    rconIp: { type: DataTypes.STRING, allowNull: false },
+    rconPort: { type: DataTypes.STRING, allowNull: false },
+    rconPassword: { type: DataTypes.STRING, allowNull: false }
+});
 async function initDb() { await sequelize.authenticate(); await sequelize.sync({ alter: true }); console.log('[DATABASE] Tables synchronized successfully.'); }
 initDb();
 

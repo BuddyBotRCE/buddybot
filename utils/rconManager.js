@@ -241,7 +241,6 @@ async function triggerCustomEvent(guildId, eventType, data = {}) {
     if (eventType === 'docked_cargo') {
         const config = await GuildConfig.findOne({ where: { guildId } });
         if (config && config.cargoDockX !== null && config.cargoDockY !== null && config.cargoDockZ !== null) {
-            // RCE command with proper comma-separated coordinates
             const coords = `${config.cargoDockX},${config.cargoDockY},${config.cargoDockZ}`;
             return await sendRconCommand(guildId, `spawn cargoshipdynamic1 ${coords}`);
         }
