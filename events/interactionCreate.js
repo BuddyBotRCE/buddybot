@@ -387,11 +387,13 @@ module.exports = async (interaction, client) => {
                 }
 
                 if (module === 'setup_autoevents') {
+                    await interaction.deferUpdate(); // <--- This immediately stops the dropdown from timing out
+                    
                     const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
                     const isPremium = config?.isPremiumServer || false;
 
                     if (!isPremium) {
-                        return interaction.reply({ 
+                        return interaction.followUp({ 
                             content: `🔒 **Premium Feature Locked**\nAutomated Server Events are exclusive to **⭐ Premium Tier** servers. Toggle your server tier status in the License Manager to unlock this feature!`, 
                             flags: 64 
                         });
@@ -417,7 +419,9 @@ module.exports = async (interaction, client) => {
                     const row2 = new ActionRowBuilder().addComponents(
                         new ButtonBuilder().setCustomId('btn_ae_toggle').setLabel(config?.autoEventsEnabled ? 'Disable Global Events' : 'Enable Global Events').setStyle(config?.autoEventsEnabled ? ButtonStyle.Danger : ButtonStyle.Success).setEmoji('⚡')
                     );
-                    return interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
+                    
+                    // Use editReply instead of reply since we deferred the update
+                    return interaction.editReply({ embeds: [embed], components: [row1, row2] });
                 }
 
                 if (module === 'setup_tier') {
