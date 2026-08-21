@@ -73,7 +73,10 @@ const GuildConfig = sequelize.define('GuildConfig', {
     // --- NEW LOGGING CHANNELS ---
     logAdminChannelId: { type: DataTypes.STRING, allowNull: true },
     logGameChannelId: { type: DataTypes.STRING, allowNull: true },
-    logDiscordChannelId: { type: DataTypes.STRING, allowNull: true }
+    logDiscordChannelId: { type: DataTypes.STRING, allowNull: true },
+    // --- NEW SUGGESTION FIELDS ---
+    suggestionChannelId: { type: DataTypes.STRING, allowNull: true },
+    suggestionPingRoleId: { type: DataTypes.STRING, allowNull: true }
 });
 
 const UserEconomy = sequelize.define('UserEconomy', {

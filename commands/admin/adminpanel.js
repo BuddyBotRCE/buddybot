@@ -30,6 +30,7 @@ module.exports = {
                     { label: 'ORP Manager', value: 'setup_orp', emoji: '🛡️' },
                     { label: 'AI Integration Setup', value: 'setup_ai', emoji: '🤖' },
                     { label: 'Logging System', value: 'setup_logging', emoji: '📊' },
+                    { label: 'Suggestions System', value: 'setup_suggestions', emoji: '💡' }
                 ])
         );
 

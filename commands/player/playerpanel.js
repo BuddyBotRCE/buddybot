@@ -13,7 +13,7 @@ module.exports = {
 
         const embed = new EmbedBuilder()
             .setTitle(`🎮 ${interaction.guild.name} — Player Hub`)
-            .setDescription(`Welcome to the community hub! Use the buttons below to manage your Rust account, access banking and daily rewards, play casino minigames, view leaderboards, and browse the store.`)
+            .setDescription(`Welcome to the community hub! Use the buttons below to manage your Rust account, access banking and daily rewards, play casino minigames, view leaderboards, browse the store, or submit a server suggestion.`)
             .setColor('#3498db')
             .setTimestamp();
 
@@ -29,7 +29,8 @@ module.exports = {
 
         const row3 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('hub_leaderboards').setLabel('Leaderboards').setStyle(ButtonStyle.Primary).setEmoji('🏆'),
-            new ButtonBuilder().setCustomId('hub_vote_info').setLabel('Vote & Claim').setStyle(ButtonStyle.Success).setEmoji('🗳️')
+            new ButtonBuilder().setCustomId('hub_vote_info').setLabel('Vote & Claim').setStyle(ButtonStyle.Success).setEmoji('🗳️'),
+            new ButtonBuilder().setCustomId('hub_suggestion').setLabel('Suggestion').setStyle(ButtonStyle.Secondary).setEmoji('💡')
         );
 
         return interaction.reply({ embeds: [embed], components: [row1, row2, row3], flags: 64 });
