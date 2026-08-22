@@ -175,15 +175,16 @@ module.exports = async (interaction, client) => {
 
             // --- AUTO EVENTS DROPDOWN SELECTOR ---
             if (interaction.customId === 'ae_event_type_select') {
-                // module will be 'supply', 'elite', or 'timed'
+                const eventType = module; // 'supply', 'elite', or 'timed'
                 const modal = new ModalBuilder()
-                    .setCustomId(`modal_ae_setup_${module}`)
-                    .setTitle(`Configure Event: ${module.toUpperCase()}`);
+                    .setCustomId(`modal_ae_setup_${eventType}`)
+                    .setTitle(`Configure: ${eventType.toUpperCase()}`);
+                
                 modal.addComponents(
                     new ActionRowBuilder().addComponents(
                         new TextInputBuilder()
                             .setCustomId('ae_count')
-                            .setLabel("How many to spawn? (Up to 10)")
+                            .setLabel("How many to spawn? (Max 10)")
                             .setStyle(TextInputStyle.Short)
                             .setValue('3')
                             .setRequired(true)
@@ -198,6 +199,19 @@ module.exports = async (interaction, client) => {
                     )
                 );
                 return interaction.showModal(modal);
+            }
+
+            // --- SLOT COORDINATOR SELECTOR (PART 3) ---
+            if (interaction.customId === 'ae_slot_coordinator_select') {
+                const [_, __, eventType, slotNum] = module.split('_'); // format: ae_setslot_[event]_[slot]
+                const userProfile = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
+                
+                if (!userProfile || !userProfile.inGameName) {
+                    return interaction.reply({ content: `❌ Link your Rust account first using \`/playerpanel\` before capturing coordinates!`, flags: 64 });
+                }
+
+                queueAdminPos(userProfile.inGameName, interaction.guild.id, interaction.user.id, interaction.channel.id, `aeslot_${eventType}_${slotNum}`, client);
+                return interaction.update({ content: `⏳ Capturing current coordinates for **${eventType.toUpperCase()} - Slot ${slotNum}** via RCON...`, components: [] });
             }
 
             if (interaction.customId === 'select_link_server_target') {
@@ -236,7 +250,7 @@ module.exports = async (interaction, client) => {
                         .addOptions(itemOptions)
                 );
 
-                return interaction.update({ content: `📦 **Admin Item Wizard:** Choose the exact item from **${categoryData.label}**:`, components: [row] });
+                return interaction.update({ content: `🎁 **Admin Item Wizard:** Choose the exact item from **${categoryData.label}**:`, components: [row] });
             }
 
             if (interaction.customId === 'admin_item_final_select') {
@@ -558,8 +572,7 @@ module.exports = async (interaction, client) => {
                     );
 
                     const row2 = new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('btn_ae_toggle').setLabel(config?.autoEventsEnabled ? 'Disable Global Events' : 'Enable Global Events').setStyle(config?.autoEventsEnabled ? ButtonStyle.Danger : ButtonStyle.Success).setEmoji('⚡'),
-                        new ButtonBuilder().setCustomId('btn_ae_set_locations').setLabel('📍 Set Event Locations (Slots 1-10)').setStyle(ButtonStyle.Primary)
+                        new ButtonBuilder().setCustomId('btn_ae_toggle').setLabel(config?.autoEventsEnabled ? 'Disable Global Events' : 'Enable Global Events').setStyle(config?.autoEventsEnabled ? ButtonStyle.Danger : ButtonStyle.Success).setEmoji('⚡')
                     );
                     return interaction.reply({ embeds: [embed], components: [selectMenuRow, row2], flags: 64 });
                 }
@@ -1215,36 +1228,6 @@ module.exports = async (interaction, client) => {
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('caps').setLabel("Max Caps % Allowed (e.g. 70)").setStyle(TextInputStyle.Short).setValue(`${config?.autoModCapsLimit || 70}`).setRequired(true))
                 );
                 return interaction.showModal(modal);
-            }
-
-            // --- MULTI-SLOT CAPTURE COORDINATES BUTTON (UP TO 10 SLOTS) ---
-            if (interaction.customId === 'btn_ae_set_locations') {
-                const userProfile = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
-                if (!userProfile || !userProfile.inGameName) {
-                    return interaction.reply({ content: '❌ Link your Rust account first using `/playerpanel` before grabbing location slots!', flags: 64 });
-                }
-
-                const options = [];
-                for (let i = 1; i <= 10; i++) {
-                    options.push({ label: `Capture Position Slot ${i}`, value: `slot_capture_${i}`, description: `Saves your current in-game coordinates to Slot ${i}` });
-                }
-
-                const row = new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder()
-                        .setCustomId('ae_slot_select_menu')
-                        .setPlaceholder('Select which slot to save your current position to...')
-                        .addOptions(options)
-                );
-
-                return interaction.reply({ content: `📍 **Location Slot Manager:** Stand at your desired location in-game, then select the slot number below to capture your coordinates:`, components: [row], flags: 64 });
-            }
-
-            if (interaction.isStringSelectMenu() && interaction.customId === 'ae_slot_select_menu') {
-                const slotNum = interaction.values[0].replace('slot_capture_', '');
-                const userProfile = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
-                
-                queueAdminPos(userProfile.inGameName, interaction.guild.id, interaction.user.id, interaction.channel.id, `aeslot_${slotNum}`, client);
-                return interaction.update({ content: `⏳ Capturing current coordinates for **Position Slot ${slotNum}** via RCON...`, components: [] });
             }
 
             if (interaction.customId === 'btn_ae_test_supply') {
@@ -1982,24 +1965,46 @@ module.exports = async (interaction, client) => {
         if (interaction.isModalSubmit()) {
 
             if (interaction.customId.startsWith('modal_ae_setup_')) {
-                const eventType = interaction.customId.replace('modal_ae_setup_', ''); // supply, elite, or timed
+                const eventType = interaction.customId.replace('modal_ae_setup_', '');
                 const count = parseInt(interaction.fields.getTextInputValue('ae_count')) || 1;
                 const interval = parseInt(interaction.fields.getTextInputValue('ae_interval')) || 60;
+                const clampedCount = Math.min(10, Math.max(1, count));
 
                 const updateObj = {};
                 if (eventType === 'supply') {
-                    updateObj.supplySpawnCount = Math.min(10, Math.max(1, count));
+                    updateObj.supplySpawnCount = clampedCount;
                     updateObj.supplyInterval = interval;
                 } else if (eventType === 'elite') {
-                    updateObj.eliteSpawnCount = Math.min(10, Math.max(1, count));
+                    updateObj.eliteSpawnCount = clampedCount;
                     updateObj.eliteInterval = interval;
                 } else if (eventType === 'timed') {
-                    updateObj.timedSpawnCount = Math.min(10, Math.max(1, count));
+                    updateObj.timedSpawnCount = clampedCount;
                     updateObj.timedInterval = interval;
                 }
 
                 await GuildConfig.upsert({ guildId: interaction.guild.id, ...updateObj });
-                return interaction.reply({ content: `✅ Successfully configured **${eventType.toUpperCase()}** events!\n• Spawn Count: **${count}** (Max 10)\n• Interval: **${interval} minutes**`, flags: 64 });
+
+                const slotOptions = [];
+                for (let i = 1; i <= clampedCount; i++) {
+                    slotOptions.push({
+                        label: `Set Coordinates for Slot ${i}`,
+                        value: `ae_setslot_${eventType}_${i}`,
+                        description: `Capture current position for ${eventType.toUpperCase()} slot ${i}`
+                    });
+                }
+
+                const slotMenuRow = new ActionRowBuilder().addComponents(
+                    new StringSelectMenuBuilder()
+                        .setCustomId('ae_slot_coordinator_select')
+                        .setPlaceholder(`Select slot to set position (1 to ${clampedCount})...`)
+                        .addOptions(slotOptions)
+                );
+
+                return interaction.reply({ 
+                    content: `✅ Configured **${eventType.toUpperCase()}** (${clampedCount} items, every ${interval}m).\n\nNow stand at your desired location in-game and **select a slot below** to map its coordinates:`, 
+                    components: [slotMenuRow], 
+                    flags: 64 
+                });
             }
 
             if (interaction.customId.startsWith('modal_admin_give_item_exec_')) {
