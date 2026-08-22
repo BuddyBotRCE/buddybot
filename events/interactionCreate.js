@@ -1187,7 +1187,7 @@ module.exports = async (interaction, client) => {
                 );
                 return interaction.showModal(modal);
             }
-            if (interaction.customId === 'btn_ae_test_cargo') {
+             if (interaction.customId === 'btn_ae_test_cargo') {
     await interaction.deferReply({ flags: 64 });
 
     const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
@@ -1201,33 +1201,34 @@ module.exports = async (interaction, client) => {
     const guildId = interaction.guild.id;
 
     try {
-        // 1. Spawn native cargo ship event
-        await sendRconCommand(guildId, 'cargoships.spawncargoship');
+        // 1. Spawn cargo ship directly at your dock coordinates using the working entity name
+        await sendRconCommand(guildId, `spawn cargoshipdynamic2 ${x},${y},${z}`);
 
-        // Give the server 2 seconds to register the entity before locking/teleporting it to the dock
-        setTimeout(async () => {
-            await sendRconCommand(guildId, `entity.setposition cargoshipdynamic2 ${x},${y},${z}`);
-            await sendRconCommand(guildId, 'cargoship.allstops');
-        }, 2000);
+        // 2. Stop its movement immediately
+        await sendRconCommand(guildId, 'cargoship.allstops');
 
-        // 2. Lock position by teleporting and stopping movement every 2 seconds
+        // 3. Lock position every 1 second by forcing coordinates, killing velocity, and stopping AI
         const anchorInterval = setInterval(async () => {
             try {
                 await sendRconCommand(guildId, `entity.setposition cargoshipdynamic2 ${x},${y},${z}`);
+                await sendRconCommand(guildId, 'entity.rigidbody.velocity 0,0,0');
                 await sendRconCommand(guildId, 'cargoship.allstops');
             } catch (err) {
                 console.error('Anchor error:', err);
             }
-        }, 2000);
+        }, 1000);
 
-        // 3. After duration, release ship
+        // 4. After duration, release ship and delete after egress
         setTimeout(async () => {
             clearInterval(anchorInterval);
             await sendRconCommand(guildId, 'cargoships.startegressing');
+            setTimeout(() => {
+                sendRconCommand(guildId, 'del cargoshipdynamic2').catch(()=>{});
+            }, 120000);
             interaction.followUp('🚢 Cargo ship is now departing.');
         }, duration * 60 * 1000);
 
-        await interaction.editReply(`🚢 Cargo ship spawned and anchored for ${duration} minutes.`);
+        await interaction.editReply(`🚢 Cargo ship spawned and anchored at dock for ${duration} minutes.`);
 
     } catch (err) {
         console.error(err);
