@@ -5,7 +5,6 @@ const path = require('path');
 const express = require('express');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { initAutoEventLoop } = require('./utils/autoEventManager');
-const { startAutoEventScheduler } = require('./services/eventScheduler'); // <-- Added background loop import
 
 const client = new Client({
     intents: [
@@ -74,7 +73,6 @@ app.listen(PORT, () => console.log(`[SYSTEM] Webhook listener running on port ${
 // --- START DISCORD LOGGER ---
 require('./utils/discordLogger')(client);
 client.on('messageCreate', async message => require('./events/messageCreate')(message, client));
-
 // Load Slash Commands Recursively (Supports subfolders like admin/ and player/)
 const commandsPath = path.join(__dirname, 'commands');
 function loadCommandsRecursively(dir) {
@@ -110,9 +108,8 @@ if (fs.existsSync(eventsPath)) {
 client.once('clientReady', async () => {
     console.log(`[SYSTEM] BuddyBotRCE is online as ${client.user.tag}`);
 
-    // --- INITIALIZE BACKGROUND AUTO-EVENT MANAGER LOOPS ---
+    // --- INITIALIZE BACKGROUND AUTO-EVENT MANAGER LOOP ---
     initAutoEventLoop(client);
-    startAutoEventScheduler(); // <-- Starts your multi-slot repeating timer loop automatically
 
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     const commandData = client.commands.map(cmd => cmd.data.toJSON());
