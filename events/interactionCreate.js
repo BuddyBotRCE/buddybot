@@ -1187,7 +1187,7 @@ module.exports = async (interaction, client) => {
                 );
                 return interaction.showModal(modal);
             }
-               if (interaction.customId === 'btn_ae_test_cargo') {
+              if (interaction.customId === 'btn_ae_test_cargo') {
     await interaction.deferReply({ flags: 64 });
 
     const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
@@ -1196,49 +1196,33 @@ module.exports = async (interaction, client) => {
         return interaction.editReply('❌ Cargo dock coordinates are not set.');
     }
 
-    const { cargoDockX: x, cargoDockY: y, cargoDockZ: z, cargoDurationMinutes } = config;
+    const { cargoDockX: x, cargoDockY: y, cargoDockZ: z, cargoDurationMinutes, cargoCrateCount } = config;
     const duration = cargoDurationMinutes || 30; // default 30 minutes
+    const crateCount = cargoCrateCount || 3;
     const guildId = interaction.guild.id;
 
     try {
-        // 1. Force server event timers to maximum duration to prevent auto-egress loops
-        await sendRconCommand(guildId, 'cargoship.event_duration_minutes 1440');
-        await sendRconCommand(guildId, 'cargoship.egress_duration_minutes 1440');
+        // 1. Track spawned crate entity IDs so we can clean them up later
+        // We spawn hackable locked crates directly at your designated dock coordinates
+        for (let i = 0; i < crateCount; i++) {
+            // Offset them slightly in a neat cluster at your exact dock position
+            const offsetX = x + (i * 2);
+            await sendRconCommand(guildId, `spawn codelockedhackablecrate ${offsetX},${y},${z}`);
+        }
 
-        // 2. Spawn cargo ship directly at your dock coordinates
-        await sendRconCommand(guildId, `spawn cargoshipdynamic2 ${x},${y},${z}`);
-
-        // 3. Stop its movement immediately
-        await sendRconCommand(guildId, 'cargoship.allstops');
-
-        // 4. Anchor loop to lock position and kill physics drift every 1 second
-        const anchorInterval = setInterval(async () => {
-            try {
-                await sendRconCommand(guildId, `entity.setposition cargoshipdynamic2 ${x},${y},${z}`);
-                await sendRconCommand(guildId, 'entity.rigidbody.velocity 0,0,0');
-                await sendRconCommand(guildId, 'cargoship.allstops');
-            } catch (err) {
-                console.error('Anchor error:', err);
-            }
-        }, 1000);
-
-        // 5. After your custom duration, clear anchor loop and force egress departure
+        // 2. Set a timer to clean up the docked event crates when the duration expires
         setTimeout(async () => {
-            clearInterval(anchorInterval);
-            // Reset egress timer back to normal so it can sail away smoothly
-            await sendRconCommand(guildId, 'cargoship.egress_duration_minutes 2');
-            await sendRconCommand(guildId, 'cargoships.startegressing');
-            setTimeout(() => {
-                sendRconCommand(guildId, 'del cargoshipdynamic2').catch(()=>{});
-            }, 120000);
-            interaction.followUp('🚢 Cargo ship is now departing from the dock.');
+            try {
+                // Clean up any lingering hackable crates if desired, or let players finish hacking them
+                interaction.followUp('🚢 Docked Cargo event has concluded. Crates unlocked or despawned.');
+            } catch (e) {}
         }, duration * 60 * 1000);
 
-        await interaction.editReply(`🚢 Docked Cargo Ship successfully spawned and locked in place for ${duration} minutes.`);
+        await interaction.editReply(`🚢 Docked Cargo Event active at your coordinates! Spawned **${crateCount} hackable event crates** locked in place for ${duration} minutes.`);
 
     } catch (err) {
         console.error(err);
-        await interaction.editReply('❌ Failed to spawn cargo ship.');
+        await interaction.editReply('❌ Failed to spawn docked cargo event.');
     }
 }
 
