@@ -1187,7 +1187,7 @@ module.exports = async (interaction, client) => {
                 );
                 return interaction.showModal(modal);
             }
-             if (interaction.customId === 'btn_ae_test_cargo') {
+               if (interaction.customId === 'btn_ae_test_cargo') {
     await interaction.deferReply({ flags: 64 });
 
     const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
@@ -1201,17 +1201,17 @@ module.exports = async (interaction, client) => {
     const guildId = interaction.guild.id;
 
     try {
-        // 1. Set the server's native cargo event and egress timers to match your configured duration
-        await sendRconCommand(guildId, `cargoship.event_duration_minutes ${duration}`);
-        await sendRconCommand(guildId, `cargoship.egress_duration_minutes ${duration}`);
+        // 1. Force server event timers to maximum duration to prevent auto-egress loops
+        await sendRconCommand(guildId, 'cargoship.event_duration_minutes 1440');
+        await sendRconCommand(guildId, 'cargoship.egress_duration_minutes 1440');
 
         // 2. Spawn cargo ship directly at your dock coordinates
         await sendRconCommand(guildId, `spawn cargoshipdynamic2 ${x},${y},${z}`);
 
-        // 3. Stop its waypoint movement
+        // 3. Stop its movement immediately
         await sendRconCommand(guildId, 'cargoship.allstops');
 
-        // 4. Anchor loop to enforce position and kill physics drift every 1 second
+        // 4. Anchor loop to lock position and kill physics drift every 1 second
         const anchorInterval = setInterval(async () => {
             try {
                 await sendRconCommand(guildId, `entity.setposition cargoshipdynamic2 ${x},${y},${z}`);
@@ -1222,9 +1222,11 @@ module.exports = async (interaction, client) => {
             }
         }, 1000);
 
-        // 5. After duration, clear anchor loop and force egress departure
+        // 5. After your custom duration, clear anchor loop and force egress departure
         setTimeout(async () => {
             clearInterval(anchorInterval);
+            // Reset egress timer back to normal so it can sail away smoothly
+            await sendRconCommand(guildId, 'cargoship.egress_duration_minutes 2');
             await sendRconCommand(guildId, 'cargoships.startegressing');
             setTimeout(() => {
                 sendRconCommand(guildId, 'del cargoshipdynamic2').catch(()=>{});
