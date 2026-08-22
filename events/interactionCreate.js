@@ -1188,7 +1188,7 @@ module.exports = async (interaction, client) => {
                 return interaction.showModal(modal);
             }
 
-           if (interaction.customId === 'btn_ae_test_cargo') {
+            if (interaction.customId === 'btn_ae_test_cargo') {
                 await interaction.deferReply({ flags: 64 });
                 const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
                 
@@ -1228,7 +1228,6 @@ module.exports = async (interaction, client) => {
                     await sendRconCommand(interaction.guild.id, 'cargoships.spawncargoship');
                     return interaction.editReply({ content: `⚠️ No custom dock position set. Triggered standard roaming cargo event test!` });
                 }
-            }
             }
             if (interaction.customId === 'btn_ae_test_supply') {
                 await interaction.deferReply({ flags: 64 });
@@ -1801,6 +1800,61 @@ module.exports = async (interaction, client) => {
                 return interaction.reply({ content: '🛒 **Server Shop Categories:** Select a category below to view items and make purchases:', components: [row], flags: 64 });
             }
 
+            if (interaction.customId === 'hub_shop_pricelist') {
+    const dbItems = await ShopItem.findAll({ where: { guildId: interaction.guild.id } });
+    const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+    const currency = config?.economyCurrency || 'Scrap';
+    const multiplier = (config?.shopMultiplier || 100) / 100;
+
+    if (dbItems.length === 0) {
+        const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('hub_shop_menu').setLabel('Go Back').setStyle(ButtonStyle.Secondary).setEmoji('🔙'));
+        return interaction.update({ content: '❌ There are currently no items for sale in the shop.', embeds: [], components: [row] });
+    }
+
+    const embed = new EmbedBuilder()
+        .setTitle('📋 Categorized Store Price List')
+        .setDescription('Here are all items currently available for purchase across all categories:')
+        .setColor('#3498db')
+        .setFooter({ text: 'Prices reflect real-time global multipliers.' });
+
+    for (const catKey in RUST_CATEGORIES) {
+        const catData = RUST_CATEGORIES[catKey];
+        const itemsInCat = dbItems.filter(i => i.category === catKey);
+
+        if (itemsInCat.length > 0) {
+            let itemListText = itemsInCat.map(i => {
+                const finalPrice = Math.round(i.price * multiplier);
+                return `• **${i.name}** — 💰 **${finalPrice} ${currency}** *(CD: ${i.cooldownSeconds}s)*`;
+            }).join('\n');
+
+            // Safety truncation if field exceeds Discord's 1024 character limit
+            if (itemListText.length > 1024) {
+                itemListText = itemListText.substring(0, 1021) + '...';
+            }
+
+            embed.addFields({ name: `${catData.emoji} ${catData.label}`, value: itemListText, inline: false });
+        }
+    }
+
+    const customItems = dbItems.filter(i => i.category === 'custom');
+    if (customItems.length > 0) {
+        let customListText = customItems.map(i => {
+            const finalPrice = Math.round(i.price * multiplier);
+            return `• **${i.name}** — 💰 **${finalPrice} ${currency}** *(CD: ${i.cooldownSeconds}s)*`;
+        }).join('\n');
+
+        if (customListText.length > 1024) {
+            customListText = customListText.substring(0, 1021) + '...';
+        }
+
+        embed.addFields({ name: '✨ Custom / Server Items', value: customListText, inline: false });
+    }
+
+    const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('hub_shop_menu').setLabel('Go Back').setStyle(ButtonStyle.Secondary).setEmoji('🔙'));
+    return interaction.update({ embeds: [embed], components: [row] });
+}
+
+            // --- UPDATED MULTI-SERVER LINK ACCOUNT BUTTON ---
             if (interaction.customId === 'hub_link_account') {
                 const servers = await GameServer.findAll({ where: { guildId: interaction.guild.id } });
                 
@@ -1967,12 +2021,20 @@ module.exports = async (interaction, client) => {
                     return interaction.reply({ content: '❌ Player unlinked or not found.', flags: 64 });
                 }
 
+                let rconResult;
                 try {
-                    await sendRconCommand(interaction.guild.id, `inventory.giveto "${targetUser.inGameName}" ${shortname} ${amount}`);
-                    return interaction.reply({ content: `✅ Successfully sent **${amount}x ${shortname}** to **${targetUser.inGameName}** in-game!`, flags: 64 });
+                    rconResult = await sendRconCommand(
+                        interaction.guild.id,
+                        `inventory.giveto "${targetUser.inGameName}" ${shortname} ${amount}`
+                    );
                 } catch (e) {
                     return interaction.reply({ content: `❌ RCON Error: ${e.message}`, flags: 64 });
                 }
+
+                if (rconResult?.error) {
+                    return interaction.reply({ content: `❌ RCON Error: ${rconResult.error.message}`, flags: 64 });
+                }
+                return interaction.reply({ content: `✅ Successfully sent **${amount}x ${shortname}** to **${targetUser.inGameName}** in-game!`, flags: 64 });
             }
 
             if (interaction.customId === 'modal_multiserver_add') {
@@ -2835,7 +2897,8 @@ module.exports = async (interaction, client) => {
                 return interaction.reply({ content: `☢️ WIPED!` });
             }
         }
-    } catch (error) {
+    } 
+        catch (error) {
         console.error('[INTERACTION ERROR]', error);
         if (interaction.deferred || interaction.replied) await interaction.followUp({ content: 'Error occurred.', flags: 64 }).catch(()=>{});
         else await interaction.reply({ content: 'Error occurred.', flags: 64 }).catch(()=>{});
