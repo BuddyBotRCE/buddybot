@@ -1188,56 +1188,61 @@ module.exports = async (interaction, client) => {
                 return interaction.showModal(modal);
             }
             if (interaction.customId === 'btn_ae_test_cargo') {
-    await interaction.deferReply({ flags: 64 });
-    const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-    
-    if (config && config.cargoDockX !== null && config.cargoDockY !== null && config.cargoDockZ !== null) {
-        const x = config.cargoDockX;
-        const y = config.cargoDockY;
-        const z = config.cargoDockZ;
+                await interaction.deferReply({ flags: 64 });
+                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+                
+                if (config && config.cargoDockX !== null && config.cargoDockY !== null && config.cargoDockZ !== null) {
+                    const x = config.cargoDockX;
+                    const y = config.cargoDockY;
+                    const z = config.cargoDockZ;
 
-        try {
-            // Send an isolated entity batch payload to the RCON socket manager
-            // This locks the network group and blocks waypoint tracking at the socket level
-            await sendRconCommand(interaction.guild.id, 'cargoships.event_enabled 0');
-            await sendRconCommand(interaction.guild.id, `spawn cargoshipdynamic2 ${x},${y},${z}`);
-            await sendRconCommand(interaction.guild.id, 'cargoship.allstops');
-            await sendRconCommand(interaction.guild.id, 'entity.enable_server_framemovement 0');
+                    try {
+                        // 1. Clear out any prior cargo instances to avoid entity ID conflicts
+                        await sendRconCommand(interaction.guild.id, 'del cargoshipdynamic2');
+                        await sendRconCommand(interaction.guild.id, 'del cargoshipdynamic1');
 
-            const duration = config.cargoDurationMinutes || 30;
-            const guildId = interaction.guild.id;
+                        // 2. Spawn fresh dynamic cargo ship directly at the captured dock coordinates
+                        await sendRconCommand(interaction.guild.id, `spawn cargoshipdynamic2 ${x},${y},${z}`);
 
-            // Socket-level frame lock loop
-            const anchorInterval = setInterval(async () => {
-                try {
-                    await sendRconCommand(guildId, `entity.setposition cargoshipdynamic2 ${x},${y},${z}`);
-                    await sendRconCommand(guildId, 'cargoship.allstops');
-                } catch (err) {}
-            }, 1000);
+                        // 3. Immediately halt its navigation and physics trajectory
+                        await sendRconCommand(interaction.guild.id, 'cargoship.allstops');
+                        await sendRconCommand(interaction.guild.id, 'entity.rigidbody.velocity 0,0,0');
 
-            // Cleanup after duration
-            setTimeout(async () => {
-                clearInterval(anchorInterval);
-                try {
-                    await sendRconCommand(guildId, 'entity.enable_server_framemovement 1');
-                    await sendRconCommand(guildId, 'cargoships.event_enabled 1');
-                    await sendRconCommand(guildId, 'cargoships.startegressing');
-                    setTimeout(() => {
-                        sendRconCommand(guildId, 'del cargoshipdynamic2').catch(()=>{});
-                    }, 120000);
-                } catch (e) {}
-            }, duration * 60 * 1000);
+                        const duration = config.cargoDurationMinutes || 30;
+                        const guildId = interaction.guild.id;
 
-            return interaction.editReply({ content: `✅ Docked Cargo Ship spawned via network-lock batch payload at \`X: ${x}, Y: ${y}, Z: ${z}\` for ${duration} minutes!` });
-        } catch (err) {
-            console.error('[CARGO ERROR]', err);
-            return interaction.editReply({ content: `❌ Failed to execute docked cargo sequence.` });
-        }
-    } else {
-        await sendRconCommand(interaction.guild.id, 'cargoships.spawncargoship');
-        return interaction.editReply({ content: `⚠️ No custom dock position set. Triggered standard roaming cargo event test!` });
-    }
-}
+                        // 4. Stable position-lock loop (non-blocking async execution)
+                        const anchorInterval = setInterval(async () => {
+                            try {
+                                await sendRconCommand(guildId, `entity.setposition cargoshipdynamic2 ${x},${y},${z}`);
+                                await sendRconCommand(guildId, 'entity.rigidbody.velocity 0,0,0');
+                                await sendRconCommand(guildId, 'cargoship.allstops');
+                            } catch (err) {
+                                // Silent catch to prevent interval crash on network hiccups
+                            }
+                        }, 1500); // 1.5 seconds gives the RCON queue breathing room while keeping it pinned
+
+                        // 5. Handle duration expiration and clean egress departure
+                        setTimeout(async () => {
+                            clearInterval(anchorInterval);
+                            try {
+                                await sendRconCommand(guildId, 'cargoships.startegressing');
+                                setTimeout(() => {
+                                    sendRconCommand(guildId, 'del cargoshipdynamic2').catch(()=>{});
+                                }, 120000);
+                            } catch (e) {}
+                        }, duration * 60 * 1000);
+
+                        return interaction.editReply({ content: `✅ Docked Cargo Ship successfully spawned and anchored at \`X: ${x}, Y: ${y}, Z: ${z}\` for ${duration} minutes!` });
+                    } catch (rconErr) {
+                        console.error('[CARGO SPAWN ERROR]', rconErr);
+                        return interaction.editReply({ content: `❌ RCON execution failed while attempting to spawn docked cargo.` });
+                    }
+                } else {
+                    await sendRconCommand(interaction.guild.id, 'cargoships.spawncargoship');
+                    return interaction.editReply({ content: `⚠️ No custom dock position set. Triggered standard roaming cargo event test!` });
+                }
+            }
 
                if (interaction.customId === 'btn_ae_test_supply') {
                 await interaction.deferReply({ flags: 64 });
