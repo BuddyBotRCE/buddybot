@@ -1187,44 +1187,55 @@ module.exports = async (interaction, client) => {
                 );
                 return interaction.showModal(modal);
             }
-              if (interaction.customId === 'btn_ae_test_cargo') {
-    await interaction.deferReply({ flags: 64 });
+            if (interaction.customId === 'btn_ae_test_cargo') {
+                await interaction.deferReply({ flags: 64 });
+                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+                
+                if (config && config.cargoDockX !== null && config.cargoDockY !== null && config.cargoDockZ !== null) {
+                    const x = config.cargoDockX;
+                    const y = config.cargoDockY;
+                    const z = config.cargoDockZ;
 
-    const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+                    // 1. Disable global cargo event routing behavior first
+                    await sendRconCommand(interaction.guild.id, 'cargoship.event_enabled "False"');
 
-    if (!config || config.cargoDockX === null) {
-        return interaction.editReply('❌ Cargo dock coordinates are not set.');
-    }
+                    // 2. Spawn the dynamic cargo ship directly at your captured in-game dock coordinates
+                    await sendRconCommand(interaction.guild.id, `spawn cargoshipdynamic2 ${x},${y},${z}`);
 
-    const { cargoDockX: x, cargoDockY: y, cargoDockZ: z, cargoDurationMinutes, cargoCrateCount } = config;
-    const duration = cargoDurationMinutes || 30; // default 30 minutes
-    const crateCount = cargoCrateCount || 3;
-    const guildId = interaction.guild.id;
+                    // 3. Kill all waypoint movement indices and momentum physics
+                    await sendRconCommand(interaction.guild.id, 'cargoship.allstops');
+                    await sendRconCommand(interaction.guild.id, 'entity.rigidbody.velocity 0,0,0');
 
-    try {
-        // 1. Track spawned crate entity IDs so we can clean them up later
-        // We spawn hackable locked crates directly at your designated dock coordinates
-        for (let i = 0; i < crateCount; i++) {
-            // Offset them slightly in a neat cluster at your exact dock position
-            const offsetX = x + (i * 2);
-            await sendRconCommand(guildId, `spawn codelockedhackablecrate ${offsetX},${y},${z}`);
-        }
+                    const duration = config.cargoDurationMinutes || 30;
+                    const guildId = interaction.guild.id;
 
-        // 2. Set a timer to clean up the docked event crates when the duration expires
-        setTimeout(async () => {
-            try {
-                // Clean up any lingering hackable crates if desired, or let players finish hacking them
-                interaction.followUp('🚢 Docked Cargo event has concluded. Crates unlocked or despawned.');
-            } catch (e) {}
-        }, duration * 60 * 1000);
+                    // 4. Strict position lock loop: forces the ship to stay frozen at your exact dock coordinates every 1 second
+                    const anchorInterval = setInterval(async () => {
+                        try {
+                            await sendRconCommand(guildId, `entity.setposition cargoshipdynamic2 ${x},${y},${z}`);
+                            await sendRconCommand(guildId, 'entity.rigidbody.velocity 0,0,0');
+                            await sendRconCommand(guildId, 'cargoship.allstops');
+                        } catch (err) {}
+                    }, 1000);
 
-        await interaction.editReply(`🚢 Docked Cargo Event active at your coordinates! Spawned **${crateCount} hackable event crates** locked in place for ${duration} minutes.`);
+                    // 5. After the duration expires, re-enable event routing and trigger clean egress departure
+                    setTimeout(async () => {
+                        clearInterval(anchorInterval);
+                        try {
+                            await sendRconCommand(guildId, 'cargoship.event_enabled "True"');
+                            await sendRconCommand(guildId, 'cargoships.startegressing');
+                            setTimeout(() => {
+                                sendRconCommand(guildId, 'del cargoshipdynamic2').catch(()=>{});
+                            }, 120000); // 2 minutes to sail away before deleting entity
+                        } catch (e) {}
+                    }, duration * 60 * 1000);
 
-    } catch (err) {
-        console.error(err);
-        await interaction.editReply('❌ Failed to spawn docked cargo event.');
-    }
-}
+                    return interaction.editReply({ content: `✅ Docked Cargo Ship successfully spawned and hard-anchored at your dock (\`X: ${x}, Y: ${y}, Z: ${z}\`) with all native event loot and scientists! It will hold position for ${duration} minutes.` });
+                } else {
+                    await sendRconCommand(interaction.guild.id, 'events.startevent event_cargoship');
+                    return interaction.editReply({ content: `⚠️ No custom dock position set. Triggered standard roaming cargo event test!` });
+                }
+            }
 
                if (interaction.customId === 'btn_ae_test_supply') {
                 await interaction.deferReply({ flags: 64 });
