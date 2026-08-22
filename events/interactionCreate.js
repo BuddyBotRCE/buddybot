@@ -1201,13 +1201,17 @@ module.exports = async (interaction, client) => {
     const guildId = interaction.guild.id;
 
     try {
-        // 1. Spawn cargo ship directly at your dock coordinates using the working entity name
+        // 1. Set the server's native cargo event and egress timers to match your configured duration
+        await sendRconCommand(guildId, `cargoship.event_duration_minutes ${duration}`);
+        await sendRconCommand(guildId, `cargoship.egress_duration_minutes ${duration}`);
+
+        // 2. Spawn cargo ship directly at your dock coordinates
         await sendRconCommand(guildId, `spawn cargoshipdynamic2 ${x},${y},${z}`);
 
-        // 2. Stop its movement immediately
+        // 3. Stop its waypoint movement
         await sendRconCommand(guildId, 'cargoship.allstops');
 
-        // 3. Lock position every 1 second by forcing coordinates, killing velocity, and stopping AI
+        // 4. Anchor loop to enforce position and kill physics drift every 1 second
         const anchorInterval = setInterval(async () => {
             try {
                 await sendRconCommand(guildId, `entity.setposition cargoshipdynamic2 ${x},${y},${z}`);
@@ -1218,17 +1222,17 @@ module.exports = async (interaction, client) => {
             }
         }, 1000);
 
-        // 4. After duration, release ship and delete after egress
+        // 5. After duration, clear anchor loop and force egress departure
         setTimeout(async () => {
             clearInterval(anchorInterval);
             await sendRconCommand(guildId, 'cargoships.startegressing');
             setTimeout(() => {
                 sendRconCommand(guildId, 'del cargoshipdynamic2').catch(()=>{});
             }, 120000);
-            interaction.followUp('🚢 Cargo ship is now departing.');
+            interaction.followUp('🚢 Cargo ship is now departing from the dock.');
         }, duration * 60 * 1000);
 
-        await interaction.editReply(`🚢 Cargo ship spawned and anchored at dock for ${duration} minutes.`);
+        await interaction.editReply(`🚢 Docked Cargo Ship successfully spawned and locked in place for ${duration} minutes.`);
 
     } catch (err) {
         console.error(err);
