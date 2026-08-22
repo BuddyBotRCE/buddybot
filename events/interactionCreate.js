@@ -1192,9 +1192,46 @@ module.exports = async (interaction, client) => {
                 await interaction.deferReply({ flags: 64 });
                 const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
                 
-                // Trigger native server event cargo ship spawn
-                await sendRconCommand(interaction.guild.id, 'cargoships.spawncargoship');
-                return interaction.editReply({ content: `✅ Successfully triggered the native Cargo Ship event!` });
+                if (config && config.cargoDockX !== null && config.cargoDockY !== null && config.cargoDockZ !== null) {
+                    const x = config.cargoDockX;
+                    const y = config.cargoDockY;
+                    const z = config.cargoDockZ;
+
+                    // 1. Force spawn the native cargo ship event
+                    await sendRconCommand(interaction.guild.id, 'cargoships.spawncargoship');
+
+                    // 2. Disable the core event movement loop so it stops roaming the map
+                    await sendRconCommand(interaction.guild.id, 'cargoship.event_enabled "False"');
+                    await sendRconCommand(interaction.guild.id, 'cargoship.allstops');
+
+                    const duration = config.cargoDurationMinutes || 30;
+                    const guildId = interaction.guild.id;
+
+                    // 3. Keep position locked using the entity anchor sequence
+                    const anchorInterval = setInterval(async () => {
+                        try {
+                            await sendRconCommand(guildId, `entity.setposition cargoshipdynamic2 ${x},${y},${z}`);
+                            await sendRconCommand(guildId, 'cargoship.allstops');
+                        } catch (err) {}
+                    }, 2000);
+
+                    // 4. After the set duration expires, re-enable the event loop and trigger departure
+                    setTimeout(async () => {
+                        clearInterval(anchorInterval);
+                        try {
+                            await sendRconCommand(guildId, 'cargoship.event_enabled "True"');
+                            await sendRconCommand(guildId, 'cargoships.startegressing');
+                            setTimeout(() => {
+                                sendRconCommand(guildId, 'del cargoshipdynamic2').catch(()=>{});
+                            }, 120000); // 2 minutes to sail away before deleting entity
+                        } catch (e) {}
+                    }, duration * 60000);
+
+                    return interaction.editReply({ content: `✅ Docked Cargo Ship event successfully spawned and locked at your dock coordinates (\`X: ${x}, Y: ${y}, Z: ${z}\`)! It will hold position for ${duration} minutes before departing.` });
+                } else {
+                    await sendRconCommand(interaction.guild.id, 'cargoships.spawncargoship');
+                    return interaction.editReply({ content: `⚠️ No custom dock position set. Triggered standard roaming cargo event test!` });
+                }
             }
             if (interaction.customId === 'btn_ae_test_supply') {
                 await interaction.deferReply({ flags: 64 });
