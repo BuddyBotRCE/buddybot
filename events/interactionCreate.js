@@ -173,7 +173,9 @@ module.exports = async (interaction, client) => {
         if (interaction.isStringSelectMenu()) {
             const module = interaction.values[0];
 
-            // --- AUTO EVENTS DROPDOWN SELECTOR ---
+            // ==========================================
+            // AUTO EVENTS DROPDOWNS & CONFIGURATION
+            // ==========================================
             if (interaction.customId === 'ae_event_type_select') {
                 const eventType = module; // 'supply', 'elite', or 'timed'
                 const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
@@ -185,76 +187,56 @@ module.exports = async (interaction, client) => {
 
                 const embed = new EmbedBuilder()
                     .setTitle(`⚙️ Auto Event Manager: ${customName}`)
-                    .setDescription(`Manage custom name, quantity (up to 10), intervals, and position slots for this event.\n\n` +
+                    .setDescription(`Manage settings and map locations for this event.\n\n` +
                         `• **Name:** \`${customName}\`\n` +
                         `• **Status:** ${isEnabled ? '🟢 Active (Enabled)' : '🔴 Disabled'}\n` +
                         `• **Spawn Count:** ${count} items\n` +
                         `• **Repeat Interval:** Every ${interval} minutes`)
                     .setColor(isEnabled ? '#2ecc71' : '#e74c3c');
 
-                // Dynamically build slot options matching the exact admin-specified count (1 up to 10)
                 const slotOptions = [];
                 for (let i = 1; i <= count; i++) {
                     const hasCoord = config && config[`${eventType}Slot${i}X`] !== null;
                     slotOptions.push({
                         label: `Set Location for Slot ${i} of ${count}`,
-                        value: `ae_setslot_${eventType}_${i}`,
+                        value: `aeslot_${eventType}_${i}`,
                         description: hasCoord ? `✅ Mapped (Click to update)` : `❌ Not set yet`,
                         emoji: hasCoord ? '📍' : '📌'
                     });
                 }
 
-                const row1 = new ActionRowBuilder().addComponents(
+                const rowLoc = new ActionRowBuilder().addComponents(
                     new StringSelectMenuBuilder()
-                        .setCustomId(`ae_slot_coordinator_${eventType}`)
-                        .setPlaceholder(`📍 Select Slot (1 to ${count}) to set position...`)
+                        .setCustomId(`ae_loc_select`)
+                        .setPlaceholder(`📍 Map Locations (Slots 1 to ${count})...`)
                         .addOptions(slotOptions)
                 );
 
-                const row2 = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(`ae_cfg_mod_${eventType}`).setLabel('Configure Name, Qty & Interval').setStyle(ButtonStyle.Primary).setEmoji('⚙️'),
+                const rowActions = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(`ae_cfg_mod_${eventType}`).setLabel('Config (Name/Qty/Time)').setStyle(ButtonStyle.Primary).setEmoji('⚙️'),
                     new ButtonBuilder().setCustomId(`ae_test_ind_${eventType}`).setLabel('Test Spawn Now').setStyle(ButtonStyle.Secondary).setEmoji('🧪'),
                     new ButtonBuilder().setCustomId(`ae_toggle_ind_${eventType}`).setLabel(isEnabled ? 'Disable Event' : 'Enable Event').setStyle(isEnabled ? ButtonStyle.Danger : ButtonStyle.Success).setEmoji('⚡'),
                     new ButtonBuilder().setCustomId(`ae_delete_cfg_${eventType}`).setLabel('Delete Event').setStyle(ButtonStyle.Danger).setEmoji('🗑️')
                 );
 
-                return interaction.update({ embeds: [embed], components: [row1, row2] });
+                return interaction.update({ embeds: [embed], components: [rowLoc, rowActions] });
             }
 
-            // --- CAPTURING INDIVIDUAL SLOT POSITION ---
-            if (interaction.customId.startsWith('ae_slot_coordinator_')) {
-                const eventType = interaction.customId.replace('ae_slot_coordinator_', '');
-                const slotNum = module.replace(`ae_setslot_${eventType}_`, '');
+            if (interaction.customId === 'ae_loc_select') {
+                const parts = module.split('_'); 
+                const eventType = parts[1];
+                const slotNum = parts[2];
                 const userProfile = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
                 
                 if (!userProfile || !userProfile.inGameName) {
                     return interaction.reply({ content: `❌ Link your Rust account first using \`/playerpanel\` before capturing coordinates!`, flags: 64 });
                 }
 
-                queueAdminPos(userProfile.inGameName, interaction.guild.id, interaction.user.id, interaction.channel.id, `aeslot_${eventType}_${slotNum}`, client);
-                return interaction.reply({ content: `⏳ Capturing current coordinates for **Slot ${slotNum}** via RCON...`, flags: 64 });
+                queueAdminPos(userProfile.inGameName, interaction.guild.id, interaction.user.id, interaction.channel.id, module, client);
+                return interaction.reply({ content: `⏳ Stand exactly where you want it. Capturing coordinates for **Slot ${slotNum}** via RCON...`, flags: 64 });
             }
+            // ==========================================
 
-            if (interaction.customId === 'ae_delete_exec_select') {
-                const eventType = module; // 'supply', 'elite', or 'timed'
-                const resetObj = {};
-                if (eventType === 'supply') {
-                    resetObj.supplySpawnCount = 1;
-                    resetObj.autoSupplyEnabled = false;
-                    for (let i = 1; i <= 10; i++) { resetObj[`supplySlot${i}X`] = null; resetObj[`supplySlot${i}Y`] = null; resetObj[`supplySlot${i}Z`] = null; }
-                } else if (eventType === 'elite') {
-                    resetObj.eliteSpawnCount = 1;
-                    resetObj.autoEliteEnabled = false;
-                    for (let i = 1; i <= 10; i++) { resetObj[`eliteSlot${i}X`] = null; resetObj[`eliteSlot${i}Y`] = null; resetObj[`eliteSlot${i}Z`] = null; }
-                } else if (eventType === 'timed') {
-                    resetObj.timedSpawnCount = 1;
-                    resetObj.autoTimedEnabled = false;
-                    for (let i = 1; i <= 10; i++) { resetObj[`timedSlot${i}X`] = null; resetObj[`timedSlot${i}Y`] = null; resetObj[`timedSlot${i}Z`] = null; }
-                }
-
-                await GuildConfig.upsert({ guildId: interaction.guild.id, ...resetObj });
-                return interaction.update({ content: `🗑️ Successfully deleted all saved configurations and position slots for **${eventType.toUpperCase()}**!`, components: [] });
-            }
 
             if (interaction.customId === 'select_link_server_target') {
                 const serverId = module.replace('link_server_', '');
@@ -592,17 +574,9 @@ module.exports = async (interaction, client) => {
                         });
                     }
 
-                    const supplyActive = config?.autoSupplyEnabled ? '🟢 Active' : '🔴 Disabled';
-                    const eliteActive = config?.autoEliteEnabled ? '🟢 Active' : '🔴 Disabled';
-                    const timedActive = config?.autoTimedEnabled ? '🟢 Active' : '🔴 Disabled';
-
                     const embed = new EmbedBuilder()
-                        .setTitle('🚁 Auto-Events Hub & Live Log')
-                        .setDescription(`Select an event type below from the dropdown to configure its quantity, slots, or delete its configuration.\n\n` +
-                            `**Live Event Status Log:**\n` +
-                            `• 📦 **Supply Drops:** ${supplyActive} (Count: ${config?.supplySpawnCount || 1}, Interval: ${config?.supplyInterval || 60}m)\n` +
-                            `• 💎 **Elite Crates:** ${eliteActive} (Count: ${config?.eliteSpawnCount || 1}, Interval: ${config?.eliteInterval || 60}m)\n` +
-                            `• ⏱️ **Timed Crates:** ${timedActive} (Count: ${config?.timedSpawnCount || 1}, Interval: ${config?.timedInterval || 60}m)`)
+                        .setTitle('🚁 Auto-Events Hub')
+                        .setDescription(`Select an event type below from the dropdown menu to configure its quantity, set intervals, map positions, and run test spawns.`)
                         .setColor('#f1c40f');
 
                     const selectMenuRow = new ActionRowBuilder().addComponents(
@@ -610,18 +584,13 @@ module.exports = async (interaction, client) => {
                             .setCustomId('ae_event_type_select')
                             .setPlaceholder('🔽 Select an event type to manage...')
                             .addOptions([
-                                { label: '📦 Supply Drops Manager', value: 'supply', description: 'Configure quantity, slots, logs, and toggle status', emoji: '📦' },
-                                { label: '💎 Elite Crates Manager', value: 'elite', description: 'Configure quantity, slots, logs, and toggle status', emoji: '💎' },
-                                { label: '⏱️ Timed Crates Manager', value: 'timed', description: 'Configure quantity, slots, logs, and toggle status', emoji: '⏱️' }
+                                { label: config?.supplyEventName || 'Supply Drops', value: 'supply', emoji: '📦' },
+                                { label: config?.eliteEventName || 'Elite Crates', value: 'elite', emoji: '💎' },
+                                { label: config?.timedEventName || 'Timed Crates', value: 'timed', emoji: '⏱️' }
                             ])
                     );
 
-                    const row2 = new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('btn_ae_toggle').setLabel(config?.autoEventsEnabled ? 'Disable Global Events' : 'Enable Global Events').setStyle(config?.autoEventsEnabled ? ButtonStyle.Danger : ButtonStyle.Success).setEmoji('⚡'),
-                        new ButtonBuilder().setCustomId('ae_delete_menu_hub').setLabel('🗑️ Delete Event Configuration').setStyle(ButtonStyle.Danger)
-                    );
-
-                    return interaction.reply({ embeds: [embed], components: [selectMenuRow, row2], flags: 64 });
+                    return interaction.reply({ embeds: [embed], components: [selectMenuRow], flags: 64 });
                 }
 
                 if (module === 'setup_tier') {
@@ -1056,10 +1025,6 @@ module.exports = async (interaction, client) => {
                     queueAdminPos(userProfile.inGameName, interaction.guild.id, interaction.user.id, interaction.channel.id, 'orp', client);
                     return interaction.reply({ content: `⏳ Stand in the middle of your base and grab coordinates for ORP setup...`, flags: 64 });
                 }
-                else if (template === 'tpl_custom') {
-                    const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(`bind_emote_custom`).setPlaceholder('Select Quick-Chat...').addOptions(RUST_EMOTES));
-                    return interaction.reply({ content: '🗣️ **Step 1:** Which phrase triggers this command?', components: [row], flags: 64 });
-                } 
                 else {
                     const userProfile = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
                     if (!userProfile) return interaction.reply({ content: '❌ Link Rust account first!', flags: 64 });
@@ -1068,25 +1033,151 @@ module.exports = async (interaction, client) => {
                 }
             }
             if (interaction.customId === 'bind_kit_select') {
-                const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(`bind_emote_kit_${interaction.values[0]}`).setPlaceholder('Select Quick-Chat...').addOptions(RUST_EMOTES));
-                return interaction.update({ content: '🗣️ **Step 2:** Which phrase triggers this kit?', components: [row] });
-            }
-            if (interaction.customId.startsWith('bind_emote_')) {
-                const parts = interaction.customId.split('_'); 
-                const type = parts[2]; 
-                const emoteSelection = interaction.values[0];
-                const modalId = type === 'kit' ? `modal_final_kit_${parts[3]}_${emoteSelection}` : (type === 'custom' ? `modal_final_custom_${emoteSelection}` : `modal_final_${type}_${parts[3]}_${parts[4]}_${parts[5]}_${emoteSelection}`);
-                const modal = new ModalBuilder().setCustomId(modalId).setTitle('Final Options');
-                if (type === 'custom') modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('command_data').setLabel("Command").setStyle(TextInputStyle.Short).setRequired(true)));
+                const modal = new ModalBuilder().setCustomId(`modal_final_kit_${interaction.values[0]}`).setTitle('Final Options');
                 modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cost').setLabel("Cost (0 = Free)").setStyle(TextInputStyle.Short).setValue('0').setRequired(false)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cooldown').setLabel("Cooldown (seconds)").setStyle(TextInputStyle.Short).setValue('0').setRequired(false)));
                 return interaction.showModal(modal);
             }
         }
 
         // ====================================================================
-        // 6. BUTTON CLICKS
+        // BUTTON CLICKS
         // ====================================================================
         if (interaction.isButton()) {
+
+            if (interaction.customId.startsWith('ae_cfg_mod_')) {
+                const eventType = interaction.customId.replace('ae_cfg_mod_', '');
+                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+                
+                const currentName = eventType === 'supply' ? (config?.supplyEventName || 'Supply Drops') : eventType === 'elite' ? (config?.eliteEventName || 'Elite Crates') : (config?.timedEventName || 'Timed Crates');
+                const count = eventType === 'supply' ? (config?.supplySpawnCount || 1) : eventType === 'elite' ? (config?.eliteSpawnCount || 1) : (config?.timedSpawnCount || 1);
+                const interval = eventType === 'supply' ? (config?.supplyInterval || 60) : eventType === 'elite' ? (config?.eliteInterval || 60) : (config?.timedInterval || 60);
+
+                const modal = new ModalBuilder()
+                    .setCustomId(`modal_ae_setup_${eventType}`)
+                    .setTitle(`Configure: ${eventType.toUpperCase()}`);
+                
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ae_name').setLabel("Event Custom Name").setStyle(TextInputStyle.Short).setValue(`${currentName}`).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ae_count').setLabel("How many to spawn? (Max 10)").setStyle(TextInputStyle.Short).setValue(`${count}`).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ae_interval').setLabel("Repeat Interval (Minutes)").setStyle(TextInputStyle.Short).setValue(`${interval}`).setRequired(true))
+                );
+                return interaction.showModal(modal);
+            }
+
+            if (interaction.customId.startsWith('ae_test_ind_')) {
+                await interaction.deferReply({ flags: 64 });
+                const eventType = interaction.customId.replace('ae_test_ind_', '');
+                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+                
+                if (!config) return interaction.editReply({ content: `❌ Guild configuration not found.` });
+
+                const count = eventType === 'supply' ? (config?.supplySpawnCount || 1) : eventType === 'elite' ? (config?.eliteSpawnCount || 1) : (config?.timedSpawnCount || 1);
+                const shortname = eventType === 'supply' ? 'supply_drop' : eventType === 'elite' ? 'codelockedhackablecrate' : 'hackablelockedcrate';
+                let spawned = 0;
+
+                for (let i = 1; i <= count; i++) {
+                    const x = config[`${eventType}Slot${i}X`];
+                    const y = config[`${eventType}Slot${i}Y`];
+                    const z = config[`${eventType}Slot${i}Z`];
+
+                    if (x !== null && y !== null && z !== null) {
+                        await sendRconCommand(interaction.guild.id, `spawn ${shortname} ${x},${y},${z}`);
+                        spawned++;
+                    }
+                }
+
+                if (spawned === 0) {
+                    if (eventType === 'supply') await sendRconCommand(interaction.guild.id, 'supply.drop');
+                    else await sendRconCommand(interaction.guild.id, `spawn ${shortname}`);
+                    return interaction.editReply({ content: `⚠️ No position slots mapped yet. Triggered a standard random test spawn instead!` });
+                }
+
+                return interaction.editReply({ content: `✅ Successfully test-spawned **${spawned}x** items at their configured locations!` });
+            }
+
+            if (interaction.customId.startsWith('ae_toggle_ind_')) {
+                const eventType = interaction.customId.replace('ae_toggle_ind_', '');
+                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+                
+                let currentState = false;
+                const updateObj = {};
+                if (eventType === 'supply') {
+                    currentState = config?.autoSupplyEnabled || false;
+                    updateObj.autoSupplyEnabled = !currentState;
+                } else if (eventType === 'elite') {
+                    currentState = config?.autoEliteEnabled || false;
+                    updateObj.autoEliteEnabled = !currentState;
+                } else if (eventType === 'timed') {
+                    currentState = config?.autoTimedEnabled || false;
+                    updateObj.autoTimedEnabled = !currentState;
+                }
+
+                await GuildConfig.upsert({ guildId: interaction.guild.id, ...updateObj });
+                return interaction.reply({ content: `✅ Event is now **${!currentState ? '🟢 Active (Enabled)' : '🔴 Disabled'}**! Select event from dropdown again to refresh the panel.`, flags: 64 });
+            }
+
+            if (interaction.customId.startsWith('ae_delete_cfg_')) {
+                const eventType = interaction.customId.replace('ae_delete_cfg_', '');
+                const resetObj = {};
+                if (eventType === 'supply') {
+                    resetObj.supplySpawnCount = 1; resetObj.autoSupplyEnabled = false; resetObj.supplyEventName = 'Supply Drops';
+                    for (let i = 1; i <= 10; i++) { resetObj[`supplySlot${i}X`] = null; resetObj[`supplySlot${i}Y`] = null; resetObj[`supplySlot${i}Z`] = null; }
+                } else if (eventType === 'elite') {
+                    resetObj.eliteSpawnCount = 1; resetObj.autoEliteEnabled = false; resetObj.eliteEventName = 'Elite Crates';
+                    for (let i = 1; i <= 10; i++) { resetObj[`eliteSlot${i}X`] = null; resetObj[`eliteSlot${i}Y`] = null; resetObj[`eliteSlot${i}Z`] = null; }
+                } else if (eventType === 'timed') {
+                    resetObj.timedSpawnCount = 1; resetObj.autoTimedEnabled = false; resetObj.timedEventName = 'Timed Crates';
+                    for (let i = 1; i <= 10; i++) { resetObj[`timedSlot${i}X`] = null; resetObj[`timedSlot${i}Y`] = null; resetObj[`timedSlot${i}Z`] = null; }
+                }
+
+                await GuildConfig.upsert({ guildId: interaction.guild.id, ...resetObj });
+                return interaction.reply({ content: `🗑️ Successfully deleted all settings and mapped locations for this event.`, flags: 64 });
+            }
+
+            if (interaction.customId.startsWith('btn_finalize_tpl_')) {
+                const parts = interaction.customId.split('_'); 
+                const type = parts[3]; 
+                
+                await interaction.message.delete().catch(() => {});
+
+                // ==========================================
+                // INTERCEPT AUTO-EVENT SLOTS (BYPASS QUICK CHAT)
+                // ==========================================
+                if (type === 'aeslot') {
+                    const eventType = parts[4]; 
+                    const slotNum = parts[5];
+                    const x = parseFloat(parts[6]);
+                    const y = parseFloat(parts[7]);
+                    const z = parseFloat(parts[8]);
+
+                    const updateObj = {};
+                    updateObj[`${eventType}Slot${slotNum}X`] = x;
+                    updateObj[`${eventType}Slot${slotNum}Y`] = y;
+                    updateObj[`${eventType}Slot${slotNum}Z`] = z;
+
+                    await GuildConfig.upsert({ guildId: interaction.guild.id, ...updateObj });
+                    return interaction.reply({ content: `✅ Position successfully saved for **${eventType.toUpperCase()} Slot ${slotNum}** (\`X: ${x}, Y: ${y}, Z: ${z}\`)!\nOpen the Auto Events menu again to see it updated.`, flags: 64 });
+                }
+
+                if (type === 'pvezone') {
+                    const row = new ActionRowBuilder().addComponents(
+                        new StringSelectMenuBuilder()
+                            .setCustomId(`pve_shape_${parts[4]}_${parts[5]}_${parts[6]}`)
+                            .setPlaceholder('Select Zone Shape...')
+                            .addOptions([
+                                { label: 'Sphere Zone (Default: 50m)', value: 'sphere', emoji: '🔵' },
+                                { label: 'Box Zone (Default: 250,250,250)', value: 'box', emoji: '📦' }
+                            ])
+                    );
+                    return interaction.reply({ content: `🏕️ **Step 2:** Select the boundary shape for your custom PVE zone:`, components: [row], flags: 64 });
+                }
+
+                // If not an auto event, proceed to custom bind setup
+                const modalId = type === 'kit' ? `modal_final_kit_${parts[4]}` : `modal_final_${type}_${parts[4]}_${parts[5]}_${parts[6]}`;
+                const modal = new ModalBuilder().setCustomId(modalId).setTitle('Final Options');
+                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cost').setLabel("Cost (0 = Free)").setStyle(TextInputStyle.Short).setValue('0').setRequired(false)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cooldown').setLabel("Cooldown (seconds)").setStyle(TextInputStyle.Short).setValue('0').setRequired(false)));
+                return interaction.showModal(modal);
+            }
             
             if (interaction.customId === 'btn_rcon_setup') {
                 const modal = new ModalBuilder().setCustomId('modal_setup_rcon').setTitle('Configure RCON Credentials');
@@ -1275,556 +1366,6 @@ module.exports = async (interaction, client) => {
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('caps').setLabel("Max Caps % Allowed (e.g. 70)").setStyle(TextInputStyle.Short).setValue(`${config?.autoModCapsLimit || 70}`).setRequired(true))
                 );
                 return interaction.showModal(modal);
-            }
-
-            // --- INDIVIDUAL AUTO EVENT MANAGEMENT BUTTON ACTIONS ---
-            if (interaction.customId.startsWith('ae_cfg_mod_')) {
-                const eventType = interaction.customId.replace('ae_cfg_mod_', '');
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-                const currentName = eventType === 'supply' ? (config?.supplyEventName || 'Supply Drops') : eventType === 'elite' ? (config?.eliteEventName || 'Elite Crates') : (config?.timedEventName || 'Timed Crates');
-                const count = eventType === 'supply' ? (config?.supplySpawnCount || 1) : eventType === 'elite' ? (config?.eliteSpawnCount || 1) : (config?.timedSpawnCount || 1);
-                const interval = eventType === 'supply' ? (config?.supplyInterval || 60) : eventType === 'elite' ? (config?.eliteInterval || 60) : (config?.timedInterval || 60);
-
-                const modal = new ModalBuilder()
-                    .setCustomId(`modal_ae_setup_${eventType}`)
-                    .setTitle(`Configure: ${eventType.toUpperCase()}`);
-                
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(
-                        new TextInputBuilder().setCustomId('ae_name').setLabel("Event Custom Name").setStyle(TextInputStyle.Short).setValue(`${currentName}`).setRequired(true)
-                    ),
-                    new ActionRowBuilder().addComponents(
-                        new TextInputBuilder().setCustomId('ae_count').setLabel("How many to spawn? (Max 10)").setStyle(TextInputStyle.Short).setValue(`${count}`).setRequired(true)
-                    ),
-                    new ActionRowBuilder().addComponents(
-                        new TextInputBuilder().setCustomId('ae_interval').setLabel("Repeat Interval (Minutes)").setStyle(TextInputStyle.Short).setValue(`${interval}`).setRequired(true)
-                    )
-                );
-                return interaction.showModal(modal);
-            }
-
-            if (interaction.customId.startsWith('ae_test_ind_')) {
-                await interaction.deferReply({ flags: 64 });
-                const eventType = interaction.customId.replace('ae_test_ind_', '');
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-                
-                if (!config) return interaction.editReply({ content: `❌ Guild configuration not found.` });
-
-                const count = eventType === 'supply' ? (config?.supplySpawnCount || 1) : eventType === 'elite' ? (config?.eliteSpawnCount || 1) : (config?.timedSpawnCount || 1);
-                const shortname = eventType === 'supply' ? 'supply_drop' : eventType === 'elite' ? 'codelockedhackablecrate' : 'hackablelockedcrate';
-                let spawned = 0;
-
-                for (let i = 1; i <= count; i++) {
-                    const x = config[`${eventType}Slot${i}X`];
-                    const y = config[`${eventType}Slot${i}Y`];
-                    const z = config[`${eventType}Slot${i}Z`];
-
-                    if (x !== null && y !== null && z !== null) {
-                        await sendRconCommand(interaction.guild.id, `spawn ${shortname} ${x},${y},${z}`);
-                        spawned++;
-                    }
-                }
-
-                if (spawned === 0) {
-                    if (eventType === 'supply') await sendRconCommand(interaction.guild.id, 'supply.drop');
-                    else await sendRconCommand(interaction.guild.id, `spawn ${shortname}`);
-                    return interaction.editReply({ content: `⚠️ No position slots set. Triggered standard default test for ${eventType.toUpperCase()}!` });
-                }
-
-                return interaction.editReply({ content: `✅ Successfully test-spawned **${spawned}x** **${eventType.toUpperCase()}** at their individual separate slots!` });
-            }
-
-            if (interaction.customId.startsWith('ae_toggle_ind_')) {
-                const eventType = interaction.customId.replace('ae_toggle_ind_', '');
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-                
-                let currentState = false;
-                const updateObj = {};
-                if (eventType === 'supply') {
-                    currentState = config?.autoSupplyEnabled || false;
-                    updateObj.autoSupplyEnabled = !currentState;
-                } else if (eventType === 'elite') {
-                    currentState = config?.autoEliteEnabled || false;
-                    updateObj.autoEliteEnabled = !currentState;
-                } else if (eventType === 'timed') {
-                    currentState = config?.autoTimedEnabled || false;
-                    updateObj.autoTimedEnabled = !currentState;
-                }
-
-                await GuildConfig.upsert({ guildId: interaction.guild.id, ...updateObj });
-                return interaction.reply({ content: `✅ Auto event is now **${!currentState ? '🟢 Active (Enabled)' : '🔴 Disabled'}**!`, flags: 64 });
-            }
-
-            if (interaction.customId.startsWith('ae_delete_cfg_')) {
-                const eventType = interaction.customId.replace('ae_delete_cfg_', '');
-                const resetObj = {};
-                if (eventType === 'supply') {
-                    resetObj.supplySpawnCount = 1;
-                    resetObj.autoSupplyEnabled = false;
-                    resetObj.supplyEventName = 'Supply Drops';
-                    for (let i = 1; i <= 10; i++) { resetObj[`supplySlot${i}X`] = null; resetObj[`supplySlot${i}Y`] = null; resetObj[`supplySlot${i}Z`] = null; }
-                } else if (eventType === 'elite') {
-                    resetObj.eliteSpawnCount = 1;
-                    resetObj.autoEliteEnabled = false;
-                    resetObj.eliteEventName = 'Elite Crates';
-                    for (let i = 1; i <= 10; i++) { resetObj[`eliteSlot${i}X`] = null; resetObj[`eliteSlot${i}Y`] = null; resetObj[`eliteSlot${i}Z`] = null; }
-                } else if (eventType === 'timed') {
-                    resetObj.timedSpawnCount = 1;
-                    resetObj.autoTimedEnabled = false;
-                    resetObj.timedEventName = 'Timed Crates';
-                    for (let i = 1; i <= 10; i++) { resetObj[`timedSlot${i}X`] = null; resetObj[`timedSlot${i}Y`] = null; resetObj[`timedSlot${i}Z`] = null; }
-                }
-
-                await GuildConfig.upsert({ guildId: interaction.guild.id, ...resetObj });
-                return interaction.reply({ content: `🗑️ Successfully deleted and reset configuration for **${eventType.toUpperCase()}**!`, flags: 64 });
-            }
-
-            if (interaction.isStringSelectMenu() && interaction.customId === 'ae_delete_exec_select') {
-                const eventType = module; // 'supply', 'elite', or 'timed'
-                const resetObj = {};
-                if (eventType === 'supply') {
-                    resetObj.supplySpawnCount = 1;
-                    resetObj.autoSupplyEnabled = false;
-                    for (let i = 1; i <= 10; i++) { resetObj[`supplySlot${i}X`] = null; resetObj[`supplySlot${i}Y`] = null; resetObj[`supplySlot${i}Z`] = null; }
-                } else if (eventType === 'elite') {
-                    resetObj.eliteSpawnCount = 1;
-                    resetObj.autoEliteEnabled = false;
-                    for (let i = 1; i <= 10; i++) { resetObj[`eliteSlot${i}X`] = null; resetObj[`eliteSlot${i}Y`] = null; resetObj[`eliteSlot${i}Z`] = null; }
-                } else if (eventType === 'timed') {
-                    resetObj.timedSpawnCount = 1;
-                    resetObj.autoTimedEnabled = false;
-                    for (let i = 1; i <= 10; i++) { resetObj[`timedSlot${i}X`] = null; resetObj[`timedSlot${i}Y`] = null; resetObj[`timedSlot${i}Z`] = null; }
-                }
-
-                await GuildConfig.upsert({ guildId: interaction.guild.id, ...resetObj });
-                return interaction.update({ content: `🗑️ Successfully deleted all saved configurations and position slots for **${eventType.toUpperCase()}**!`, components: [] });
-            }
-
-            if (interaction.customId.startsWith('lb_refresh_')) {
-                const category = interaction.customId.replace('lb_refresh_', '');
-                const guildId = interaction.guild.id;
-                const config = await GuildConfig.findOne({ where: { guildId } });
-                const currency = config ? config.economyCurrency : 'Scrap';
-
-                const allPlayers = await UserEconomy.findAll({ where: { guildId } });
-                let leaderboardText = '';
-                let embedTitle = '';
-                let embedColor = '';
-
-                if (category === 'wealth') {
-                    const sortedPlayers = allPlayers.sort((a, b) => (b.wallet + b.bank) - (a.wallet + a.bank)).slice(0, 10);
-                    embedTitle = '💰 Wealth Leaderboard (Refreshed)';
-                    embedColor = '#FFD700';
-
-                    sortedPlayers.forEach((player, index) => {
-                        const rank = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `**#${index + 1}**`;
-                        const totalWealth = player.wallet + player.bank;
-                        const ign = player.inGameName ? `**${player.inGameName}**` : 'Unlinked';
-                        leaderboardText += `${rank} ${ign} (<@${player.userId}>) - **${totalWealth}** ${currency}\n`;
-                    });
-                } 
-                else if (category === 'level') {
-                    const sortedPlayers = allPlayers.sort((a, b) => {
-                        if (b.level === a.level) return b.xp - a.xp;
-                        return b.level - a.level;
-                    }).slice(0, 10);
-                    
-                    embedTitle = '⭐ BuddyPass Leaderboard (Refreshed)';
-                    embedColor = '#00ff00';
-
-                    sortedPlayers.forEach((player, index) => {
-                        const rank = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `**#${index + 1}**`;
-                        const ign = player.inGameName ? `**${player.inGameName}**` : 'Unlinked';
-                        leaderboardText += `${rank} ${ign} (<@${player.userId}>) - **Level ${player.level || 1}** (${player.xp || 0} XP)\n`;
-                    });
-                }
-                else if (category === 'pvp') {
-                    const sortedPlayers = allPlayers.sort((a, b) => {
-                        const kdRatioA = a.deaths === 0 ? a.pvpKills : (a.pvpKills / a.deaths);
-                        const kdRatioB = b.deaths === 0 ? b.pvpKills : (b.pvpKills / b.deaths);
-                        if (kdRatioB === kdRatioA) return b.pvpKills - a.pvpKills;
-                        return kdRatioB - kdRatioA;
-                    }).slice(0, 10);
-
-                    embedTitle = '⚔️ PvP K/D Leaderboard (Refreshed)';
-                    embedColor = '#e74c3c';
-
-                    sortedPlayers.forEach((player, index) => {
-                        const rank = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `**#${index + 1}**`;
-                        const ign = player.inGameName ? `**${player.inGameName}**` : 'Unlinked';
-                        const kills = player.pvpKills || 0;
-                        const deaths = player.deaths || 0;
-                        const kd = deaths === 0 ? kills.toFixed(2) : (kills / deaths).toFixed(2);
-                        leaderboardText += `${rank} ${ign} (<@${player.userId}>) — **K: ${kills} | D: ${deaths} | KD: ${kd}**\n`;
-                    });
-                }
-
-                const embed = new EmbedBuilder()
-                    .setTitle(embedTitle)
-                    .setDescription(leaderboardText || 'No data recorded yet.')
-                    .setColor(embedColor)
-                    .setTimestamp();
-
-                const row = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(`lb_refresh_${category}`).setLabel('Refresh Leaderboard').setStyle(ButtonStyle.Secondary).setEmoji('🔄')
-                );
-
-                return interaction.update({ embeds: [embed], components: [row] });
-            }
-
-            if (interaction.customId === 'btn_ai_set_key') {
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-                const modal = new ModalBuilder().setCustomId('modal_ai_credentials').setTitle('Configure AI Credentials');
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ai_key').setLabel("API Key").setStyle(TextInputStyle.Short).setValue(config?.aiApiKey || '').setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ai_model').setLabel("Model Name (e.g. gpt-4o-mini)").setStyle(TextInputStyle.Short).setValue(config?.aiModel || 'gpt-4o-mini').setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ai_url').setLabel("Base API URL").setStyle(TextInputStyle.Short).setValue(config?.aiBaseUrl || 'https://api.openai.com/v1').setRequired(true))
-                );
-                return interaction.showModal(modal);
-            }
-
-            if (interaction.customId === 'btn_econ_name') {
-                const modal = new ModalBuilder().setCustomId('modal_setup_economy').setTitle('Configure Currency');
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('currency_name').setLabel("Currency Name (e.g. Scrap)").setStyle(TextInputStyle.Short).setRequired(true)));
-                return interaction.showModal(modal);
-            }
-
-            if (interaction.customId === 'btn_admin_give') {
-                const row = new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId('select_admin_give_target').setPlaceholder('Select player to GIVE currency to...'));
-                return interaction.reply({ content: '➕ **Give Currency:** Select the player from the list below:', components: [row], flags: 64 });
-            }
-            if (interaction.customId === 'btn_admin_take') {
-                const row = new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId('select_admin_take_target').setPlaceholder('Select player to TAKE currency from...'));
-                return interaction.reply({ content: '➖ **Take Currency:** Select the player from the list below:', components: [row], flags: 64 });
-            }
-
-            if (interaction.customId === 'btn_econ_interest') {
-                const modal = new ModalBuilder().setCustomId('modal_econ_interest').setTitle('Configure Bank Interest');
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('interest_rate').setLabel("Interest Rate % (e.g. 2.5)").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('interest_hours').setLabel("Interval in Hours").setStyle(TextInputStyle.Short).setValue('24').setRequired(true))
-                );
-                return interaction.showModal(modal);
-            }
-
-            if (interaction.customId === 'btn_open_verify_modal') {
-                const modal = new ModalBuilder().setCustomId('modal_verify_email').setTitle('Verify Stripe Subscription');
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(
-                        new TextInputBuilder()
-                            .setCustomId('stripe_email')
-                            .setLabel("Stripe Checkout Email")
-                            .setStyle(TextInputStyle.Short)
-                            .setPlaceholder('your@email.com')
-                            .setRequired(true)
-                    )
-                );
-                return interaction.showModal(modal);
-            }
-
-            if (interaction.customId === 'hub_economy_menu') {
-                const embed = new EmbedBuilder()
-                    .setTitle('🏦 Economy & Bank Hub')
-                    .setDescription('Manage your wallet, check your bank balance, claim your 24-hour daily reward, or deposit and withdraw funds.')
-                    .setColor('#2ecc71');
-
-                const row = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('hub_balance').setLabel('Balance').setStyle(ButtonStyle.Secondary).setEmoji('💰'),
-                    new ButtonBuilder().setCustomId('hub_daily').setLabel('Daily').setStyle(ButtonStyle.Success).setEmoji('🎁'),
-                    new ButtonBuilder().setCustomId('hub_deposit').setLabel('Deposit').setStyle(ButtonStyle.Primary).setEmoji('📥'),
-                    new ButtonBuilder().setCustomId('hub_withdraw').setLabel('Withdraw').setStyle(ButtonStyle.Secondary).setEmoji('📤')
-                );
-
-                return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
-            }
-
-            if (interaction.customId === 'hub_leaderboards') {
-                const row = new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder()
-                        .setCustomId('hub_lb_select')
-                        .setPlaceholder('Choose a leaderboard category...')
-                        .addOptions([
-                            { label: 'Wealth Leaderboard', value: 'wealth', emoji: '💰' },
-                            { label: 'BuddyPass Level Leaderboard', value: 'level', emoji: '⭐' },
-                            { label: 'PvP K/D Leaderboard', value: 'pvp', emoji: '⚔️' }
-                        ]
-                    )
-                );
-                return interaction.reply({ content: '🏆 **Server Leaderboards:** Select a category below to view rankings:', components: [row], flags: 64 });
-            }
-
-            if (interaction.customId === 'hub_deposit') {
-                const modal = new ModalBuilder().setCustomId('modal_hub_deposit').setTitle('Deposit Currency to Bank');
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel("Amount to Deposit (or 'all')").setStyle(TextInputStyle.Short).setRequired(true)));
-                return interaction.showModal(modal);
-            }
-
-            if (interaction.customId === 'hub_withdraw') {
-                const modal = new ModalBuilder().setCustomId('modal_hub_withdraw').setTitle('Withdraw Currency to Wallet');
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel("Amount to Withdraw (or 'all')").setStyle(TextInputStyle.Short).setRequired(true)));
-                return interaction.showModal(modal);
-            }
-
-            if (interaction.customId === 'hub_vote_info') {
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-                const voteUrl = config?.voteUrl || 'https://rust-servers.net';
-                const reward = config?.voteRewardAmount || 250;
-                const currency = config?.economyCurrency || 'Scrap';
-
-                const embed = new EmbedBuilder()
-                    .setTitle('🗳️ Support Our Server')
-                    .setDescription(`Vote for our GPortal server to help us grow and earn **${reward} ${currency}**!\n\n🔗 **Vote Link:** [Click Here to Vote](${voteUrl})\n\n*After voting, use the command \`/claimvote\` to deliver your reward in-game!*`)
-                    .setColor('#e67e22');
-                return interaction.reply({ embeds: [embed], flags: 64 });
-            }
-
-            if (interaction.customId === 'btn_casino_settings') {
-                const modal = new ModalBuilder().setCustomId('modal_casino_config').setTitle('Configure Casino Limits');
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('max_bet').setLabel("Max Bet Amount (e.g. 1000)").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cooldown_sec').setLabel("Cooldown in Seconds (e.g. 5)").setStyle(TextInputStyle.Short).setRequired(true))
-                );
-                return interaction.showModal(modal);
-            }
-
-            if (interaction.customId === 'btn_pve_create') {
-                const userProfile = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
-                if (!userProfile || !userProfile.inGameName) {
-                    return interaction.reply({ content: '❌ Link your Rust account first using `/playerpanel` before setting zone coordinates!', flags: 64 });
-                }
-                queueAdminPos(userProfile.inGameName, interaction.guild.id, interaction.user.id, interaction.channel.id, 'pvezone', client);
-                return interaction.reply({ content: `⏳ Stand at the center point where you want your PVE zone created... grabbing coordinates via RCON.`, flags: 64 });
-            }
-
-            if (interaction.customId === 'btn_pve_list') {
-                const zones = await PveZone.findAll({ where: { guildId: interaction.guild.id } });
-                if (zones.length === 0) return interaction.reply({ content: '❌ No PVE zones registered.', flags: 64 });
-                
-                const list = zones.map(z => `🏕️ **${z.zoneName}**\n• Shape: \`${z.shape}\` | Size: \`${z.size}\` | Color: \`${z.color}\`\n• Pos: \`X: ${z.x}, Y: ${z.y}, Z: ${z.z}\`\n`).join('\n');
-                
-                const options = zones.map(z => ({
-                    label: `Toggle Outline: ${z.zoneName}`,
-                    description: `Turn visual boundary on/off for ${z.zoneName}`,
-                    value: `toggle_zone_${z.zoneName}`
-                }));
-
-                const row = new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder()
-                        .setCustomId('select_pve_toggle_area')
-                        .setPlaceholder('Select a zone to toggle in-game outline...')
-                        .addOptions(options)
-                );
-
-                return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🏕️ Registered PVE Zones').setDescription(list).setColor('#1abc9c')], components: [row], flags: 64 });
-            }
-
-            if (interaction.customId === 'btn_pve_delete_menu') {
-                const zones = await PveZone.findAll({ where: { guildId: interaction.guild.id } });
-                if (zones.length === 0) return interaction.reply({ content: '❌ No PVE zones registered to delete.', flags: 64 });
-
-                const options = zones.map(z => ({
-                    label: z.zoneName,
-                    description: `Shape: ${z.shape.toUpperCase()} | Size: ${z.size}`,
-                    value: z.id.toString()
-                }));
-
-                const row = new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder()
-                        .setCustomId('select_pve_delete_exec')
-                        .setPlaceholder('Select a zone to delete...')
-                        .addOptions(options)
-                );
-                return interaction.reply({ content: '🗑️ **Delete PVE Zone:** Choose the zone you want to remove:', components: [row], flags: 64 });
-            }
-
-            if (interaction.customId === 'btn_pve_wipe_all') {
-                await interaction.deferReply({ flags: 64 });
-                const zones = await PveZone.findAll({ where: { guildId: interaction.guild.id } });
-                if (zones.length === 0) return interaction.editReply({ content: '❌ No PVE zones to wipe.' });
-
-                for (const z of zones) {
-                    try {
-                        await sendRconCommand(interaction.guild.id, `zones.deletecustomzone "${z.zoneName}"`);
-                    } catch (e) {}
-                }
-                await PveZone.destroy({ where: { guildId: interaction.guild.id } });
-                return interaction.editReply({ content: `☢️ Successfully wiped **all PVE zones** from the database and in-game server!` });
-            }
-
-            if (interaction.customId === 'btn_ae_toggle') {
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-                if (!config?.isPremiumServer) return interaction.reply({ content: '❌ Premium tier required.', flags: 64 });
-
-                const newState = !(config.autoEventsEnabled || false);
-                await GuildConfig.upsert({ guildId: interaction.guild.id, autoEventsEnabled: newState });
-                return interaction.reply({ content: `✅ Global Auto-Events have been turned **${newState ? 'ON 🟢' : 'OFF 🔴'}**!`, flags: 64 });
-            }
-
-            if (interaction.customId === 'toggle_tier_status') {
-                if (interaction.user.id !== process.env.GLOBAL_OWNER_ID) {
-                    return interaction.reply({ 
-                        content: '❌ **Access Denied:** Only the Bot Developer can manually overwrite tier licenses. Please purchase a subscription via the Stripe link above to automatically unlock Premium features.', 
-                        flags: 64 
-                    });
-                }
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-                const newStatus = !(config?.isPremiumServer || false);
-                await GuildConfig.upsert({ guildId: interaction.guild.id, isPremiumServer: newStatus });
-                return interaction.update({ content: `✅ Server tier successfully updated to: **${newStatus ? '⭐ PREMIUM TIER' : '🆓 FREE TIER'}**!`, embeds: [], components: [] });
-            }
-
-            if (interaction.customId === 'btn_tk_add_cat') {
-                const modal = new ModalBuilder().setCustomId('modal_tk_add_cat').setTitle('Add Ticket Category');
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cat_name').setLabel("Category Name (e.g. VIP Problems)").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cat_desc').setLabel("Description").setStyle(TextInputStyle.Short).setValue('Support ticket category').setRequired(false))
-                );
-                return interaction.showModal(modal);
-            }
-            if (interaction.customId === 'btn_tk_clear_cats') {
-                await TicketCategory.destroy({ where: { guildId: interaction.guild.id } });
-                return interaction.reply({ content: `🗑️ All custom ticket categories cleared!`, flags: 64 });
-            }
-
-            if (interaction.customId === 'bp_set_xp') {
-                const modal = new ModalBuilder().setCustomId('modal_bp_xp').setTitle('Configure BuddyPass XP');
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('xp_rate').setLabel("XP Rate Multiplier (e.g. 10)").setStyle(TextInputStyle.Short).setRequired(true)));
-                return interaction.showModal(modal);
-            }
-            if (interaction.customId === 'bp_load_preloaded') {
-                const defaults = [
-                    { title: 'Kill 10 Scientists', targetType: 'scientist', targetAmount: 10, rewardXp: 150, isPreloaded: true },
-                    { title: 'Kill 5 Players', targetType: 'player', targetAmount: 5, rewardXp: 200, isPreloaded: true },
-                    { title: 'Visit 3 Monuments', targetType: 'monument', targetAmount: 3, rewardXp: 100, isPreloaded: true }
-                ];
-                for (const d of defaults) {
-                    await BuddyPassChallenge.findOrCreate({ where: { guildId: interaction.guild.id, title: d.title }, defaults: d });
-                }
-                return interaction.reply({ content: `✅ Loaded preloaded challenges successfully!`, flags: 64 });
-            }
-            if (interaction.customId === 'bp_add_custom') {
-                const modal = new ModalBuilder().setCustomId('modal_bp_custom').setTitle('Add Custom Challenge');
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel("Challenge Title").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('type').setLabel("Target Type").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel("Target Amount").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('xp').setLabel("Reward XP").setStyle(TextInputStyle.Short).setRequired(true))
-                );
-                return interaction.showModal(modal);
-            }
-            if (interaction.customId === 'bp_set_reward') {
-                const modal = new ModalBuilder().setCustomId('modal_bp_level_select').setTitle('Select BuddyPass Level (1-50)');
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('level').setLabel("Level Number (1 to 50)").setStyle(TextInputStyle.Short).setRequired(true)));
-                return interaction.showModal(modal);
-            }
-
-            if (interaction.customId === 'btn_orp_settings') {
-                const modal = new ModalBuilder().setCustomId('modal_orp_config').setTitle('Configure ORP Parameters');
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('orp_size').setLabel("Zone Radius Size in meters").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('orp_online').setLabel("Online Color").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('orp_offline').setLabel("Offline Color").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('orp_hours').setLabel("Active Offline Duration in Hours").setStyle(TextInputStyle.Short).setRequired(true))
-                );
-                return interaction.showModal(modal);
-            }
-            if (interaction.customId === 'btn_orp_list') {
-                const bases = await PlayerOrpBase.findAll({ where: { guildId: interaction.guild.id } });
-                const list = bases.length ? bases.map(b => `• **${b.inGameName}** at \`X: ${b.x}, Y: ${b.y}, Z: ${b.z}\``).join('\n') : 'No active ORP bases registered.';
-                return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🛡️ Registered ORP Bases').setDescription(list).setColor('#3498db')], flags: 64 });
-            }
-
-            if (interaction.customId === 'rcon_quick_connect') {
-                await interaction.reply({ content: '⏳ Connecting...', flags: 64 });
-                try {
-                    const status = await connectRcon(interaction.guild.id, client);
-                    await interaction.editReply({ content: `✅ ${status}` });
-                } catch (e) { await interaction.editReply({ content: `❌ ${e.message}` }); }
-                return;
-            }
-
-            if (interaction.customId === 'btn_kit_create') {
-                const modal = new ModalBuilder().setCustomId('modal_kit_start').setTitle('Start Kit Wizard');
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('kit_name').setLabel("Kit Name").setStyle(TextInputStyle.Short).setRequired(true)));
-                return interaction.showModal(modal);
-            }
-            if (interaction.customId === 'btn_kit_add_item') {
-                const modal = new ModalBuilder().setCustomId('modal_kit_search').setTitle('Search Item');
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('search_term').setLabel("Type item name").setStyle(TextInputStyle.Short).setRequired(true)));
-                return interaction.showModal(modal);
-            }
-            if (interaction.customId === 'btn_kit_save') {
-                const builder = activeKitBuilders.get(interaction.user.id);
-                if (!builder || builder.items.length === 0) return interaction.reply({ content: '❌ Cannot save an empty kit.', flags: 64 });
-                await ServerKit.create({ guildId: interaction.guild.id, kitName: builder.name, items: builder.items.join(',') });
-                activeKitBuilders.delete(interaction.user.id);
-                return interaction.update({ content: `✅ Kit **${builder.name}** saved!`, components: [] });
-            }
-            if (interaction.customId === 'btn_kit_list') {
-                const kits = await ServerKit.findAll({ where: { guildId: interaction.guild.id } });
-                const list = kits.length ? kits.map(k => `**${k.kitName}**\n\`${k.items}\``).join('\n\n') : 'No kits found.';
-                return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🎒 Server Kits').setDescription(list).setColor('#3498db')], flags: 64 });
-            }
-
-            if (interaction.customId === 'btn_admin_item') {
-                const row = new ActionRowBuilder().addComponents(
-                    new UserSelectMenuBuilder()
-                        .setCustomId('admin_item_select_player')
-                        .setPlaceholder('Step 1: Select the player to give items to...')
-                );
-                return interaction.reply({ content: '🎁 **Admin Item Wizard:** Choose the target player below:', components: [row], flags: 64 });
-            }
-            if (interaction.customId === 'btn_admin_rcon') {
-                const modal = new ModalBuilder().setCustomId('modal_admin_rcon').setTitle('Send RCON');
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_command').setLabel("Command").setStyle(TextInputStyle.Paragraph).setRequired(true)));
-                return interaction.showModal(modal);
-            }
-
-            if (interaction.customId === 'btn_bind_add') {
-                const row = new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder().setCustomId('bind_template_select').setPlaceholder('Select Bind Type...')
-                        .addOptions([
-                            { label: '🎁 Give Kit', value: 'tpl_kit' },
-                            { label: '🛡️ Setup ORP Base', value: 'tpl_orp' },
-                            { label: '📍 Teleport Hub', value: 'tpl_tp' },
-                            { label: '♻️ Spawn Recycler', value: 'tpl_recycler' },
-                            { label: '⚡ Custom Command', value: 'tpl_custom' }
-                        ])
-                );
-                return interaction.reply({ content: 'What kind of bind?', components: [row], flags: 64 });
-            }
-            if (interaction.customId === 'btn_bind_remove') {
-                const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('remove_bind_select').setPlaceholder('Select Quick-Chat phrase...').addOptions(RUST_EMOTES));
-                return interaction.reply({ content: '🗣️ Which bind do you want to remove?', components: [row], flags: 64 });
-            }
-            if (interaction.customId === 'btn_bind_list') {
-                const binds = await CustomBind.findAll({ where: { guildId: interaction.guild.id } });
-                if (binds.length === 0) return interaction.reply({ content: 'No custom binds set.', flags: 64 });
-                let list = ''; binds.forEach(b => list += `🗣️ **"${b.emote}"**\n🛠️ \`${b.command.replace(/\n/g, ', ')}\`\n⏱️ CD: ${b.cooldown}s | 💰 Cost: ${b.cost}\n\n`);
-                return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🔗 Active Binds').setDescription(list).setColor('#00ff00')], flags: 64 });
-            }
-
-            if (interaction.customId.startsWith('btn_finalize_tpl_')) {
-                const parts = interaction.customId.split('_'); 
-                const type = parts[3]; 
-                
-                await interaction.message.delete().catch(() => {});
-
-                if (type === 'pvezone') {
-                    const row = new ActionRowBuilder().addComponents(
-                        new StringSelectMenuBuilder()
-                            .setCustomId(`pve_shape_${parts[4]}_${parts[5]}_${parts[6]}`)
-                            .setPlaceholder('Select Zone Shape...')
-                            .addOptions([
-                                { label: 'Sphere Zone (Default: 50m)', value: 'sphere', emoji: '🔵' },
-                                { label: 'Box Zone (Default: 250,250,250)', value: 'box', emoji: '📦' }
-                            ])
-                    );
-                    return interaction.reply({ content: `🏕️ **Step 2:** Select the boundary shape for your custom PVE zone:`, components: [row], flags: 64 });
-                }
-
-                const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(`bind_emote_${type}_${parts[4]}_${parts[5]}_${parts[6]}`).setPlaceholder('Select Quick-Chat...').addOptions(RUST_EMOTES));
-                return interaction.reply({ content: `🗣️ **Step 2:** Which Quick-Chat triggers this ${type}?`, components: [row], flags: 64 });
             }
 
             if (interaction.customId === 'btn_dismiss_coord') {
@@ -2088,7 +1629,7 @@ module.exports = async (interaction, client) => {
                 }
 
                 await GuildConfig.upsert({ guildId: interaction.guild.id, ...updateObj });
-                return interaction.reply({ content: `✅ Successfully configured **"${customName}"**!\n• Spawn Count: **${clampedCount}**\n• Repeat Interval: **${interval} minutes**`, flags: 64 });
+                return interaction.reply({ content: `✅ Successfully configured **"${customName}"**!\n• Spawn Count: **${clampedCount}**\n• Repeat Interval: **${interval} minutes**\n\n*Please select the event from the dropdown menu again to map out the new slots!*`, flags: 64 });
             }
 
             if (interaction.customId.startsWith('modal_admin_give_exec_')) {
@@ -2872,7 +2413,7 @@ module.exports = async (interaction, client) => {
                 return interaction.reply({ content: `✅ Bind for **${emote}** created!`, components: [new ActionRowBuilder().addComponents(roleMenu)], flags: 64 });
             }
 
-            if (interaction.customId.startsWith('modal_give_item_')) {
+            if (interaction.customId.startsWith('modal_admin_give_item_exec_')) {
                 try {
                     await sendRconCommand(interaction.guild.id, `inventory.giveto "${interaction.customId.replace('modal_give_item_', '')}" ${interaction.fields.getTextInputValue('item_name')} ${interaction.fields.getTextInputValue('item_amount')}`);
                     return interaction.reply({ content: `✅ Sent!`, flags: 64 });
@@ -2959,11 +2500,11 @@ module.exports = async (interaction, client) => {
                 }
                 await GuildConfig.update(updateData, { where: { guildId: interaction.guild.id } });
                 await UserEconomy.update(updateData, { where: { guildId: interaction.guild.id } });
-                return interaction.reply({ content: `☢️ WIPED!` });
+                return interaction.reply({ content: `☢️ Server WIPED successfully! All auto event configurations cleared.` });
             }
         }
     } 
-        catch (error) {
+    catch (error) {
         console.error('[INTERACTION ERROR]', error);
         if (interaction.deferred || interaction.replied) await interaction.followUp({ content: 'Error occurred.', flags: 64 }).catch(()=>{});
         else await interaction.reply({ content: 'Error occurred.', flags: 64 }).catch(()=>{});
