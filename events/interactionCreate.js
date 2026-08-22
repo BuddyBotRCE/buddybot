@@ -173,7 +173,7 @@ module.exports = async (interaction, client) => {
         if (interaction.isStringSelectMenu()) {
             const module = interaction.values[0];
 
-            // --- UNIFIED AUTO EVENTS MANAGEMENT HUB SELECTOR ---
+            // --- AUTO EVENTS DROPDOWN SELECTOR ---
             if (interaction.customId === 'ae_event_type_select') {
                 const eventType = module; // 'supply', 'elite', or 'timed'
                 const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
@@ -184,7 +184,7 @@ module.exports = async (interaction, client) => {
 
                 const embed = new EmbedBuilder()
                     .setTitle(`⚙️ Auto Event Manager: ${eventType.toUpperCase()}`)
-                    .setDescription(`Manage quantity, repeating intervals, mapped position slots (up to 10), and active logs for **${eventType.toUpperCase()}**.\n\n` +
+                    .setDescription(`Configure quantity, repeating intervals, and mapped slots (up to 10) for **${eventType.toUpperCase()}**.\n\n` +
                         `• **Status:** ${isEnabled ? '🟢 Active' : '🔴 Disabled'}\n` +
                         `• **Spawn Count:** ${count} items\n` +
                         `• **Repeat Interval:** Every ${interval} minutes`)
@@ -195,7 +195,7 @@ module.exports = async (interaction, client) => {
                     slotOptions.push({
                         label: `Set Location for Slot ${i}`,
                         value: `ae_setslot_${eventType}_${i}`,
-                        description: `Capture your current in-game position to Slot ${i}`
+                        description: `Capture current in-game position to Slot ${i}`
                     });
                 }
 
@@ -208,8 +208,7 @@ module.exports = async (interaction, client) => {
 
                 const row2 = new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId(`ae_cfg_mod_${eventType}`).setLabel('Configure Qty & Interval').setStyle(ButtonStyle.Primary).setEmoji('⚙️'),
-                    new ButtonBuilder().setCustomId(`ae_toggle_ind_${eventType}`).setLabel(isEnabled ? 'Disable Event' : 'Enable Event').setStyle(isEnabled ? ButtonStyle.Danger : ButtonStyle.Success).setEmoji('⚡'),
-                    new ButtonBuilder().setCustomId(`ae_delete_cfg_${eventType}`).setLabel('Delete Configuration').setStyle(ButtonStyle.Danger).setEmoji('🗑️')
+                    new ButtonBuilder().setCustomId(`ae_toggle_ind_${eventType}`).setLabel(isEnabled ? 'Disable Event' : 'Enable Event').setStyle(isEnabled ? ButtonStyle.Danger : ButtonStyle.Success).setEmoji('⚡')
                 );
 
                 return interaction.update({ embeds: [embed], components: [row1, row2] });
@@ -218,8 +217,8 @@ module.exports = async (interaction, client) => {
             // --- CAPTURING INDIVIDUAL SLOT POSITION ---
             if (interaction.customId.startsWith('ae_slot_coordinator_')) {
                 const eventType = interaction.customId.replace('ae_slot_coordinator_', '');
-                const slotNum = module.replace(`ae_setslot_${eventType}_`, ''); // extract slot number
-                const userProfile = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id }});
+                const slotNum = module.replace(`ae_setslot_${eventType}_`, '');
+                const userProfile = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
                 
                 if (!userProfile || !userProfile.inGameName) {
                     return interaction.reply({ content: `❌ Link your Rust account first using \`/playerpanel\` before capturing coordinates!`, flags: 64 });
@@ -571,7 +570,7 @@ module.exports = async (interaction, client) => {
 
                     const embed = new EmbedBuilder()
                         .setTitle('🚁 Auto-Events Hub & Live Log')
-                        .setDescription(`Select an event type below from the dropdown to manage its quantity (up to 10), set repeating intervals, map positions, or toggle/delete its configuration.\n\n` +
+                        .setDescription(`Select an event type below from the dropdown to configure its quantity, slots, or delete its configuration.\n\n` +
                             `**Live Event Status Log:**\n` +
                             `• 📦 **Supply Drops:** ${supplyActive} (Count: ${config?.supplySpawnCount || 1}, Interval: ${config?.supplyInterval || 60}m)\n` +
                             `• 💎 **Elite Crates:** ${eliteActive} (Count: ${config?.eliteSpawnCount || 1}, Interval: ${config?.eliteInterval || 60}m)\n` +
@@ -589,7 +588,12 @@ module.exports = async (interaction, client) => {
                             ])
                     );
 
-                    return interaction.reply({ embeds: [embed], components: [selectMenuRow], flags: 64 });
+                    const row2 = new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('btn_ae_toggle').setLabel(config?.autoEventsEnabled ? 'Disable Global Events' : 'Enable Global Events').setStyle(config?.autoEventsEnabled ? ButtonStyle.Danger : ButtonStyle.Success).setEmoji('⚡'),
+                        new ButtonBuilder().setCustomId('ae_delete_menu_hub').setLabel('🗑️ Delete Event Configuration').setStyle(ButtonStyle.Danger)
+                    );
+
+                    return interaction.reply({ embeds: [embed], components: [selectMenuRow, row2], flags: 64 });
                 }
 
                 if (module === 'setup_tier') {
@@ -1288,8 +1292,23 @@ module.exports = async (interaction, client) => {
                 return interaction.reply({ content: `✅ **${eventType.toUpperCase()}** auto event is now **${!currentState ? '🟢 Active (Enabled)' : '🔴 Disabled'}**!`, flags: 64 });
             }
 
-            if (interaction.customId.startsWith('ae_delete_cfg_')) {
-                const eventType = interaction.customId.replace('ae_delete_cfg_', '');
+            // --- DELETE EVENT CONFIGURATION FROM HUB MENU ---
+            if (interaction.customId === 'ae_delete_menu_hub') {
+                const row = new ActionRowBuilder().addComponents(
+                    new StringSelectMenuBuilder()
+                        .setCustomId('ae_delete_exec_select')
+                        .setPlaceholder('Select which event configuration to delete...')
+                        .addOptions([
+                            { label: '🗑️ Delete Supply Drops Config & Slots', value: 'supply', emoji: '📦' },
+                            { label: '🗑️ Delete Elite Crates Config & Slots', value: 'elite', emoji: '💎' },
+                            { label: '🗑️ Delete Timed Crates Config & Slots', value: 'timed', emoji: '⏱️' }
+                        ])
+                );
+                return interaction.reply({ content: `🗑️ **Delete Event Configuration:** Select which event configuration you want to wipe clean:`, components: [row], flags: 64 });
+            }
+
+            if (interaction.isStringSelectMenu() && interaction.customId === 'ae_delete_exec_select') {
+                const eventType = module; // 'supply', 'elite', or 'timed'
                 const resetObj = {};
                 if (eventType === 'supply') {
                     resetObj.supplySpawnCount = 1;
@@ -1306,7 +1325,7 @@ module.exports = async (interaction, client) => {
                 }
 
                 await GuildConfig.upsert({ guildId: interaction.guild.id, ...resetObj });
-                return interaction.reply({ content: `🗑️ Successfully deleted all saved configurations and locations for **${eventType.toUpperCase()}**!`, flags: 64 });
+                return interaction.update({ content: `🗑️ Successfully deleted all saved configurations and position slots for **${eventType.toUpperCase()}**!`, components: [] });
             }
 
             if (interaction.customId.startsWith('lb_refresh_')) {
@@ -1558,6 +1577,15 @@ module.exports = async (interaction, client) => {
                 }
                 await PveZone.destroy({ where: { guildId: interaction.guild.id } });
                 return interaction.editReply({ content: `☢️ Successfully wiped **all PVE zones** from the database and in-game server!` });
+            }
+
+            if (interaction.customId === 'btn_ae_toggle') {
+                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+                if (!config?.isPremiumServer) return interaction.reply({ content: '❌ Premium tier required.', flags: 64 });
+
+                const newState = !(config.autoEventsEnabled || false);
+                await GuildConfig.upsert({ guildId: interaction.guild.id, autoEventsEnabled: newState });
+                return interaction.reply({ content: `✅ Global Auto-Events have been turned **${newState ? 'ON 🟢' : 'OFF 🔴'}**!`, flags: 64 });
             }
 
             if (interaction.customId === 'toggle_tier_status') {
@@ -1965,7 +1993,7 @@ module.exports = async (interaction, client) => {
         // ====================================================================
         if (interaction.isModalSubmit()) {
 
-           if (interaction.customId.startsWith('modal_ae_setup_')) {
+            if (interaction.customId.startsWith('modal_ae_setup_')) {
                 const eventType = interaction.customId.replace('modal_ae_setup_', '');
                 const count = parseInt(interaction.fields.getTextInputValue('ae_count')) || 1;
                 const interval = parseInt(interaction.fields.getTextInputValue('ae_interval')) || 60;
@@ -1984,10 +2012,11 @@ module.exports = async (interaction, client) => {
                 }
 
                 await GuildConfig.upsert({ guildId: interaction.guild.id, ...updateObj });
-                return interaction.reply({ content: `✅ Successfully configured **${eventType.toUpperCase()}** settings!\n• Spawn Count: **${clampedCount}**\n• Repeat Timer: Every **${interval} minutes**`, flags: 64 });
+                return interaction.reply({ content: `✅ Successfully configured **${eventType.toUpperCase()}**!\n• Spawn Count: **${clampedCount}**\n• Repeat Interval: **${interval} minutes**`, flags: 64 });
             }
-            if (interaction.customId.startsWith('modal_admin_give_item_exec_')) {
-                const parts = interaction.customId.replace('modal_admin_give_item_exec_', '').split('_');
+
+            if (interaction.customId.startsWith('modal_admin_give_exec_')) {
+                const parts = interaction.customId.replace('modal_admin_give_exec_', '').split('_');
                 const targetUserId = parts[0];
                 const shortname = parts.slice(1).join('_'); 
                 
@@ -2829,7 +2858,16 @@ module.exports = async (interaction, client) => {
                         try { await sendRconCommand(interaction.guild.id, `zones.deletecustomzone "${z.zoneName}"`); } catch (e) {}
                     }
                     await PveZone.destroy({ where: { guildId: interaction.guild.id } });
-                    updateData = { wallet: 0, xp: 0, level: 1, homeX: null, homeY: null, homeZ: null };
+                    updateData = { 
+                        wallet: 0, xp: 0, level: 1, homeX: null, homeY: null, homeZ: null,
+                        autoSupplyEnabled: false, autoEliteEnabled: false, autoTimedEnabled: false,
+                        supplySpawnCount: 1, eliteSpawnCount: 1, timedSpawnCount: 1
+                    };
+                    for (let i = 1; i <= 10; i++) {
+                        updateData[`supplySlot${i}X`] = null; updateData[`supplySlot${i}Y`] = null; updateData[`supplySlot${i}Z`] = null;
+                        updateData[`eliteSlot${i}X`] = null; updateData[`eliteSlot${i}Y`] = null; updateData[`eliteSlot${i}Z`] = null;
+                        updateData[`timedSlot${i}X`] = null; updateData[`timedSlot${i}Y`] = null; updateData[`timedSlot${i}Z`] = null;
+                    }
                 } else {
                     const sel = interaction.customId.replace('modal_wipe_sel_', '').split('-');
                     if (sel.includes('wipe_econ')) updateData.wallet = 0;
@@ -2843,6 +2881,7 @@ module.exports = async (interaction, client) => {
                         await PveZone.destroy({ where: { guildId: interaction.guild.id } });
                     }
                 }
+                await GuildConfig.update(updateData, { where: { guildId: interaction.guild.id } });
                 await UserEconomy.update(updateData, { where: { guildId: interaction.guild.id } });
                 return interaction.reply({ content: `☢️ WIPED!` });
             }
