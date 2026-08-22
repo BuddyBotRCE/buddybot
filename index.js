@@ -4,7 +4,6 @@ const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-const { initAutoEventLoop } = require('./utils/autoEventManager');
 
 const client = new Client({
     intents: [
@@ -67,12 +66,13 @@ app.post('/webhook/stripe', async (req, res) => {
     }
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => console.log(`[SYSTEM] Webhook listener running on port ${PORT}`));
 
 // --- START DISCORD LOGGER ---
 require('./utils/discordLogger')(client);
 client.on('messageCreate', async message => require('./events/messageCreate')(message, client));
+
 // Load Slash Commands Recursively (Supports subfolders like admin/ and player/)
 const commandsPath = path.join(__dirname, 'commands');
 function loadCommandsRecursively(dir) {
@@ -108,8 +108,15 @@ if (fs.existsSync(eventsPath)) {
 client.once('clientReady', async () => {
     console.log(`[SYSTEM] BuddyBotRCE is online as ${client.user.tag}`);
 
-    // --- INITIALIZE BACKGROUND AUTO-EVENT MANAGER LOOP ---
-    initAutoEventLoop(client);
+    // --- INITIALIZE BACKGROUND AUTO-EVENT MANAGER LOOP SAFELY ---
+    try {
+        const { initAutoEventLoop } = require('./utils/autoEventManager');
+        if (typeof initAutoEventLoop === 'function') {
+            initAutoEventLoop(client);
+        }
+    } catch (e) {
+        console.log('[SYSTEM] Auto event loop file skipped or not found.');
+    }
 
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     const commandData = client.commands.map(cmd => cmd.data.toJSON());
