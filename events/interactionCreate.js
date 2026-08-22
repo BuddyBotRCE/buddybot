@@ -178,19 +178,21 @@ module.exports = async (interaction, client) => {
                 const eventType = module; // 'supply', 'elite', or 'timed'
                 const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
                 
+                const customName = eventType === 'supply' ? (config?.supplyEventName || 'Supply Drops') : eventType === 'elite' ? (config?.eliteEventName || 'Elite Crates') : (config?.timedEventName || 'Timed Crates');
                 const count = eventType === 'supply' ? (config?.supplySpawnCount || 1) : eventType === 'elite' ? (config?.eliteSpawnCount || 1) : (config?.timedSpawnCount || 1);
                 const interval = eventType === 'supply' ? (config?.supplyInterval || 60) : eventType === 'elite' ? (config?.eliteInterval || 60) : (config?.timedInterval || 60);
                 const isEnabled = eventType === 'supply' ? (config?.autoSupplyEnabled || false) : eventType === 'elite' ? (config?.autoEliteEnabled || false) : (config?.autoTimedEnabled || false);
 
                 const embed = new EmbedBuilder()
-                    .setTitle(`⚙️ Auto Event Manager: ${eventType.toUpperCase()}`)
-                    .setDescription(`Configure quantity (up to 10), repeating intervals, test spawn, and mapped slots for **${eventType.toUpperCase()}**.\n\n` +
+                    .setTitle(`⚙️ Auto Event Manager: ${customName}`)
+                    .setDescription(`Manage custom name, quantity (up to 10), intervals, and position slots for this event.\n\n` +
+                        `• **Name:** \`${customName}\`\n` +
                         `• **Status:** ${isEnabled ? '🟢 Active (Enabled)' : '🔴 Disabled'}\n` +
                         `• **Spawn Count:** ${count} items\n` +
                         `• **Repeat Interval:** Every ${interval} minutes`)
                     .setColor(isEnabled ? '#2ecc71' : '#e74c3c');
 
-                // Dynamically build slot options from 1 up to the configured count (e.g., 6 items = Slots 1 to 6)
+                // Dynamically build slot options matching the exact admin-specified count (1 up to 10)
                 const slotOptions = [];
                 for (let i = 1; i <= count; i++) {
                     const hasCoord = config && config[`${eventType}Slot${i}X`] !== null;
@@ -210,9 +212,10 @@ module.exports = async (interaction, client) => {
                 );
 
                 const row2 = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(`ae_cfg_mod_${eventType}`).setLabel('Configure Qty & Interval').setStyle(ButtonStyle.Primary).setEmoji('⚙️'),
+                    new ButtonBuilder().setCustomId(`ae_cfg_mod_${eventType}`).setLabel('Configure Name, Qty & Interval').setStyle(ButtonStyle.Primary).setEmoji('⚙️'),
                     new ButtonBuilder().setCustomId(`ae_test_ind_${eventType}`).setLabel('Test Spawn Now').setStyle(ButtonStyle.Secondary).setEmoji('🧪'),
-                    new ButtonBuilder().setCustomId(`ae_toggle_ind_${eventType}`).setLabel(isEnabled ? 'Disable Event' : 'Enable Event').setStyle(isEnabled ? ButtonStyle.Danger : ButtonStyle.Success).setEmoji('⚡')
+                    new ButtonBuilder().setCustomId(`ae_toggle_ind_${eventType}`).setLabel(isEnabled ? 'Disable Event' : 'Enable Event').setStyle(isEnabled ? ButtonStyle.Danger : ButtonStyle.Success).setEmoji('⚡'),
+                    new ButtonBuilder().setCustomId(`ae_delete_cfg_${eventType}`).setLabel('Delete Event').setStyle(ButtonStyle.Danger).setEmoji('🗑️')
                 );
 
                 return interaction.update({ embeds: [embed], components: [row1, row2] });
@@ -229,7 +232,7 @@ module.exports = async (interaction, client) => {
                 }
 
                 queueAdminPos(userProfile.inGameName, interaction.guild.id, interaction.user.id, interaction.channel.id, `aeslot_${eventType}_${slotNum}`, client);
-                return interaction.reply({ content: `⏳ Capturing current coordinates for **${eventType.toUpperCase()} - Slot ${slotNum}** via RCON...`, flags: 64 });
+                return interaction.reply({ content: `⏳ Capturing current coordinates for **Slot ${slotNum}** via RCON...`, flags: 64 });
             }
 
             if (interaction.customId === 'ae_delete_exec_select') {
@@ -1275,9 +1278,10 @@ module.exports = async (interaction, client) => {
             }
 
             // --- INDIVIDUAL AUTO EVENT MANAGEMENT BUTTON ACTIONS ---
-          if (interaction.customId.startsWith('ae_cfg_mod_')) {
+            if (interaction.customId.startsWith('ae_cfg_mod_')) {
                 const eventType = interaction.customId.replace('ae_cfg_mod_', '');
                 const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+                const currentName = eventType === 'supply' ? (config?.supplyEventName || 'Supply Drops') : eventType === 'elite' ? (config?.eliteEventName || 'Elite Crates') : (config?.timedEventName || 'Timed Crates');
                 const count = eventType === 'supply' ? (config?.supplySpawnCount || 1) : eventType === 'elite' ? (config?.eliteSpawnCount || 1) : (config?.timedSpawnCount || 1);
                 const interval = eventType === 'supply' ? (config?.supplyInterval || 60) : eventType === 'elite' ? (config?.eliteInterval || 60) : (config?.timedInterval || 60);
 
@@ -1286,6 +1290,9 @@ module.exports = async (interaction, client) => {
                     .setTitle(`Configure: ${eventType.toUpperCase()}`);
                 
                 modal.addComponents(
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder().setCustomId('ae_name').setLabel("Event Custom Name").setStyle(TextInputStyle.Short).setValue(`${currentName}`).setRequired(true)
+                    ),
                     new ActionRowBuilder().addComponents(
                         new TextInputBuilder().setCustomId('ae_count').setLabel("How many to spawn? (Max 10)").setStyle(TextInputStyle.Short).setValue(`${count}`).setRequired(true)
                     ),
@@ -1345,21 +1352,31 @@ module.exports = async (interaction, client) => {
                 }
 
                 await GuildConfig.upsert({ guildId: interaction.guild.id, ...updateObj });
-                return interaction.reply({ content: `✅ **${eventType.toUpperCase()}** auto event is now **${!currentState ? '🟢 Active (Enabled)' : '🔴 Disabled'}**!`, flags: 64 });
+                return interaction.reply({ content: `✅ Auto event is now **${!currentState ? '🟢 Active (Enabled)' : '🔴 Disabled'}**!`, flags: 64 });
             }
 
-            if (interaction.customId === 'ae_delete_menu_hub') {
-                const row = new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder()
-                        .setCustomId('ae_delete_exec_select')
-                        .setPlaceholder('Select which event configuration to delete...')
-                        .addOptions([
-                            { label: '🗑️ Delete Supply Drops Config & Slots', value: 'supply', emoji: '📦' },
-                            { label: '🗑️ Delete Elite Crates Config & Slots', value: 'elite', emoji: '💎' },
-                            { label: '🗑️ Delete Timed Crates Config & Slots', value: 'timed', emoji: '⏱️' }
-                        ])
-                );
-                return interaction.reply({ content: `🗑️ **Delete Event Configuration:** Select which event configuration you want to wipe clean:`, components: [row], flags: 64 });
+            if (interaction.customId.startsWith('ae_delete_cfg_')) {
+                const eventType = interaction.customId.replace('ae_delete_cfg_', '');
+                const resetObj = {};
+                if (eventType === 'supply') {
+                    resetObj.supplySpawnCount = 1;
+                    resetObj.autoSupplyEnabled = false;
+                    resetObj.supplyEventName = 'Supply Drops';
+                    for (let i = 1; i <= 10; i++) { resetObj[`supplySlot${i}X`] = null; resetObj[`supplySlot${i}Y`] = null; resetObj[`supplySlot${i}Z`] = null; }
+                } else if (eventType === 'elite') {
+                    resetObj.eliteSpawnCount = 1;
+                    resetObj.autoEliteEnabled = false;
+                    resetObj.eliteEventName = 'Elite Crates';
+                    for (let i = 1; i <= 10; i++) { resetObj[`eliteSlot${i}X`] = null; resetObj[`eliteSlot${i}Y`] = null; resetObj[`eliteSlot${i}Z`] = null; }
+                } else if (eventType === 'timed') {
+                    resetObj.timedSpawnCount = 1;
+                    resetObj.autoTimedEnabled = false;
+                    resetObj.timedEventName = 'Timed Crates';
+                    for (let i = 1; i <= 10; i++) { resetObj[`timedSlot${i}X`] = null; resetObj[`timedSlot${i}Y`] = null; resetObj[`timedSlot${i}Z`] = null; }
+                }
+
+                await GuildConfig.upsert({ guildId: interaction.guild.id, ...resetObj });
+                return interaction.reply({ content: `🗑️ Successfully deleted and reset configuration for **${eventType.toUpperCase()}**!`, flags: 64 });
             }
 
             if (interaction.isStringSelectMenu() && interaction.customId === 'ae_delete_exec_select') {
@@ -2050,24 +2067,28 @@ module.exports = async (interaction, client) => {
 
             if (interaction.customId.startsWith('modal_ae_setup_')) {
                 const eventType = interaction.customId.replace('modal_ae_setup_', '');
+                const customName = interaction.fields.getTextInputValue('ae_name').trim();
                 const count = parseInt(interaction.fields.getTextInputValue('ae_count')) || 1;
                 const interval = parseInt(interaction.fields.getTextInputValue('ae_interval')) || 60;
                 const clampedCount = Math.min(10, Math.max(1, count));
 
                 const updateObj = {};
                 if (eventType === 'supply') {
+                    updateObj.supplyEventName = customName;
                     updateObj.supplySpawnCount = clampedCount;
                     updateObj.supplyInterval = interval;
                 } else if (eventType === 'elite') {
+                    updateObj.eliteEventName = customName;
                     updateObj.eliteSpawnCount = clampedCount;
                     updateObj.eliteInterval = interval;
                 } else if (eventType === 'timed') {
+                    updateObj.timedEventName = customName;
                     updateObj.timedSpawnCount = clampedCount;
                     updateObj.timedInterval = interval;
                 }
 
                 await GuildConfig.upsert({ guildId: interaction.guild.id, ...updateObj });
-                return interaction.reply({ content: `✅ Successfully configured **${eventType.toUpperCase()}** settings!\n• Spawn Count: **${clampedCount}**\n• Repeat Interval: **${interval} minutes**`, flags: 64 });
+                return interaction.reply({ content: `✅ Successfully configured **"${customName}"**!\n• Spawn Count: **${clampedCount}**\n• Repeat Interval: **${interval} minutes**`, flags: 64 });
             }
 
             if (interaction.customId.startsWith('modal_admin_give_exec_')) {
