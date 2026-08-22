@@ -173,6 +173,33 @@ module.exports = async (interaction, client) => {
         if (interaction.isStringSelectMenu()) {
             const module = interaction.values[0];
 
+            // --- AUTO EVENTS DROPDOWN SELECTOR ---
+            if (interaction.customId === 'ae_event_type_select') {
+                // module will be 'supply', 'elite', or 'timed'
+                const modal = new ModalBuilder()
+                    .setCustomId(`modal_ae_setup_${module}`)
+                    .setTitle(`Configure Event: ${module.toUpperCase()}`);
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder()
+                            .setCustomId('ae_count')
+                            .setLabel("How many to spawn? (Up to 10)")
+                            .setStyle(TextInputStyle.Short)
+                            .setValue('3')
+                            .setRequired(true)
+                    ),
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder()
+                            .setCustomId('ae_interval')
+                            .setLabel("Repeat Interval (Minutes)")
+                            .setStyle(TextInputStyle.Short)
+                            .setValue('60')
+                            .setRequired(true)
+                    )
+                );
+                return interaction.showModal(modal);
+            }
+
             if (interaction.customId === 'select_link_server_target') {
                 const serverId = module.replace('link_server_', '');
                 const server = await GameServer.findByPk(serverId);
@@ -324,7 +351,6 @@ module.exports = async (interaction, client) => {
             }
 
             if (interaction.customId === 'admin_menu_select') {
-                // Auto-cleanup any lingering coordinate prompt messages in the channel when switching tabs
                 await interaction.channel.messages.fetch({ limit: 10 }).then(messages => {
                     const prompts = messages.filter(m => m.content.includes('Grabbing coordinates') || m.content.includes('Stand at your desired'));
                     for (const [_, msg] of prompts) { msg.delete().catch(() => {}); }
@@ -511,26 +537,31 @@ module.exports = async (interaction, client) => {
                     }
 
                     const embed = new EmbedBuilder()
-                        .setTitle('🚁 Premium Auto-Events Manager Hub')
-                        .setDescription(`Select a specific world event below to configure its independent spawn interval, positions, and parameters.\n\n` +
+                        .setTitle('🚁 Auto-Events Hub (Dropdown Manager)')
+                        .setDescription(`Select an event type below using the dropdown menu to choose how many items to spawn (up to 10), set repeating intervals, and capture locations.\n\n` +
                             `• **Global Status:** ${config?.autoEventsEnabled ? '🟢 Enabled' : '🔴 Disabled'}\n\n` +
-                            `**Configured Features:**\n` +
-                            `• 🚢 **Docked Cargo:** Every **${config?.cargoInterval || 60}m** (\`X: ${config?.cargoDockX || 'None'}, Y: ${config?.cargoDockY || 'None'}, Z: ${config?.cargoDockZ || 'None'}\`, Crates: **${config?.cargoCrateCount || 3}**)\n` +
-                            `• 📦 **Supply Drop:** Every **${config?.supplyInterval || 60}m**\n` +
-                            `• 💎 **Elite Crate:** Every **${config?.eliteInterval || 60}m**\n` +
-                            `• ⏱️ **Timed Crate:** Every **${config?.timedInterval || 60}m**`)
+                            `**Current Configurations:**\n` +
+                            `• 📦 **Supply Drops:** Count: **${config?.supplySpawnCount || 1}**, Interval: **${config?.supplyInterval || 60}m**\n` +
+                            `• 💎 **Elite Crates:** Count: **${config?.eliteSpawnCount || 1}**, Interval: **${config?.eliteInterval || 60}m**\n` +
+                            `• ⏱️ **Timed Crates:** Count: **${config?.timedSpawnCount || 1}**, Interval: **${config?.timedInterval || 60}m**`)
                         .setColor('#f1c40f');
 
-                    const row1 = new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('ae_sub_cargo').setLabel('🚢 Docked Cargo Config').setStyle(ButtonStyle.Primary),
-                        new ButtonBuilder().setCustomId('ae_sub_supply').setLabel('📦 Supply Drop Config').setStyle(ButtonStyle.Primary),
-                        new ButtonBuilder().setCustomId('ae_sub_elite').setLabel('💎 Elite Crate Config').setStyle(ButtonStyle.Secondary),
-                        new ButtonBuilder().setCustomId('ae_sub_timed').setLabel('⏱️ Timed Crate Config').setStyle(ButtonStyle.Secondary)
+                    const selectMenuRow = new ActionRowBuilder().addComponents(
+                        new StringSelectMenuBuilder()
+                            .setCustomId('ae_event_type_select')
+                            .setPlaceholder('Select event type to configure...')
+                            .addOptions([
+                                { label: '📦 Supply Drops Config', value: 'supply', description: 'Configure quantity (up to 10), interval, and capture locations', emoji: '📦' },
+                                { label: '💎 Elite Crates Config', value: 'elite', description: 'Configure quantity (up to 10), interval, and capture locations', emoji: '💎' },
+                                { label: '⏱️ Timed Crates Config', value: 'timed', description: 'Configure quantity (up to 10), interval, and capture locations', emoji: '⏱️' }
+                            ])
                     );
+
                     const row2 = new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('btn_ae_toggle').setLabel(config?.autoEventsEnabled ? 'Disable Global Events' : 'Enable Global Events').setStyle(config?.autoEventsEnabled ? ButtonStyle.Danger : ButtonStyle.Success).setEmoji('⚡')
+                        new ButtonBuilder().setCustomId('btn_ae_toggle').setLabel(config?.autoEventsEnabled ? 'Disable Global Events' : 'Enable Global Events').setStyle(config?.autoEventsEnabled ? ButtonStyle.Danger : ButtonStyle.Success).setEmoji('⚡'),
+                        new ButtonBuilder().setCustomId('btn_ae_set_locations').setLabel('📍 Set Event Locations (Slots 1-10)').setStyle(ButtonStyle.Primary)
                     );
-                    return interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
+                    return interaction.reply({ embeds: [embed], components: [selectMenuRow, row2], flags: 64 });
                 }
 
                 if (module === 'setup_tier') {
@@ -997,7 +1028,6 @@ module.exports = async (interaction, client) => {
         // ====================================================================
         if (interaction.isButton()) {
             
-            // --- RCON SETUP BUTTON ---
             if (interaction.customId === 'btn_rcon_setup') {
                 const modal = new ModalBuilder().setCustomId('modal_setup_rcon').setTitle('Configure RCON Credentials');
                 modal.addComponents(
@@ -1008,7 +1038,6 @@ module.exports = async (interaction, client) => {
                 return interaction.showModal(modal);
             }
 
-            // --- NEW PLAYER CLAN HUB ---
             if (interaction.customId === 'hub_clans') {
                 const userProfile = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
                 if (!userProfile || !userProfile.inGameName) {
@@ -1187,77 +1216,104 @@ module.exports = async (interaction, client) => {
                 );
                 return interaction.showModal(modal);
             }
-            if (interaction.customId === 'btn_ae_test_cargo') {
+
+            // --- MULTI-SLOT CAPTURE COORDINATES BUTTON (UP TO 10 SLOTS) ---
+            if (interaction.customId === 'btn_ae_set_locations') {
+                const userProfile = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
+                if (!userProfile || !userProfile.inGameName) {
+                    return interaction.reply({ content: '❌ Link your Rust account first using `/playerpanel` before grabbing location slots!', flags: 64 });
+                }
+
+                const options = [];
+                for (let i = 1; i <= 10; i++) {
+                    options.push({ label: `Capture Position Slot ${i}`, value: `slot_capture_${i}`, description: `Saves your current in-game coordinates to Slot ${i}` });
+                }
+
+                const row = new ActionRowBuilder().addComponents(
+                    new StringSelectMenuBuilder()
+                        .setCustomId('ae_slot_select_menu')
+                        .setPlaceholder('Select which slot to save your current position to...')
+                        .addOptions(options)
+                );
+
+                return interaction.reply({ content: `📍 **Location Slot Manager:** Stand at your desired location in-game, then select the slot number below to capture your coordinates:`, components: [row], flags: 64 });
+            }
+
+            if (interaction.isStringSelectMenu() && interaction.customId === 'ae_slot_select_menu') {
+                const slotNum = interaction.values[0].replace('slot_capture_', '');
+                const userProfile = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
+                
+                queueAdminPos(userProfile.inGameName, interaction.guild.id, interaction.user.id, interaction.channel.id, `aeslot_${slotNum}`, client);
+                return interaction.update({ content: `⏳ Capturing current coordinates for **Position Slot ${slotNum}** via RCON...`, components: [] });
+            }
+
+            if (interaction.customId === 'btn_ae_test_supply') {
                 await interaction.deferReply({ flags: 64 });
                 const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-                
-                if (config && config.cargoDockX !== null && config.cargoDockY !== null && config.cargoDockZ !== null) {
-                    const x = config.cargoDockX;
-                    const y = config.cargoDockY;
-                    const z = config.cargoDockZ;
+                if (!config) return interaction.editReply({ content: `❌ Guild configuration not found.` });
 
-                    try {
-                        // 1. Clear out any prior cargo instances to avoid entity ID conflicts
-                        await sendRconCommand(interaction.guild.id, 'del cargoshipdynamic2');
-                        await sendRconCommand(interaction.guild.id, 'del cargoshipdynamic1');
-
-                        // 2. Spawn fresh dynamic cargo ship directly at the captured dock coordinates
-                        await sendRconCommand(interaction.guild.id, `spawn cargoshipdynamic2 ${x},${y},${z}`);
-
-                        // 3. Immediately halt its navigation and physics trajectory
-                        await sendRconCommand(interaction.guild.id, 'cargoship.allstops');
-                        await sendRconCommand(interaction.guild.id, 'entity.rigidbody.velocity 0,0,0');
-
-                        const duration = config.cargoDurationMinutes || 30;
-                        const guildId = interaction.guild.id;
-
-                        // 4. Stable position-lock loop (non-blocking async execution)
-                        const anchorInterval = setInterval(async () => {
-                            try {
-                                await sendRconCommand(guildId, `entity.setposition cargoshipdynamic2 ${x},${y},${z}`);
-                                await sendRconCommand(guildId, 'entity.rigidbody.velocity 0,0,0');
-                                await sendRconCommand(guildId, 'cargoship.allstops');
-                            } catch (err) {
-                                // Silent catch to prevent interval crash on network hiccups
-                            }
-                        }, 1500); // 1.5 seconds gives the RCON queue breathing room while keeping it pinned
-
-                        // 5. Handle duration expiration and clean egress departure
-                        setTimeout(async () => {
-                            clearInterval(anchorInterval);
-                            try {
-                                await sendRconCommand(guildId, 'cargoships.startegressing');
-                                setTimeout(() => {
-                                    sendRconCommand(guildId, 'del cargoshipdynamic2').catch(()=>{});
-                                }, 120000);
-                            } catch (e) {}
-                        }, duration * 60 * 1000);
-
-                        return interaction.editReply({ content: `✅ Docked Cargo Ship successfully spawned and anchored at \`X: ${x}, Y: ${y}, Z: ${z}\` for ${duration} minutes!` });
-                    } catch (rconErr) {
-                        console.error('[CARGO SPAWN ERROR]', rconErr);
-                        return interaction.editReply({ content: `❌ RCON execution failed while attempting to spawn docked cargo.` });
+                const count = config.supplySpawnCount || 1;
+                let spawned = 0;
+                for (let i = 1; i <= count; i++) {
+                    const x = config[`supplySlot${i}X`];
+                    const y = config[`supplySlot${i}Y`];
+                    const z = config[`supplySlot${i}Z`];
+                    if (x !== null && y !== null && z !== null) {
+                        await sendRconCommand(interaction.guild.id, `spawn supply_drop ${x},${y},${z}`);
+                        spawned++;
                     }
-                } else {
-                    await sendRconCommand(interaction.guild.id, 'cargoships.spawncargoship');
-                    return interaction.editReply({ content: `⚠️ No custom dock position set. Triggered standard roaming cargo event test!` });
                 }
+                if (spawned === 0) {
+                    await sendRconCommand(interaction.guild.id, 'supply.drop');
+                    return interaction.editReply({ content: `⚠️ No custom slots set. Triggered standard random supply drop!` });
+                }
+                return interaction.editReply({ content: `✅ Test-spawned **${spawned}** Supply Drops at their individual slots!` });
             }
 
-               if (interaction.customId === 'btn_ae_test_supply') {
-                await interaction.deferReply({ flags: 64 });
-                await sendRconCommand(interaction.guild.id, 'supply.drop');
-                return interaction.editReply({ content: `✅ Test supply drop triggered successfully!` });
-            }
             if (interaction.customId === 'btn_ae_test_elite') {
                 await interaction.deferReply({ flags: 64 });
-                await sendRconCommand(interaction.guild.id, 'spawn codelockedhackablecrate');
-                return interaction.editReply({ content: `✅ Test elite crate spawned successfully!` });
+                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+                if (!config) return interaction.editReply({ content: `❌ Guild configuration not found.` });
+
+                const count = config.eliteSpawnCount || 1;
+                let spawned = 0;
+                for (let i = 1; i <= count; i++) {
+                    const x = config[`eliteSlot${i}X`];
+                    const y = config[`eliteSlot${i}Y`];
+                    const z = config[`eliteSlot${i}Z`];
+                    if (x !== null && y !== null && z !== null) {
+                        await sendRconCommand(interaction.guild.id, `spawn codelockedhackablecrate ${x},${y},${z}`);
+                        spawned++;
+                    }
+                }
+                if (spawned === 0) {
+                    await sendRconCommand(interaction.guild.id, 'spawn codelockedhackablecrate');
+                    return interaction.editReply({ content: `⚠️ No custom slots set. Triggered default elite crate spawn!` });
+                }
+                return interaction.editReply({ content: `✅ Test-spawned **${spawned}** Elite Crates at their individual slots!` });
             }
+
             if (interaction.customId === 'btn_ae_test_timed') {
                 await interaction.deferReply({ flags: 64 });
-                await sendRconCommand(interaction.guild.id, 'spawn hackablelockedcrate');
-                return interaction.editReply({ content: `✅ Test timed crate spawned successfully!` });
+                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+                if (!config) return interaction.editReply({ content: `❌ Guild configuration not found.` });
+
+                const count = config.timedSpawnCount || 1;
+                let spawned = 0;
+                for (let i = 1; i <= count; i++) {
+                    const x = config[`timedSlot${i}X`];
+                    const y = config[`timedSlot${i}Y`];
+                    const z = config[`timedSlot${i}Z`];
+                    if (x !== null && y !== null && z !== null) {
+                        await sendRconCommand(interaction.guild.id, `spawn hackablelockedcrate ${x},${y},${z}`);
+                        spawned++;
+                    }
+                }
+                if (spawned === 0) {
+                    await sendRconCommand(interaction.guild.id, 'spawn hackablelockedcrate');
+                    return interaction.editReply({ content: `⚠️ No custom slots set. Triggered default timed crate spawn!` });
+                }
+                return interaction.editReply({ content: `✅ Test-spawned **${spawned}** Timed Crates at their individual slots!` });
             }
 
             if (interaction.customId.startsWith('lb_refresh_')) {
@@ -1436,103 +1492,6 @@ module.exports = async (interaction, client) => {
                     .setDescription(`Vote for our GPortal server to help us grow and earn **${reward} ${currency}**!\n\n🔗 **Vote Link:** [Click Here to Vote](${voteUrl})\n\n*After voting, use the command \`/claimvote\` to deliver your reward in-game!*`)
                     .setColor('#e67e22');
                 return interaction.reply({ embeds: [embed], flags: 64 });
-            }
-
-            if (interaction.customId === 'ae_sub_cargo') {
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-                const embed = new EmbedBuilder()
-                    .setTitle('🚢 Docked Cargo Ship Configuration')
-                    .setDescription(`Configure custom docked cargo parameters and interval timer.\n\n` +
-                        `• **Interval:** Every **${config?.cargoInterval || 60} minutes**\n` +
-                        `• **Crate Count:** **${config?.cargoCrateCount || 3} crates**\n` +
-                        `• **Dock Position:** \`X: ${config?.cargoDockX || 'None'}, Y: ${config?.cargoDockY || 'None'}, Z: ${config?.cargoDockZ || 'None'}\``)
-                    .setColor('#3498db');
-
-                const row = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('btn_ae_set_cargo_pos').setLabel('Set Dock Position').setStyle(ButtonStyle.Secondary).setEmoji('📍'),
-                    new ButtonBuilder().setCustomId('btn_ae_set_crates').setLabel('Set Crate Qty').setStyle(ButtonStyle.Primary).setEmoji('🔢'),
-                    new ButtonBuilder().setCustomId('btn_ae_set_interval_cargo').setLabel('Set Interval (Mins)').setStyle(ButtonStyle.Primary).setEmoji('⏱️'),
-                    new ButtonBuilder().setCustomId('btn_ae_test_cargo').setLabel('Test Spawn Cargo').setStyle(ButtonStyle.Success).setEmoji('🚢')
-                );
-                return interaction.update({ embeds: [embed], components: [row] });
-            }
-
-            if (interaction.customId === 'ae_sub_supply') {
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-                const embed = new EmbedBuilder()
-                    .setTitle('📦 Supply Drop Configuration')
-                    .setDescription(`Configure automated supply drop event settings.\n\n• **Interval:** Every **${config?.supplyInterval || 60} minutes**`)
-                    .setColor('#3498db');
-
-                const row = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('btn_ae_set_interval_supply').setLabel('Set Interval (Mins)').setStyle(ButtonStyle.Primary).setEmoji('⏱️'),
-                    new ButtonBuilder().setCustomId('btn_ae_test_supply').setLabel('Test Spawn Supply Drop').setStyle(ButtonStyle.Success).setEmoji('📦')
-                );
-                return interaction.update({ embeds: [embed], components: [row] });
-            }
-
-            if (interaction.customId === 'ae_sub_elite') {
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-                const embed = new EmbedBuilder()
-                    .setTitle('💎 Elite Crate Configuration')
-                    .setDescription(`Configure automated elite hackable crate event settings.\n\n• **Interval:** Every **${config?.eliteInterval || 60} minutes**`)
-                    .setColor('#3498db');
-
-                const row = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('btn_ae_set_interval_elite').setLabel('Set Interval (Mins)').setStyle(ButtonStyle.Primary).setEmoji('⏱️'),
-                    new ButtonBuilder().setCustomId('btn_ae_test_elite').setLabel('Test Spawn Elite Crate').setStyle(ButtonStyle.Success).setEmoji('💎')
-                );
-                return interaction.update({ embeds: [embed], components: [row] });
-            }
-
-            if (interaction.customId === 'ae_sub_timed') {
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-                const embed = new EmbedBuilder()
-                    .setTitle('⏱️ Timed Crate Configuration')
-                    .setDescription(`Configure automated timed locked crate event settings.\n\n• **Interval:** Every **${config?.timedInterval || 60} minutes**`)
-                    .setColor('#3498db');
-
-                const row = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('btn_ae_set_interval_timed').setLabel('Set Interval (Mins)').setStyle(ButtonStyle.Primary).setEmoji('⏱️'),
-                    new ButtonBuilder().setCustomId('btn_ae_test_timed').setLabel('Test Spawn Timed Crate').setStyle(ButtonStyle.Success).setEmoji('⏱️')
-                );
-                return interaction.update({ embeds: [embed], components: [row] });
-            }
-
-            if (interaction.customId === 'btn_ae_set_interval_cargo') {
-                const modal = new ModalBuilder().setCustomId('modal_ae_int_cargo').setTitle('Set Cargo Interval');
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('interval').setLabel("Interval in Minutes").setStyle(TextInputStyle.Short).setValue('60').setRequired(true)));
-                return interaction.showModal(modal);
-            }
-            if (interaction.customId === 'btn_ae_set_interval_supply') {
-                const modal = new ModalBuilder().setCustomId('modal_ae_int_supply').setTitle('Set Supply Drop Interval');
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('interval').setLabel("Interval in Minutes").setStyle(TextInputStyle.Short).setValue('60').setRequired(true)));
-                return interaction.showModal(modal);
-            }
-            if (interaction.customId === 'btn_ae_set_interval_elite') {
-                const modal = new ModalBuilder().setCustomId('modal_ae_int_elite').setTitle('Set Elite Crate Interval');
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('interval').setLabel("Interval in Minutes").setStyle(TextInputStyle.Short).setValue('60').setRequired(true)));
-                return interaction.showModal(modal);
-            }
-            if (interaction.customId === 'btn_ae_set_interval_timed') {
-                const modal = new ModalBuilder().setCustomId('modal_ae_int_timed').setTitle('Set Timed Crate Interval');
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('interval').setLabel("Interval in Minutes").setStyle(TextInputStyle.Short).setValue('60').setRequired(true)));
-                return interaction.showModal(modal);
-            }
-
-            if (interaction.customId === 'btn_ae_set_cargo_pos') {
-                const userProfile = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
-                if (!userProfile || !userProfile.inGameName) {
-                    return interaction.reply({ content: '❌ Link your Rust account first using `/playerpanel` before grabbing coordinates!', flags: 64 });
-                }
-                
-                await interaction.channel.messages.fetch({ limit: 10 }).then(messages => {
-                    const oldPrompts = messages.filter(m => m.content.includes('Stand at your desired Cargo Ship dock location'));
-                    for (const [_, msg] of oldPrompts) { msg.delete().catch(() => {}); }
-                });
-
-                queueAdminPos(userProfile.inGameName, interaction.guild.id, interaction.user.id, interaction.channel.id, 'cargodock', client);
-                return interaction.reply({ content: `⏳ Stand at your desired Cargo Ship dock location... capturing coordinates via RCON.`, flags: 64 });
             }
 
             if (interaction.customId === 'btn_casino_settings') {
@@ -1842,7 +1801,6 @@ module.exports = async (interaction, client) => {
                 return `• **${i.name}** — 💰 **${finalPrice} ${currency}** *(CD: ${i.cooldownSeconds}s)*`;
             }).join('\n');
 
-            // Safety truncation if field exceeds Discord's 1024 character limit
             if (itemListText.length > 1024) {
                 itemListText = itemListText.substring(0, 1021) + '...';
             }
@@ -1869,7 +1827,6 @@ module.exports = async (interaction, client) => {
     return interaction.update({ embeds: [embed], components: [row] });
 }
 
-            // --- UPDATED MULTI-SERVER LINK ACCOUNT BUTTON ---
             if (interaction.customId === 'hub_link_account') {
                 const servers = await GameServer.findAll({ where: { guildId: interaction.guild.id } });
                 
@@ -2023,6 +1980,27 @@ module.exports = async (interaction, client) => {
         // 7. MODAL SUBMISSIONS
         // ====================================================================
         if (interaction.isModalSubmit()) {
+
+            if (interaction.customId.startsWith('modal_ae_setup_')) {
+                const eventType = interaction.customId.replace('modal_ae_setup_', ''); // supply, elite, or timed
+                const count = parseInt(interaction.fields.getTextInputValue('ae_count')) || 1;
+                const interval = parseInt(interaction.fields.getTextInputValue('ae_interval')) || 60;
+
+                const updateObj = {};
+                if (eventType === 'supply') {
+                    updateObj.supplySpawnCount = Math.min(10, Math.max(1, count));
+                    updateObj.supplyInterval = interval;
+                } else if (eventType === 'elite') {
+                    updateObj.eliteSpawnCount = Math.min(10, Math.max(1, count));
+                    updateObj.eliteInterval = interval;
+                } else if (eventType === 'timed') {
+                    updateObj.timedSpawnCount = Math.min(10, Math.max(1, count));
+                    updateObj.timedInterval = interval;
+                }
+
+                await GuildConfig.upsert({ guildId: interaction.guild.id, ...updateObj });
+                return interaction.reply({ content: `✅ Successfully configured **${eventType.toUpperCase()}** events!\n• Spawn Count: **${count}** (Max 10)\n• Interval: **${interval} minutes**`, flags: 64 });
+            }
 
             if (interaction.customId.startsWith('modal_admin_give_item_exec_')) {
                 const parts = interaction.customId.replace('modal_admin_give_item_exec_', '').split('_');
@@ -2313,12 +2291,6 @@ module.exports = async (interaction, client) => {
                 return interaction.reply({ content: `✅ Successfully took **${amount}** currency from **${nameLabel}**! New wallet: **${user.wallet}**`, flags: 64 });
             }
 
-            if (interaction.customId === 'modal_ae_crates') {
-                const crates = parseInt(interaction.fields.getTextInputValue('crate_amount')) || 3;
-                await GuildConfig.upsert({ guildId: interaction.guild.id, cargoCrateCount: crates });
-                return interaction.reply({ content: `✅ Cargo ship crate quantity successfully set to **${crates} crates**!`, flags: 64 });
-            }
-
             if (interaction.customId === 'modal_verify_email') {
                 await interaction.deferReply({ flags: 64 });
                 const email = interaction.fields.getTextInputValue('stripe_email').trim().toLowerCase();
@@ -2403,27 +2375,6 @@ module.exports = async (interaction, client) => {
 
                 await targetChannel.send({ embeds: [embed] });
                 return interaction.reply({ content: `✅ Custom embed successfully posted in <#${targetChannel.id}>!`, flags: 64 });
-            }
-
-            if (interaction.customId === 'modal_ae_int_cargo') {
-                const mins = parseInt(interaction.fields.getTextInputValue('interval')) || 60;
-                await GuildConfig.upsert({ guildId: interaction.guild.id, cargoInterval: mins });
-                return interaction.reply({ content: `✅ Cargo Ship event interval updated to every **${mins} minutes**!`, flags: 64 });
-            }
-            if (interaction.customId === 'modal_ae_int_supply') {
-                const mins = parseInt(interaction.fields.getTextInputValue('interval')) || 60;
-                await GuildConfig.upsert({ guildId: interaction.guild.id, supplyInterval: mins });
-                return interaction.reply({ content: `✅ Supply Drop event interval updated to every **${mins} minutes**!`, flags: 64 });
-            }
-            if (interaction.customId === 'modal_ae_int_elite') {
-                const mins = parseInt(interaction.fields.getTextInputValue('interval')) || 60;
-                await GuildConfig.upsert({ guildId: interaction.guild.id, eliteInterval: mins });
-                return interaction.reply({ content: `✅ Elite Crate event interval updated to every **${mins} minutes**!`, flags: 64 });
-            }
-            if (interaction.customId === 'modal_ae_int_timed') {
-                const mins = parseInt(interaction.fields.getTextInputValue('interval')) || 60;
-                await GuildConfig.upsert({ guildId: interaction.guild.id, timedInterval: mins });
-                return interaction.reply({ content: `✅ Timed Crate event interval updated to every **${mins} minutes**!`, flags: 64 });
             }
 
             if (interaction.customId === 'modal_econ_interest') {
