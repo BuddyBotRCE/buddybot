@@ -1188,7 +1188,7 @@ module.exports = async (interaction, client) => {
                 return interaction.showModal(modal);
             }
 
-           if (interaction.customId === 'btn_ae_test_cargo') {
+          if (interaction.customId === 'btn_ae_test_cargo') {
                 await interaction.deferReply({ flags: 64 });
                 const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
                 
@@ -1197,36 +1197,20 @@ module.exports = async (interaction, client) => {
                     const y = config.cargoDockY;
                     const z = config.cargoDockZ;
 
-                    // 1. Spawn dynamic cargo ship
-                    await sendRconCommand(interaction.guild.id, `spawn cargoshipdynamic2 ${x},${y},${z}`);
-
-                    // 2. Kill pathfinding route tracking and waypoint movement immediately
-                    await sendRconCommand(interaction.guild.id, 'cargoship.allstops');
-                    await sendRconCommand(interaction.guild.id, 'cargoship.disable_waittime 1');
+                    // Use the static entity spawn command to lock it as a non-moving map asset
+                    await sendRconCommand(interaction.guild.id, `entity.spawn cargoshipdynamic2 ${x},${y},${z}`);
 
                     const duration = config.cargoDurationMinutes || 30;
                     const guildId = interaction.guild.id;
 
-                    // 3. Continuous anchor lock loop to prevent drift
-                    const anchorInterval = setInterval(async () => {
-                        try {
-                            await sendRconCommand(guildId, `entity.setposition cargoshipdynamic2 ${x},${y},${z}`);
-                            await sendRconCommand(guildId, 'cargoship.allstops');
-                        } catch (err) {}
-                    }, 1000);
-
-                    // 4. Cleanup timer after duration expires
+                    // Clean up after duration expires
                     setTimeout(async () => {
-                        clearInterval(anchorInterval);
                         try {
-                            await sendRconCommand(guildId, 'cargoships.startegressing');
-                            setTimeout(() => {
-                                sendRconCommand(guildId, 'del cargoshipdynamic2').catch(()=>{});
-                            }, 120000);
+                            await sendRconCommand(guildId, 'del cargoshipdynamic2').catch(()=>{});
                         } catch (e) {}
                     }, duration * 60000);
 
-                    return interaction.editReply({ content: `✅ Docked Cargo Ship event successfully spawned and locked at \`X: ${x}, Y: ${y}, Z: ${z}\`! It will hold position for ${duration} minutes before departing.` });
+                    return interaction.editReply({ content: `✅ Static Docked Cargo Ship spawned at coordinates \`X: ${x}, Y: ${y}, Z: ${z}\`! It will remain stationary for ${duration} minutes.` });
                 } else {
                     await sendRconCommand(interaction.guild.id, 'cargoships.spawncargoship');
                     return interaction.editReply({ content: `⚠️ No custom dock position set. Triggered standard roaming cargo event test!` });
