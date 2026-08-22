@@ -1188,33 +1188,13 @@ module.exports = async (interaction, client) => {
                 return interaction.showModal(modal);
             }
 
-          if (interaction.customId === 'btn_ae_test_cargo') {
+         if (interaction.customId === 'btn_ae_test_cargo') {
                 await interaction.deferReply({ flags: 64 });
                 const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
                 
-                if (config && config.cargoDockX !== null && config.cargoDockY !== null && config.cargoDockZ !== null) {
-                    const x = config.cargoDockX;
-                    const y = config.cargoDockY;
-                    const z = config.cargoDockZ;
-
-                    // Use the static entity spawn command to lock it as a non-moving map asset
-                    await sendRconCommand(interaction.guild.id, `entity.spawn cargoshipdynamic2 ${x},${y},${z}`);
-
-                    const duration = config.cargoDurationMinutes || 30;
-                    const guildId = interaction.guild.id;
-
-                    // Clean up after duration expires
-                    setTimeout(async () => {
-                        try {
-                            await sendRconCommand(guildId, 'del cargoshipdynamic2').catch(()=>{});
-                        } catch (e) {}
-                    }, duration * 60000);
-
-                    return interaction.editReply({ content: `✅ Static Docked Cargo Ship spawned at coordinates \`X: ${x}, Y: ${y}, Z: ${z}\`! It will remain stationary for ${duration} minutes.` });
-                } else {
-                    await sendRconCommand(interaction.guild.id, 'cargoships.spawncargoship');
-                    return interaction.editReply({ content: `⚠️ No custom dock position set. Triggered standard roaming cargo event test!` });
-                }
+                // Trigger native server event cargo ship spawn
+                await sendRconCommand(interaction.guild.id, 'cargoships.spawncargoship');
+                return interaction.editReply({ content: `✅ Successfully triggered the native Cargo Ship event!` });
             }
             if (interaction.customId === 'btn_ae_test_supply') {
                 await interaction.deferReply({ flags: 64 });
