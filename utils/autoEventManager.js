@@ -1,12 +1,14 @@
 const { GuildConfig } = require('../database/db');
-const { sendRconCommand } = require('../utils/rconManager');
+const { sendRconCommand } = require('./rconManager');
 
-function startAutoEventScheduler() {
+function initAutoEventLoop(client) {
+    // Runs a background check every 60 seconds
     setInterval(async () => {
         try {
             const guilds = await GuildConfig.findAll();
 
             for (const config of guilds) {
+                // Check if global auto-events are enabled for this server
                 if (!config.autoEventsEnabled) continue;
                 const guildId = config.guildId;
                 const now = Date.now();
@@ -14,7 +16,7 @@ function startAutoEventScheduler() {
                 // --- 1. SUPPLY DROP AUTO-EVENT ---
                 if (config.autoSupplyEnabled && config.supplyInterval) {
                     const lastRun = config.lastSupplyRun ? new Date(config.lastSupplyRun).getTime() : 0;
-                    const intervalMs = config.supplyInterval * 60 * 1000;
+                    const intervalMs = config.supplyInterval * 60 * 1000; // convert minutes to ms
 
                     if (now - lastRun > intervalMs) {
                         const count = config.supplySpawnCount || 1;
@@ -31,6 +33,7 @@ function startAutoEventScheduler() {
                             }
                         }
 
+                        // Fallback to standard random drop if no slots are mapped
                         if (!spawnedAny) {
                             await sendRconCommand(guildId, 'supply.drop');
                         }
@@ -99,9 +102,9 @@ function startAutoEventScheduler() {
                 }
             }
         } catch (err) {
-            console.error('[Auto-Event Scheduler Loop Error]:', err);
+            console.error('[Auto-Event Manager Loop Error]:', err);
         }
-    }, 60000);
+    }, 60000); // Check every 1 minute
 }
 
-module.exports = { startAutoEventScheduler };
+module.exports = { initAutoEventLoop };

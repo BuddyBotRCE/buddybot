@@ -185,24 +185,27 @@ module.exports = async (interaction, client) => {
                 const embed = new EmbedBuilder()
                     .setTitle(`⚙️ Auto Event Manager: ${eventType.toUpperCase()}`)
                     .setDescription(`Configure quantity (up to 10), repeating intervals, test spawn, and mapped slots for **${eventType.toUpperCase()}**.\n\n` +
-                        `• **Status:** ${isEnabled ? '🟢 Active' : '🔴 Disabled'}\n` +
+                        `• **Status:** ${isEnabled ? '🟢 Active (Enabled)' : '🔴 Disabled'}\n` +
                         `• **Spawn Count:** ${count} items\n` +
                         `• **Repeat Interval:** Every ${interval} minutes`)
-                    .setColor('#3498db');
+                    .setColor(isEnabled ? '#2ecc71' : '#e74c3c');
 
+                // Dynamically build slot options from 1 up to the configured count (e.g., 6 items = Slots 1 to 6)
                 const slotOptions = [];
                 for (let i = 1; i <= count; i++) {
+                    const hasCoord = config && config[`${eventType}Slot${i}X`] !== null;
                     slotOptions.push({
-                        label: `Set Location for Slot ${i}`,
+                        label: `Set Location for Slot ${i} of ${count}`,
                         value: `ae_setslot_${eventType}_${i}`,
-                        description: `Capture current in-game position to Slot ${i}`
+                        description: hasCoord ? `✅ Mapped (Click to update)` : `❌ Not set yet`,
+                        emoji: hasCoord ? '📍' : '📌'
                     });
                 }
 
                 const row1 = new ActionRowBuilder().addComponents(
                     new StringSelectMenuBuilder()
                         .setCustomId(`ae_slot_coordinator_${eventType}`)
-                        .setPlaceholder('📍 Select a position slot to set/update...')
+                        .setPlaceholder(`📍 Select Slot (1 to ${count}) to set position...`)
                         .addOptions(slotOptions)
                 );
 
