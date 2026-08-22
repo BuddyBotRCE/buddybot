@@ -12,6 +12,64 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 const activeKitBuilders = new Map(); 
 
+// --- HELPER FUNCTION: GENERATE AUTO-EVENT MENU DYNAMICALLY ---
+async function renderAutoEventPanel(interaction, eventType) {
+    const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+    
+    const customName = eventType === 'supply' ? (config?.supplyEventName || 'Supply Drops') : eventType === 'elite' ? (config?.eliteEventName || 'Elite Crates') : (config?.timedEventName || 'Timed Crates');
+    const count = eventType === 'supply' ? (config?.supplySpawnCount || 1) : eventType === 'elite' ? (config?.eliteSpawnCount || 1) : (config?.timedSpawnCount || 1);
+    const interval = eventType === 'supply' ? (config?.supplyInterval || 60) : eventType === 'elite' ? (config?.eliteInterval || 60) : (config?.timedInterval || 60);
+    const isEnabled = eventType === 'supply' ? (config?.autoSupplyEnabled || false) : eventType === 'elite' ? (config?.autoEliteEnabled || false) : (config?.autoTimedEnabled || false);
+
+    const embed = new EmbedBuilder()
+        .setTitle(`⚙️ Auto Event Manager: ${customName}`)
+        .setDescription(`Manage your configuration completely through the dropdowns below.\n\n` +
+            `• **Status:** ${isEnabled ? '🟢 Active (Enabled)' : '🔴 Disabled'}\n` +
+            `• **Spawn Count:** ${count} item(s) per interval\n` +
+            `• **Repeat Interval:** Every ${interval} minutes\n\n` +
+            `*Use the location dropdown below to map out all ${count} slots.*`)
+        .setColor(isEnabled ? '#2ecc71' : '#e74c3c');
+
+    const qtyOptions = [];
+    for (let i = 1; i <= 10; i++) qtyOptions.push({ label: `Set Quantity: ${i}`, value: `${i}`, emoji: '🔢' });
+    const rowQty = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder().setCustomId(`ae_qty_select_${eventType}`).setPlaceholder(`Current Quantity: ${count} (Click to change)...`).addOptions(qtyOptions)
+    );
+
+    const slotOptions = [];
+    for (let i = 1; i <= count; i++) {
+        const x = config ? config[`${eventType}Slot${i}X`] : null;
+        const hasCoord = x !== null && x !== undefined;
+        slotOptions.push({
+            label: `Capture Position for Slot ${i} of ${count}`,
+            value: `${i}`,
+            description: hasCoord ? `Mapped (Click to overwrite)` : `Not mapped yet`,
+            emoji: hasCoord ? '🟢' : '🔴'
+        });
+    }
+    const rowLoc = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder().setCustomId(`ae_loc_select_${eventType}`).setPlaceholder(`📍 Map Locations (Slots 1 to ${count})...`).addOptions(slotOptions)
+    );
+
+    const rowActions = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId(`ae_action_select_${eventType}`)
+            .setPlaceholder('⚙️ Event Actions & Testing...')
+            .addOptions([
+                { label: 'Set Custom Name & Timer', value: 'config', emoji: '⏱️' },
+                { label: 'Test Spawn Now', value: 'test', emoji: '🧪' },
+                { label: isEnabled ? 'Disable Event' : 'Enable Event', value: 'toggle', emoji: '⚡' },
+                { label: 'Delete Configuration', value: 'delete', emoji: '🗑️' }
+            ])
+    );
+
+    if (interaction.deferred) {
+        await interaction.editReply({ embeds: [embed], components: [rowQty, rowLoc, rowActions] });
+    } else {
+        await interaction.update({ embeds: [embed], components: [rowQty, rowLoc, rowActions] });
+    }
+}
+
 const RUST_EMOTES = [
     { label: 'I need wood', value: 'i need wood', emoji: '🪵' }, { label: 'I need stone', value: 'i need stone', emoji: '🪨' },
     { label: 'I need metal', value: 'i need metal', emoji: '⚙️' }, { label: 'I need cloth', value: 'i need cloth', emoji: '🧵' },
@@ -177,63 +235,10 @@ module.exports = async (interaction, client) => {
             // AUTO EVENTS: 100% PURE DROPDOWN SYSTEM
             // =================================================================
 
-            // 1. SELECT EVENT TYPE
             if (interaction.customId === 'ae_event_select_main') {
-                const eventType = module; 
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-                
-                const customName = eventType === 'supply' ? (config?.supplyEventName || 'Supply Drops') : eventType === 'elite' ? (config?.eliteEventName || 'Elite Crates') : (config?.timedEventName || 'Timed Crates');
-                const count = eventType === 'supply' ? (config?.supplySpawnCount || 1) : eventType === 'elite' ? (config?.eliteSpawnCount || 1) : (config?.timedSpawnCount || 1);
-                const interval = eventType === 'supply' ? (config?.supplyInterval || 60) : eventType === 'elite' ? (config?.eliteInterval || 60) : (config?.timedInterval || 60);
-                const isEnabled = eventType === 'supply' ? (config?.autoSupplyEnabled || false) : eventType === 'elite' ? (config?.autoEliteEnabled || false) : (config?.autoTimedEnabled || false);
-
-                const embed = new EmbedBuilder()
-                    .setTitle(`⚙️ Manager: ${customName}`)
-                    .setDescription(`Configure and map locations strictly using the dropdowns below.\n\n` +
-                        `• **Status:** ${isEnabled ? '🟢 Active (Enabled)' : '🔴 Disabled'}\n` +
-                        `• **Spawn Count:** ${count} items\n` +
-                        `• **Repeat Interval:** Every ${interval} minutes`)
-                    .setColor(isEnabled ? '#2ecc71' : '#e74c3c');
-
-                // QTY Dropdown
-                const qtyOptions = [];
-                for (let i = 1; i <= 10; i++) qtyOptions.push({ label: `Spawn Quantity: ${i}`, value: `${i}` });
-                const rowQty = new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder().setCustomId(`ae_qty_select_${eventType}`).setPlaceholder('🔢 Select How Many Items to Spawn (1-10)...').addOptions(qtyOptions)
-                );
-
-                // Slot Dropdown (Dynamically sized based on count)
-                const slotOptions = [];
-                for (let i = 1; i <= count; i++) {
-                    const hasCoord = config && config[`${eventType}Slot${i}X`] !== null;
-                    slotOptions.push({
-                        label: `Set Location for Slot ${i} of ${count}`,
-                        value: `${i}`,
-                        description: hasCoord ? `Mapped (Click to update position)` : `Not set yet`,
-                        emoji: hasCoord ? '📍' : '📌'
-                    });
-                }
-                const rowLoc = new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder().setCustomId(`ae_loc_select_${eventType}`).setPlaceholder(`📍 Map Locations (Slots 1 to ${count})...`).addOptions(slotOptions)
-                );
-
-                // Actions Dropdown
-                const rowActions = new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder()
-                        .setCustomId(`ae_action_select_${eventType}`)
-                        .setPlaceholder('⚙️ Event Actions & Testing...')
-                        .addOptions([
-                            { label: 'Set Custom Name & Timer', value: 'config', emoji: '⏱️' },
-                            { label: 'Test Spawn Now', value: 'test', emoji: '🧪' },
-                            { label: isEnabled ? 'Disable Event' : 'Enable Event', value: 'toggle', emoji: '⚡' },
-                            { label: 'Delete Configuration', value: 'delete', emoji: '🗑️' }
-                        ])
-                );
-
-                return interaction.update({ embeds: [embed], components: [rowQty, rowLoc, rowActions] });
+                return await renderAutoEventPanel(interaction, module);
             }
 
-            // 2. SET QUANTITY DROPDOWN
             if (interaction.customId.startsWith('ae_qty_select_')) {
                 const eventType = interaction.customId.replace('ae_qty_select_', '');
                 const qty = parseInt(module);
@@ -244,10 +249,9 @@ module.exports = async (interaction, client) => {
                 else if (eventType === 'timed') updateObj.timedSpawnCount = qty;
                 
                 await GuildConfig.upsert({ guildId: interaction.guild.id, ...updateObj });
-                return interaction.reply({ content: `✅ Quantity for **${eventType.toUpperCase()}** updated to **${qty}**. Please select the event from the main dropdown again to refresh the panel.`, flags: 64 });
+                return await renderAutoEventPanel(interaction, eventType);
             }
 
-            // 3. SET LOCATION SLOT DROPDOWN
             if (interaction.customId.startsWith('ae_loc_select_')) {
                 const eventType = interaction.customId.replace('ae_loc_select_', '');
                 const slotNum = module;
@@ -257,12 +261,10 @@ module.exports = async (interaction, client) => {
                     return interaction.reply({ content: `❌ Link your Rust account first using \`/playerpanel\` before capturing coordinates!`, flags: 64 });
                 }
 
-                // queueAdminPos creates a button named: btn_finalize_tpl_aeslot_{eventType}_{slotNum}
                 queueAdminPos(userProfile.inGameName, interaction.guild.id, interaction.user.id, interaction.channel.id, `aeslot_${eventType}_${slotNum}`, client);
                 return interaction.reply({ content: `⏳ Stand exactly where you want it. Capturing coordinates for **Slot ${slotNum}** via RCON...`, flags: 64 });
             }
 
-            // 4. EVENT ACTIONS DROPDOWN
             if (interaction.customId.startsWith('ae_action_select_')) {
                 const eventType = interaction.customId.replace('ae_action_select_', '');
                 const action = module;
@@ -288,7 +290,7 @@ module.exports = async (interaction, client) => {
                     else if (eventType === 'timed') { currentState = config?.autoTimedEnabled || false; updateObj.autoTimedEnabled = !currentState; }
 
                     await GuildConfig.upsert({ guildId: interaction.guild.id, ...updateObj });
-                    return interaction.reply({ content: `✅ Event is now **${!currentState ? '🟢 Active (Enabled)' : '🔴 Disabled'}**! Select event again to refresh panel.`, flags: 64 });
+                    return await renderAutoEventPanel(interaction, eventType);
                 }
 
                 if (action === 'delete') {
@@ -304,7 +306,7 @@ module.exports = async (interaction, client) => {
                         for (let i = 1; i <= 10; i++) { resetObj[`timedSlot${i}X`] = null; resetObj[`timedSlot${i}Y`] = null; resetObj[`timedSlot${i}Z`] = null; }
                     }
                     await GuildConfig.upsert({ guildId: interaction.guild.id, ...resetObj });
-                    return interaction.reply({ content: `🗑️ Successfully deleted all settings and locations for this event.`, flags: 64 });
+                    return await renderAutoEventPanel(interaction, eventType);
                 }
 
                 if (action === 'test') {
@@ -312,7 +314,7 @@ module.exports = async (interaction, client) => {
                     if (!config) return interaction.editReply({ content: `❌ Configuration not found.` });
 
                     const count = eventType === 'supply' ? (config.supplySpawnCount || 1) : eventType === 'elite' ? (config.eliteSpawnCount || 1) : (config.timedSpawnCount || 1);
-                    const shortname = eventType === 'supply' ? 'supply_drop' : eventType === 'elite' ? 'codelockedhackablecrate' : 'hackablelockedcrate';
+                    const shortname = eventType === 'supply' ? 'supply_drop' : eventType === 'elite' ? 'crate_elite' : 'hackablelockedcrate';
                     let spawned = 0;
 
                     for (let i = 1; i <= count; i++) {
@@ -329,9 +331,9 @@ module.exports = async (interaction, client) => {
                     if (spawned === 0) {
                         if (eventType === 'supply') await sendRconCommand(interaction.guild.id, 'supply.drop');
                         else await sendRconCommand(interaction.guild.id, `spawn ${shortname}`);
-                        return interaction.editReply({ content: `⚠️ No location slots were set. Triggered a default random test spawn instead!` });
+                        return interaction.editReply({ content: `⚠️ No location slots were mapped. Triggered a standard fallback test spawn instead!` });
                     }
-                    return interaction.editReply({ content: `✅ Test-spawned **${spawned}x** items at their configured locations!` });
+                    return interaction.editReply({ content: `✅ Test-spawned **${spawned}x** items successfully at mapped locations!` });
                 }
             }
 
@@ -855,6 +857,10 @@ module.exports = async (interaction, client) => {
                     const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_kit_create').setLabel('Create Kit Wizard').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId('btn_kit_list').setLabel('View Kits').setStyle(ButtonStyle.Secondary));
                     return interaction.reply({ content: '🎒 **Kit Builder**', components: [row], flags: 64 });
                 }
+                if (module === 'setup_binds') {
+                    const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_bind_add').setLabel('Add Bind').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId('btn_bind_remove').setLabel('Remove Bind').setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId('btn_bind_list').setLabel('List Binds').setStyle(ButtonStyle.Secondary));
+                    return interaction.reply({ content: '🗣️ Custom Binds Manager', components: [row], flags: 64 });
+                }
                 if (module === 'setup_crosschat') {
                     const row = new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_crosschat_channel').setPlaceholder('Select channel...').addChannelTypes(ChannelType.GuildText));
                     return interaction.reply({ content: '💬 Select a text channel:', components: [row], flags: 64 });
@@ -1106,6 +1112,48 @@ module.exports = async (interaction, client) => {
                 modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('confirm_text').setLabel('Type WIPE').setStyle(TextInputStyle.Short).setRequired(true)));
                 return interaction.showModal(modal);
             }
+
+            if (interaction.customId === 'bind_template_select') {
+                const template = interaction.values[0];
+                if (template === 'tpl_kit') {
+                    const kits = await ServerKit.findAll({ where: { guildId: interaction.guild.id } });
+                    if (kits.length === 0) return interaction.reply({ content: '❌ Create a Kit first!', flags: 64 });
+                    const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('bind_kit_select').setPlaceholder('Select Kit...').addOptions(kits.map(k => ({ label: k.kitName, value: k.id.toString() }))));
+                    return interaction.reply({ content: '🎁 **Step 1:** Which kit?', components: [row], flags: 64 });
+                } 
+                else if (template === 'tpl_orp') {
+                    const userProfile = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
+                    if (!userProfile) return interaction.reply({ content: '❌ Link Rust account first using `/playerpanel`!', flags: 64 });
+                    queueAdminPos(userProfile.inGameName, interaction.guild.id, interaction.user.id, interaction.channel.id, 'orp', client);
+                    return interaction.reply({ content: `⏳ Stand in the middle of your base and grab coordinates for ORP setup...`, flags: 64 });
+                }
+                else if (template === 'tpl_custom') {
+                    const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(`bind_emote_custom`).setPlaceholder('Select Quick-Chat...').addOptions(RUST_EMOTES));
+                    return interaction.reply({ content: '🗣️ **Step 1:** Which phrase triggers this command?', components: [row], flags: 64 });
+                } 
+                else {
+                    const userProfile = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
+                    if (!userProfile) return interaction.reply({ content: '❌ Link Rust account first!', flags: 64 });
+                    queueAdminPos(userProfile.inGameName, interaction.guild.id, interaction.user.id, interaction.channel.id, template, client);
+                    return interaction.reply({ content: `⏳ Grabbing coordinates...`, flags: 64 });
+                }
+            }
+
+            if (interaction.customId === 'bind_kit_select') {
+                const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(`bind_emote_kit_${interaction.values[0]}`).setPlaceholder('Select Quick-Chat...').addOptions(RUST_EMOTES));
+                return interaction.update({ content: '🗣️ **Step 2:** Which phrase triggers this kit?', components: [row] });
+            }
+
+            if (interaction.customId.startsWith('bind_emote_')) {
+                const parts = interaction.customId.split('_'); 
+                const type = parts[2]; 
+                const emoteSelection = interaction.values[0];
+                const modalId = type === 'kit' ? `modal_final_kit_${parts[3]}_${emoteSelection}` : (type === 'custom' ? `modal_final_custom_${emoteSelection}` : `modal_final_${type}_${parts[3]}_${parts[4]}_${parts[5]}_${emoteSelection}`);
+                const modal = new ModalBuilder().setCustomId(modalId).setTitle('Final Options');
+                if (type === 'custom') modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('command_data').setLabel("Command").setStyle(TextInputStyle.Short).setRequired(true)));
+                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cost').setLabel("Cost (0 = Free)").setStyle(TextInputStyle.Short).setValue('0').setRequired(false)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cooldown').setLabel("Cooldown (seconds)").setStyle(TextInputStyle.Short).setValue('0').setRequired(false)));
+                return interaction.showModal(modal);
+            }
         }
 
         // ====================================================================
@@ -1155,8 +1203,14 @@ module.exports = async (interaction, client) => {
                     await sendRconCommand(interaction.guild.id, `say "Offline Raid Protection has been setup at ${parts[4]},${parts[5]},${parts[6]}!"`);
                     return interaction.reply({ content: `✅ ORP setup completed.`, flags: 64 });
                 }
-                
-                return interaction.reply({ content: `✅ Location saved!`, flags: 64 });
+
+                const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(`bind_emote_${type}_${parts[4]}_${parts[5]}_${parts[6]}`).setPlaceholder('Select Quick-Chat...').addOptions(RUST_EMOTES));
+                return interaction.reply({ content: `🗣️ **Step 2:** Which Quick-Chat triggers this ${type}?`, components: [row], flags: 64 });
+            }
+
+            if (interaction.customId === 'btn_dismiss_coord') {
+                await interaction.message.delete().catch(() => {});
+                return interaction.reply({ content: '❌ Coordinate prompt dismissed.', flags: 64 });
             }
 
             if (interaction.customId === 'btn_rcon_setup') {
@@ -1316,7 +1370,6 @@ module.exports = async (interaction, client) => {
                 );
                 return interaction.showModal(modal);
             }
-
             if (interaction.customId === 'btn_bounty_clear') {
                 await ActiveBounty.destroy({ where: { guildId: interaction.guild.id } });
                 return interaction.reply({ content: '🗑️ All active bounties have been cleared from the database.', flags: 64 });
@@ -1349,11 +1402,6 @@ module.exports = async (interaction, client) => {
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('caps').setLabel("Max Caps % Allowed (e.g. 70)").setStyle(TextInputStyle.Short).setValue(`${config?.autoModCapsLimit || 70}`).setRequired(true))
                 );
                 return interaction.showModal(modal);
-            }
-
-            if (interaction.customId === 'btn_dismiss_coord') {
-                await interaction.message.delete().catch(() => {});
-                return interaction.reply({ content: '❌ Coordinate prompt dismissed.', flags: 64 });
             }
 
             if (interaction.customId === 'hub_shop_menu') {
@@ -1633,7 +1681,7 @@ module.exports = async (interaction, client) => {
                 }
 
                 await GuildConfig.upsert({ guildId: interaction.guild.id, ...updateObj });
-                return interaction.reply({ content: `✅ Successfully configured **"${customName}"**!\n• Repeat Interval: **${interval} minutes**\n\n*Please select the event from the dropdown menu again to map out the new slots!*`, flags: 64 });
+                return await renderAutoEventPanel(interaction, eventType);
             }
 
             if (interaction.customId.startsWith('modal_admin_give_item_exec_')) {
@@ -2394,7 +2442,7 @@ module.exports = async (interaction, client) => {
 
             if (interaction.customId.startsWith('modal_admin_give_item_exec_')) {
                 try {
-                    await sendRconCommand(interaction.guild.id, `inventory.giveto "${interaction.customId.replace('modal_give_item_', '')}" ${interaction.fields.getTextInputValue('item_name')} ${interaction.fields.getTextInputValue('item_amount')}`);
+                    await sendRconCommand(interaction.guild.id, `inventory.giveto "${interaction.customId.replace('modal_give_item_exec_', '')}" ${interaction.fields.getTextInputValue('item_name')} ${interaction.fields.getTextInputValue('item_amount')}`);
                     return interaction.reply({ content: `✅ Sent!`, flags: 64 });
                 } catch(e) { return interaction.reply({ content: `❌ Error`, flags: 64 }); }
             }
