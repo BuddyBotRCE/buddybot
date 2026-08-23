@@ -5,6 +5,7 @@ module.exports = async (interaction, client) => {
     try {
         const customId = interaction.customId || '';
         const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
+        console.log(`[RR HANDLER DEBUG] CustomID: ${customId} | Selected: ${selectedValue}`);
 
         // --- ADMIN MENU SELECT ENTRY ---
         if ((customId === 'admin_menu_select' && selectedValue === 'setup_reactionroles') || customId === 'rr_action_select') {
@@ -58,7 +59,6 @@ module.exports = async (interaction, client) => {
                 return interaction.reply({ content: `⚠️ The role **${roleObj?.name || roleId}** is already in the queue!`, flags: 64 });
             }
 
-            // Present an imported preset list of emojis in a dropdown menu
             const emojiMenu = new ActionRowBuilder().addComponents(
                 new StringSelectMenuBuilder()
                     .setCustomId(`select_rr_emoji_${roleId}`)
@@ -94,7 +94,6 @@ module.exports = async (interaction, client) => {
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
             const targetChannelId = config?.rrTempChannelId || interaction.channelId;
 
-            // Save to database queue with the chosen preset emoji
             await ReactionRole.create({
                 guildId: interaction.guild.id,
                 channelId: targetChannelId,
@@ -171,9 +170,10 @@ module.exports = async (interaction, client) => {
                 .setTimestamp();
 
             const buttons = roles.map((rr) => {
+                const labelText = rr.buttonLabel || interaction.guild.roles.cache.get(rr.roleId)?.name || 'Get Role';
                 const btn = new ButtonBuilder()
                     .setCustomId(`rr_toggle_${rr.id}`)
-                    .setLabel(rr.buttonLabel)
+                    .setLabel(labelText.substring(0, 80))
                     .setStyle(ButtonStyle.Primary);
                 
                 if (rr.emoji) {
