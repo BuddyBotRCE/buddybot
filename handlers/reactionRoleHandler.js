@@ -9,7 +9,7 @@ module.exports = async (interaction, client) => {
 
         // --- ADMIN MENU SELECT ENTRY ---
         if ((customId === 'admin_menu_select' && selectedValue === 'setup_reactionroles') || customId === 'rr_action_select') {
-            const activeRoles = await ReactionRole.count({ where: { guildId: interaction.guild.id, messageId: 'PENDING_DEPLOY' } });
+            const activeRoles = await ReactionRole.count({ where: { guildId: interaction.guild.id } });
             
             const embed = new EmbedBuilder()
                 .setTitle('🎭 Reaction Roles Setup')
@@ -135,11 +135,11 @@ module.exports = async (interaction, client) => {
             return interaction.reply({ content: `✅ Panel description saved successfully!`, flags: 64 });
         }
 
-        // --- CLEAR QUEUE BUTTON ---
+        // --- CLEAR QUEUE BUTTON (FIXED TO WIPE ALL GUILD QUEUE ENTRIES) ---
         if (interaction.isButton() && customId === 'btn_rr_clear') {
-            await ReactionRole.destroy({ where: { guildId: interaction.guild.id, messageId: 'PENDING_DEPLOY' } });
+            await ReactionRole.destroy({ where: { guildId: interaction.guild.id } });
             await GuildConfig.update({ rrTempDescription: null, rrTempChannelId: null }, { where: { guildId: interaction.guild.id } });
-            return interaction.reply({ content: '🗑️ Cleared all queued reaction roles for this server.', flags: 64 });
+            return interaction.reply({ content: '🗑️ Cleared all queued reaction roles and temporary config for this server.', flags: 64 });
         }
 
         // --- DEPLOY REACTION ROLE PANEL ---
