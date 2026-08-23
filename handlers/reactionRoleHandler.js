@@ -51,8 +51,6 @@ module.exports = async (interaction, client) => {
         // --- HANDLE ROLE SELECTION & PROMPT FOR EMOJI ---
         if (interaction.isRoleSelectMenu() && customId === 'select_rr_role') {
             const roleId = interaction.values[0];
-            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-            const targetChannelId = config?.rrTempChannelId || interaction.channelId;
             const roleObj = interaction.guild.roles.cache.get(roleId);
 
             const existing = await ReactionRole.findOne({ where: { guildId: interaction.guild.id, roleId: roleId, messageId: 'PENDING_DEPLOY' } });
@@ -60,17 +58,27 @@ module.exports = async (interaction, client) => {
                 return interaction.reply({ content: `⚠️ The role **${roleObj?.name || roleId}** is already in the queue!`, flags: 64 });
             }
 
-            // Save temporarily to pass roleId into the modal session
-            await GuildConfig.upsert({ guildId: interaction.guild.id, rrTempRoleId: roleId, rrTempChannelId: targetChannelId });
+            // Embed roleId directly into the modal customId to avoid database state issues
+            const modal = new ModalBuilder()
+                .setCustomId(`modal_rr_add_role_${roleId}`)
+                .setTitle(`Configure Button: ${roleObj?.name || 'Role'}`);
 
-            // Pop open a quick modal to let them type a custom emoji and button label
-            const modal = new ModalBuilder().setCustomId('modal_rr_add_role').setTitle(`Configure Button: ${roleObj?.name || 'Role'}`);
             modal.addComponents(
                 new ActionRowBuilder().addComponents(
-                    new TextInputBuilder().setCustomId('button_label').setLabel("Button Label").setStyle(TextInputStyle.Short).setValue(roleObj?.name || 'Get Role').setRequired(true)
+                    new TextInputBuilder()
+                        .setCustomId('button_label')
+                        .setLabel("Button Label")
+                        .setStyle(TextInputStyle.Short)
+                        .setValue(roleObj?.name || 'Get Role')
+                        .setRequired(true)
                 ),
                 new ActionRowBuilder().addComponents(
-                    new TextInputBuilder().setCustomId('button_emoji').setLabel("Button Emoji (e.g. 🔥 or 🛡️)").setStyle(TextInputStyle.Short).setValue('🏷️').setRequired(true)
+                    new TextInputBuilder()
+                        .setCustomId('button_emoji')
+                        .setLabel("Button Emoji (Type any emoji like 🔥 or 🛡️)")
+                        .setStyle(TextInputStyle.Short)
+                        .setValue('🏷️')
+                        .setRequired(true)
                 )
             );
 
@@ -78,17 +86,13 @@ module.exports = async (interaction, client) => {
         }
 
         // --- HANDLE MODAL SUBMISSION FOR ROLE EMOJI & LABEL ---
-        if (interaction.isModalSubmit() && customId === 'modal_rr_add_role') {
+        if (interaction.isModalSubmit() && customId.startsWith('modal_rr_add_role_')) {
+            const roleId = customId.replace('modal_rr_add_role_', '');
             const label = interaction.fields.getTextInputValue('button_label').trim();
             const emoji = interaction.fields.getTextInputValue('button_emoji').trim();
-            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
             
-            const roleId = config?.rrTempRoleId;
+            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
             const targetChannelId = config?.rrTempChannelId || interaction.channelId;
-
-            if (!roleId) {
-                return interaction.reply({ content: '❌ Session expired. Please re-select the role from the dropdown.', flags: 64 });
-            }
 
             await ReactionRole.create({
                 guildId: interaction.guild.id,
@@ -144,7 +148,6 @@ module.exports = async (interaction, client) => {
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
             const targetChannelId = config?.rrTempChannelId || roles[0].channelId;
             
-            // Fetch channel safely with cache fallback or API fetch
             let targetChannel = interaction.guild.channels.cache.get(targetChannelId);
             if (!targetChannel) {
                 try {
