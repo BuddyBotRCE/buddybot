@@ -94,19 +94,19 @@ function loadCommandsRecursively(dir) {
 }
 loadCommandsRecursively(commandsPath);
 
-// Load Events
-const eventsPath = path.join(__dirname, 'events');
-if (fs.existsSync(eventsPath)) {
-    for (const file of fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'))) {
-        const event = require(path.join(eventsPath, file));
-        if (file.split('.')[0] === 'interactionCreate') {
-            client.on('interactionCreate', async interaction => await event(interaction, client));
+    // Load Events Explicitly
+const interactionCreateEvent = path.join(__dirname, 'events', 'interactionCreate.js');
+if (fs.existsSync(interactionCreateEvent)) {
+    const event = require(interactionCreateEvent);
+    client.on('interactionCreate', async interaction => {
+        try {
+            await event(interaction, client);
+        } catch (err) {
+            console.error('[INTERACTION EVENT ERROR]', err);
         }
-    }
+    });
+    console.log('[SYSTEM] Loaded event: interactionCreate');
 }
-
-client.once('clientReady', async () => {
-    console.log(`[SYSTEM] BuddyBotRCE is online as ${client.user.tag}`);
 
     // --- INITIALIZE BACKGROUND AUTO-EVENT MANAGER LOOP SAFELY ---
     try {
@@ -118,6 +118,7 @@ client.once('clientReady', async () => {
         console.log('[SYSTEM] Auto event loop file skipped or not found.');
     }
 
+client.once('ready', async () => {
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     const commandData = client.commands.map(cmd => cmd.data.toJSON());
     
