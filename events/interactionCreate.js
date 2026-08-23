@@ -107,6 +107,9 @@ module.exports = async (interaction, client) => {
         if (customId.includes('verify') || customId.includes('verification')) {
             return await verificationHandler(interaction, client);
         }
+        if (customId.includes('rr_') || customId.includes('reaction') || customId.includes('select_rr')) {
+            return await reactionRoleHandler(interaction, client);
+        }
 
         return await adminHandler(interaction, client);
 
