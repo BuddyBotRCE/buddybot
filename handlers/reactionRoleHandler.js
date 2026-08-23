@@ -16,7 +16,7 @@ module.exports = async (interaction, client) => {
         console.log(`[RR HANDLER DEBUG] CustomID: ${customId} | Selected: ${selectedValue}`);
 
         // Helper function to render the main setup interface state dynamically
-        async const renderSetupPanel = async (inter, messageOverride = '') => {
+        const renderSetupPanel = async (inter, messageOverride = '') => {
             const guildId = inter.guild.id;
             const activeRoles = await ReactionRole.count({ where: { guildId, messageId: 'PENDING_DEPLOY' } });
             const config = await GuildConfig.findOne({ where: { guildId } });
@@ -132,7 +132,6 @@ module.exports = async (interaction, client) => {
                 emoji: selectedEmoji
             });
 
-            // Re-render setup panel with success note
             return await renderSetupPanel(interaction, `✅ Successfully added role **${roleObj?.name || 'Role'}** with emoji ${selectedEmoji}!`);
         }
 
@@ -200,7 +199,6 @@ module.exports = async (interaction, client) => {
                 targetChannel = interaction.channel;
             }
 
-            // Pull custom description directly from DB instance
             const customDescription = config?.getDataValue('rrTempDescription') || 'Click the button below to verify and get your role instantly!';
             console.log(`[RR DEPLOY] Channel: ${targetChannel.id} | Description Length: ${customDescription.length}`);
 
@@ -230,7 +228,6 @@ module.exports = async (interaction, client) => {
 
             const sentMessage = await targetChannel.send({ embeds: [embed], components: rows });
 
-            // Stamp message ID and clear temp settings
             await ReactionRole.update({ messageId: sentMessage.id }, { where: { guildId: interaction.guild.id, messageId: 'PENDING_DEPLOY' } });
             await config.update({ rrTempDescription: null, rrTempChannelId: null });
 
