@@ -8,24 +8,27 @@ module.exports = async (interaction, client) => {
     const customId = interaction.customId || '';
     const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
 
-    // --- HELPER FUNCTION: LIVE STORE MANAGER VIEW ---
+    // --- HELPER FUNCTION: CATEGORY BREAKDOWN SHOP MANAGER PANEL ---
     async function renderShopManagePanel(interaction, messageText = '') {
-        const items = await ShopItem.findAll({ where: { guildId: interaction.guild.id } });
-        const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-        const currency = config?.economyCurrency || 'Scrap';
-        const multiplier = (config?.shopMultiplier || 100) / 100;
+        const dbItems = await ShopItem.findAll({ where: { guildId: interaction.guild.id } });
+        const totalCount = dbItems.length;
+
+        let categoryBreakdown = '';
+        for (const catKey in RUST_CATEGORIES) {
+            const count = dbItems.filter(i => i.category === catKey).length;
+            categoryBreakdown += `• ${RUST_CATEGORIES[catKey].emoji} **${RUST_CATEGORIES[catKey].label}:** \`${count}\` item(s)\n`;
+        }
+        const customCount = dbItems.filter(i => i.category === 'custom').length;
+        categoryBreakdown += `• ✨ **Custom / Server Items:** \`${customCount}\` item(s)\n`;
 
         const embed = new EmbedBuilder()
-            .setTitle('🛒 Server Shop Manager & Active Items')
-            .setDescription(messageText ? `**${messageText}**\n\n` : '' + `Here is everything currently active in your store (${items.length} items total):`)
+            .setTitle('🛒 Server Shop Manager')
+            .setDescription(messageText ? `**${messageText}**\n\n` : '' + 
+                `Manage your store categories, add prebuilt catalog items, custom gear, or adjust pricing multipliers.\n\n` +
+                `📊 **Active Store Summary:**\n` +
+                `• **Total Items in Store:** \`${totalCount}\`\n\n` +
+                `📂 **Category Breakdown:**\n${categoryBreakdown}`)
             .setColor('#2ecc71');
-
-        if (items.length === 0) {
-            embed.addFields({ name: 'Store Status', value: '❌ No items in the store yet. Use the action menu below to add some!' });
-        } else {
-            const list = items.slice(0, 25).map(i => `• **${i.name}** — 💰 ${Math.round(i.price * multiplier)} ${currency} *(CD: ${i.cooldownSeconds}s)*`).join('\n');
-            embed.addFields({ name: 'Active Items List', value: list.length > 1024 ? list.substring(0, 1021) + '...' : list });
-        }
 
         const row = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder().setCustomId('shop_action_select').setPlaceholder('Select shop action...')
@@ -63,14 +66,6 @@ module.exports = async (interaction, client) => {
             return interaction.update({ content: '📦 Select a category to open the multi-select item checklist:', components: [row], embeds: [] });
         }
         if (selectedValue === 'shop_add_custom') {
-            const modal = new ModalBuilder().setCustomId('modal_shop_custom').setTitle('Add Custom Shop Item');
-            modal.addComponents(
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('item_name').setLabel("Display Name").setStyle(TextInputStyle.Short).setRequired(true)),
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('item_cmd').setLabel("RCON Command (use {player})").setStyle(TextInputStyle.Short).setRequired(true)),
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('item_price').setLabel("Price").setStyle(TextInputStyle.Short).setRequired(true)),
-                new TextInputBuilder().setCustomId('item_cooldown') // handled safely via modals
-            );
-            // Re-building modal cleanly
             const cleanModal = new ModalBuilder().setCustomId('modal_shop_custom').setTitle('Add Custom Shop Item');
             cleanModal.addComponents(
                 new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('item_name').setLabel("Display Name").setStyle(TextInputStyle.Short).setRequired(true)),
@@ -99,7 +94,6 @@ module.exports = async (interaction, client) => {
         const categoryData = RUST_CATEGORIES[catKey];
         const dbItems = await ShopItem.findAll({ where: { guildId: interaction.guild.id } });
 
-        // Map items, showing checkmarks or text if they are already in the store
         const itemOptions = categoryData.items.slice(0, 25).map(item => {
             const isAlreadyAdded = dbItems.some(i => i.command.includes(item.shortname));
             return {
@@ -109,7 +103,6 @@ module.exports = async (interaction, client) => {
             };
         });
         
-        // Multi-select enabled: checkmark multiple, uncheck to skip
         const row = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder()
                 .setCustomId('shop_catalog_multi_select')
