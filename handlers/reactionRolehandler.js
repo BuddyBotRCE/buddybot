@@ -7,7 +7,7 @@ module.exports = async (interaction, client) => {
         const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
 
         // --- ADMIN MENU SELECT ENTRY ---
-        if (customId === 'admin_menu_select' && selectedValue === 'setup_reactionroles') {
+        if ((customId === 'admin_menu_select' && selectedValue === 'setup_reactionroles') || customId === 'rr_action_select') {
             const activeRoles = await ReactionRole.count({ where: { guildId: interaction.guild.id } });
             
             const embed = new EmbedBuilder()
