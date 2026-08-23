@@ -60,10 +60,15 @@ module.exports = async (interaction, client) => {
         }
 
         // ====================================================================
-        // 🚦 3. COMPONENT & MODAL ROUTING STATION (CLANS FIRST TO PREVENT CONFLICTS)
+        // 🚦 3. COMPONENT & MODAL ROUTING STATION (PRIORITY ROUTERS FIRST)
         // ====================================================================
 
-        // --- CLANS ROUTER (PLACED FIRST SO 'deposit' DOESN'T HIJACK IT) ---
+        // --- REACTION ROLES ROUTER (MOVED TO TOP TO PREVENT INTERCEPTION) ---
+        if (customId.includes('rr_') || customId.includes('reaction') || customId.includes('select_rr')) {
+            return await reactionRoleHandler(interaction, client);
+        }
+
+        // --- CLANS ROUTER ---
         if (customId.includes('clan') || customId.includes('bank') || customId.startsWith('modal_clan_') || customId.startsWith('btn_clan_') || customId.startsWith('btn_bank_') || customId.startsWith('clan_modal_') || customId.startsWith('select_clan_')) {
             return await clanHandler(interaction, client);
         }
@@ -109,9 +114,6 @@ module.exports = async (interaction, client) => {
         }
         if (customId.includes('verify') || customId.includes('verification')) {
             return await verificationHandler(interaction, client);
-        }
-        if (customId.includes('rr_') || customId.includes('reaction') || customId.includes('select_rr')) {
-            return await reactionRoleHandler(interaction, client);
         }
 
         return await adminHandler(interaction, client);
