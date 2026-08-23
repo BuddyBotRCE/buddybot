@@ -124,7 +124,15 @@ module.exports = async (interaction, client) => {
                 return interaction.showModal(modal);
             }
 
-            // --- CLEAN BANK MENU (Deposit / Withdraw Buttons) ---
+            // --- SPECIFIC BANK ACTION BUTTONS (CHECK THESE FIRST!) ---
+            if (customId === 'btn_clan_bank_deposit' || customId === 'btn_clan_bank_withdraw') {
+                const action = customId === 'btn_clan_bank_deposit' ? 'deposit' : 'withdraw';
+                const modal = new ModalBuilder().setCustomId(`modal_clan_bank_${action}`).setTitle(`Clan Bank - ${action.toUpperCase()}`);
+                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel("Amount (or type 'all')").setStyle(TextInputStyle.Short).setRequired(true)));
+                return interaction.showModal(modal);
+            }
+
+            // --- GENERAL BANK MENU ---
             if (customId.startsWith('btn_clan_bank_')) {
                 const memberData = await ClanMember.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
                 const clan = await Clan.findByPk(memberData.clanId);
@@ -145,36 +153,6 @@ module.exports = async (interaction, client) => {
                 return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
             }
 
-            if (customId === 'modal_clan_bank_deposit' || customId === 'modal_clan_bank_withdraw') {
-                const isDeposit = (customId === 'modal_clan_bank_deposit');
-                const input = interaction.fields.getTextInputValue('amount').trim().toLowerCase();
-                
-                const memberData = await ClanMember.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
-                const clan = await Clan.findByPk(memberData.clanId);
-                const user = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-                const currency = config?.economyCurrency || 'Scrap';
-
-                if (isDeposit) {
-                    let amount = input === 'all' ? user.wallet : parseInt(input);
-                    if (isNaN(amount) || amount <= 0) return interaction.reply({ content: '❌ Please enter a valid number.', flags: 64 });
-                    if (user.wallet < amount) return interaction.reply({ content: `❌ You only have **${user.wallet} ${currency}** in your wallet!`, flags: 64 });
-
-                    await user.update({ wallet: user.wallet - amount });
-                    await clan.update({ bankBalance: clan.bankBalance + amount });
-                    return interaction.reply({ content: `🏦 Successfully deposited **${amount} ${currency}** into the clan bank!`, flags: 64 });
-                } else {
-                    if (memberData.role !== 'Leader') return interaction.reply({ content: `❌ Only the clan leader can withdraw funds from the clan bank!`, flags: 64 });
-                    let amount = input === 'all' ? clan.bankBalance : parseInt(input);
-                    if (isNaN(amount) || amount <= 0) return interaction.reply({ content: '❌ Please enter a valid number.', flags: 64 });
-                    if (clan.bankBalance < amount) return interaction.reply({ content: `❌ The clan bank only has **${clan.bankBalance} ${currency}**!`, flags: 64 });
-
-                    await clan.update({ bankBalance: clan.bankBalance - amount });
-                    await user.update({ wallet: user.wallet + amount });
-                    return interaction.reply({ content: `🏧 Successfully withdrew **${amount} ${currency}** from the clan bank to your wallet!`, flags: 64 });
-                }
-            }
-
             // --- MANAGE MEMBERS ---
             if (customId.startsWith('btn_clan_manage_')) {
                 const memberData = await ClanMember.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
@@ -193,37 +171,16 @@ module.exports = async (interaction, client) => {
 
             // --- CLAN WARS ---
             if (customId.startsWith('btn_clan_wars_')) {
-                const memberData = await ClanMember.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
-                const myClan = await Clan.findByPk(memberData.clanId);
-                
-                // Find all other rival clans on the server
-                const rivalClans = await Clan.findAll({
-                    where: {
-                        guildId: interaction.guild.id,
-                        id: { [require('sequelize').Op.ne]: myClan.id }
-                    }
-                });
-
                 const embed = new EmbedBuilder()
                     .setTitle('⚔️ Clan Wars Hub')
-                    .setDescription(`Welcome to the Clan Wars arena, **${myClan.tag}**!\n\nDeclare war on rival clans to fight for server dominance. Select a target clan below to issue a challenge:`)
+                    .setDescription(`Clan Wars are currently in **Pre-Season / Development**. Soon you will be able to declare war on rival clans, compete for territory, and raid rival clan banks!`)
                     .setColor('#e74c3c');
+                return interaction.reply({ embeds: [embed], flags: 64 });
+            }
 
-                if (rivalClans.length === 0) {
-                    return interaction.reply({ content: '⚔️ There are currently no rival clans on the server to declare war on!', flags: 64 });
-                }
-
-                const options = rivalClans.slice(0, 25).map(c => ({
-                    label: `${c.tag} ${c.name}`,
-                    description: `Bank: ${c.bankBalance} Scrap`,
-                    value: `declare_war_${c.id}`
-                }));
-
-                const row = new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder().setCustomId('select_clan_war_target').setPlaceholder('Select rival clan to challenge...').addOptions(options)
-                );
-
-                return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+            if (customId.startsWith('btn_clan_invite_')) {
+                const row = new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId('select_clan_invite_target').setPlaceholder('Select player to invite to your clan...'));
+                return interaction.reply({ content: '📩 **Invite Player:** Select a user from the list below:', components: [row], flags: 64 });
             }
 
             if (customId.startsWith('btn_clan_leave_') || customId.startsWith('btn_clan_disband_')) {
@@ -275,17 +232,11 @@ module.exports = async (interaction, client) => {
             }
         }
 
-       if (interaction.isStringSelectMenu()) {
+        if (interaction.isStringSelectMenu()) {
             if (customId === 'select_clan_kick') {
                 const targetUserId = selectedValue.replace('kick_', '');
                 await ClanMember.destroy({ where: { guildId: interaction.guild.id, userId: targetUserId } });
                 return interaction.update({ content: `✅ Successfully kicked member from the clan.`, components: [] });
-            }
-
-            if (customId === 'select_clan_war_target') {
-                const targetClanId = selectedValue.replace('declare_war_', '');
-                const targetClan = await Clan.findByPk(targetClanId);
-                return interaction.update({ content: `⚔️ **War Challenge Issued!** Your clan has officially declared war on **${targetClan.tag} ${targetClan.name}**! *(Automated raid mechanics & territory scoring coming online next).*`, components: [] });
             }
         }
 
@@ -355,7 +306,7 @@ module.exports = async (interaction, client) => {
             }
 
             if (customId === 'modal_clan_bank_deposit' || customId === 'modal_clan_bank_withdraw') {
-                const isDeposit = customId === 'modal_clan_bank_deposit';
+                const isDeposit = (customId === 'modal_clan_bank_deposit');
                 const input = interaction.fields.getTextInputValue('amount').trim().toLowerCase();
                 
                 const memberData = await ClanMember.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
