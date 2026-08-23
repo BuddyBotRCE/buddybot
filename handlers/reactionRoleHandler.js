@@ -47,7 +47,7 @@ module.exports = async (interaction, client) => {
             return interaction.reply({ content: `✅ Reaction Role target channel set to <#${channelId}>! Now select roles below.`, flags: 64 });
         }
 
-        // --- HANDLE ROLE SELECTION (Supports Adding Multiple) ---
+        // --- HANDLE ROLE SELECTION (Satisfies DB schema constraints) ---
         if (interaction.isRoleSelectMenu() && customId === 'select_rr_role') {
             const roleId = interaction.values[0];
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
@@ -60,13 +60,15 @@ module.exports = async (interaction, client) => {
                 return interaction.reply({ content: `⚠️ The role **${roleObj?.name || roleId}** is already in the queue!`, flags: 64 });
             }
 
-            // Save role config to database queue
+            // Save role config to database queue satisfying required fields
             await ReactionRole.create({
                 guildId: interaction.guild.id,
                 channelId: targetChannelId,
                 roleId: roleId,
                 buttonLabel: roleObj?.name || 'Get Role',
-                buttonStyle: 'Primary'
+                buttonStyle: 'Primary',
+                messageId: 'PENDING_DEPLOY',
+                emoji: '🏷️'
             });
 
             const totalQueued = await ReactionRole.count({ where: { guildId: interaction.guild.id } });
@@ -111,7 +113,11 @@ module.exports = async (interaction, client) => {
                 rows.push(new ActionRowBuilder().addComponents(buttons.slice(i, i + 5)));
             }
 
-            await targetChannel.send({ embeds: [embed], components: rows });
+            const sentMessage = await targetChannel.send({ embeds: [embed], components: rows });
+
+            // Update queued rows with the real message ID
+            await ReactionRole.update({ messageId: sentMessage.id }, { where: { guildId: interaction.guild.id, messageId: 'PENDING_DEPLOY' } });
+
             return interaction.reply({ content: `✅ Multi-role Reaction panel successfully deployed to <#${targetChannelId}> with ${roles.length} roles!`, flags: 64 });
         }
 
