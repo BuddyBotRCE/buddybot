@@ -37,7 +37,9 @@ module.exports = {
                     { label: 'Post Custom Embed', value: 'setup_embed', emoji: '📢' },
                     { label: 'AI Integration Setup', value: 'setup_ai', emoji: '🤖' },
                     { label: 'Logging System', value: 'setup_logging', emoji: '📊' },
-                    { label: 'Suggestions System', value: 'setup_suggestions', emoji: '💡' }
+                    { label: 'Suggestions System', value: 'setup_suggestions', emoji: '💡' },
+                    { label: '🛡️ Setup Verification', value: 'setup_verification' },
+                    { label: '🎭 Setup Reaction Roles', value: 'setup_reactionroles' },
                 ])
         );
 

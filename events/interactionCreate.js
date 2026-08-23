@@ -54,6 +54,8 @@ module.exports = async (interaction, client) => {
             if (selectedValue === 'setup_kits') return await kitHandler(interaction, client);
             if (selectedValue === 'setup_pvezones') return await pveHandler(interaction, client);
             if (selectedValue === 'setup_binds') return await bindHandler(interaction, client);
+            if (selectedValue === 'setup_verification') return await verificationHandler(interaction, client);
+            if (selectedValue === 'setup_reactionroles') return await reactionRoleHandler(interaction, client);
             return await adminHandler(interaction, client);
         }
 

@@ -12,25 +12,25 @@ module.exports = async (interaction, client) => {
             
             const embed = new EmbedBuilder()
                 .setTitle('🎭 Reaction Roles Setup')
-                .setDescription(`Create interactive button-based role panels. Use the native dropdown menus below to configure your panel channels and roles.\n\n• **Active Reaction Roles:** ${activeRoles}`)
+                .setDescription(`Create interactive button-based role panels. Use the dropdowns below to choose your channel and add multiple roles to the queue.\n\n• **Queued / Active Roles:** ${activeRoles}`)
                 .setColor('#3498db');
 
             const channelRow = new ActionRowBuilder().addComponents(
                 new ChannelSelectMenuBuilder()
                     .setCustomId('select_rr_channel')
-                    .setPlaceholder('📂 Select Target Channel for RR Panel...')
+                    .setPlaceholder('📂 1. Select Target Channel for RR Panel...')
                     .addChannelTypes(ChannelType.GuildText)
             );
 
             const roleRow = new ActionRowBuilder().addComponents(
                 new RoleSelectMenuBuilder()
                     .setCustomId('select_rr_role')
-                    .setPlaceholder('🏷️ Select Role to Add to Panel...')
+                    .setPlaceholder('🏷️ 2. Select Role(s) to Add (Repeat for Multiple)...')
             );
 
             const actionRow = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('btn_rr_deploy').setLabel('Deploy Panel').setStyle(ButtonStyle.Success).setEmoji('📦'),
-                new ButtonBuilder().setCustomId('btn_rr_list').setLabel('View Active Roles').setStyle(ButtonStyle.Secondary).setEmoji('📋')
+                new ButtonBuilder().setCustomId('btn_rr_clear').setLabel('Clear Queue').setStyle(ButtonStyle.Danger).setEmoji('🗑️')
             );
 
             return interaction.reply({ 
@@ -40,29 +40,43 @@ module.exports = async (interaction, client) => {
             });
         }
 
-        // --- HANDLE CHANNEL SELECTION (Temporarily store in memory or config) ---
+        // --- HANDLE CHANNEL SELECTION ---
         if (interaction.isChannelSelectMenu() && customId === 'select_rr_channel') {
             const channelId = interaction.values[0];
             await GuildConfig.upsert({ guildId: interaction.guild.id, rrTempChannelId: channelId });
-            return interaction.reply({ content: `✅ Reaction Role target channel temporarily set to <#${channelId}>! Now select a role below.`, flags: 64 });
+            return interaction.reply({ content: `✅ Reaction Role target channel set to <#${channelId}>! Now select roles below.`, flags: 64 });
         }
 
-        // --- HANDLE ROLE SELECTION (Saves to database immediately) ---
+        // --- HANDLE ROLE SELECTION (Supports Adding Multiple) ---
         if (interaction.isRoleSelectMenu() && customId === 'select_rr_role') {
             const roleId = interaction.values[0];
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
             const targetChannelId = config?.rrTempChannelId || interaction.channelId;
+            const roleObj = interaction.guild.roles.cache.get(roleId);
 
-            // Save role config to database
+            // Prevent duplicates
+            const existing = await ReactionRole.findOne({ where: { guildId: interaction.guild.id, roleId: roleId } });
+            if (existing) {
+                return interaction.reply({ content: `⚠️ The role **${roleObj?.name || roleId}** is already in the queue!`, flags: 64 });
+            }
+
+            // Save role config to database queue
             await ReactionRole.create({
                 guildId: interaction.guild.id,
                 channelId: targetChannelId,
                 roleId: roleId,
-                buttonLabel: interaction.guild.roles.cache.get(roleId)?.name || 'Get Role',
+                buttonLabel: roleObj?.name || 'Get Role',
                 buttonStyle: 'Primary'
             });
 
-            return interaction.reply({ content: `✅ Successfully added role <@&${roleId}> to the reaction role queue! Click **Deploy Panel** when you're ready.`, flags: 64 });
+            const totalQueued = await ReactionRole.count({ where: { guildId: interaction.guild.id } });
+            return interaction.reply({ content: `✅ Added **${roleObj?.name || 'Role'}** to the reaction role queue! *(Total queued: ${totalQueued}). Select another role or click **Deploy Panel**.*`, flags: 64 });
+        }
+
+        // --- CLEAR QUEUE BUTTON ---
+        if (interaction.isButton() && customId === 'btn_rr_clear') {
+            await ReactionRole.destroy({ where: { guildId: interaction.guild.id } });
+            return interaction.reply({ content: '🗑️ Cleared all queued reaction roles for this server.', flags: 64 });
         }
 
         // --- DEPLOY REACTION ROLE PANEL ---
@@ -80,25 +94,25 @@ module.exports = async (interaction, client) => {
 
             const embed = new EmbedBuilder()
                 .setTitle('🎭 Server Roles')
-                .setDescription('Click the buttons below to toggle your roles instantly!')
+                .setDescription('Click the buttons below to assign or remove roles instantly!')
                 .setColor('#f1c40f');
 
-            // Build buttons dynamically from database entries
-            const buttons = roles.map((rr, index) => 
+            // Build buttons dynamically for every role in the database queue
+            const buttons = roles.map((rr) => 
                 new ButtonBuilder()
                     .setCustomId(`rr_toggle_${rr.id}`)
                     .setLabel(rr.buttonLabel)
                     .setStyle(ButtonStyle.Primary)
             );
 
-            // Group buttons into rows of up to 5
+            // Group buttons into rows of up to 5 (Discord limit per action row)
             const rows = [];
             for (let i = 0; i < buttons.length; i += 5) {
                 rows.push(new ActionRowBuilder().addComponents(buttons.slice(i, i + 5)));
             }
 
             await targetChannel.send({ embeds: [embed], components: rows });
-            return interaction.reply({ content: `✅ Reaction Role panel successfully deployed to <#${targetChannelId}>!`, flags: 64 });
+            return interaction.reply({ content: `✅ Multi-role Reaction panel successfully deployed to <#${targetChannelId}> with ${roles.length} roles!`, flags: 64 });
         }
 
         // --- USER CLICKS A REACTION ROLE BUTTON ---
