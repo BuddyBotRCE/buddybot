@@ -88,7 +88,7 @@ module.exports = async (interaction, client) => {
         }
 
         // --- CLANS ROUTER (Captures all button clicks, select menus, and modals for clans) ---
-        if (customId.includes('clan') || customId.startsWith('modal_clan_') || customId.startsWith('btn_clan_') || customId.startsWith('select_clan_')) {
+        if (customId.includes('clan') || customId.includes('bank') || customId.startsWith('modal_clan_') || customId.startsWith('btn_clan_') || customId.startsWith('btn_bank_') || customId.startsWith('select_clan_')) {
             return await clanHandler(interaction, client);
         }
 
