@@ -25,6 +25,7 @@ const kitHandler = require(handlerPath('kitHandler'));
 const pveHandler = require(handlerPath('pveHandler'));
 const bindHandler = require(handlerPath('bindHandler'));
 const adminHandler = require(handlerPath('adminHandler'));
+const reactionRoleHandler = require(handlerPath('reactionRoleHandler'));
 
 module.exports = async (interaction, client) => {
     console.log(`[INTERACTION DEBUG] Type: ${interaction.type} | CustomID: ${interaction.customId || 'N/A'} | Command: ${interaction.commandName || 'N/A'}`);
