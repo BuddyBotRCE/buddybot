@@ -9,14 +9,20 @@ module.exports = async (interaction, client) => {
 
     // --- ADMIN SETUP HUB ---
     if (customId === 'admin_menu_select' && selectedValue === 'setup_shop') {
-        const embed = new EmbedBuilder().setTitle('🛒 Server Shop Manager').setDescription('Add prebuilt catalog items, custom gear, or adjust pricing multipliers.').setColor('#e67e22');
+        const itemCount = await ShopItem.count({ where: { guildId: interaction.guild.id } });
+        const embed = new EmbedBuilder()
+            .setTitle('🛒 Server Shop Manager')
+            .setDescription(`Add prebuilt catalog items, custom gear, or adjust pricing multipliers.\n\n• **Active Store Items:** ${itemCount}`)
+            .setColor('#e67e22');
+            
         const row = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder().setCustomId('shop_action_select').setPlaceholder('Select shop action...')
             .addOptions([
-                { label: 'Add Prebuilt Catalog Items (Multi-Select)', value: 'shop_add_catalog', emoji: '📦' },
+                { label: 'Add Prebuilt Catalog Items', value: 'shop_add_catalog', emoji: '📦' },
                 { label: 'Add Custom Shop Item', value: 'shop_add_custom', emoji: '✨' },
                 { label: 'Set Price Multiplier (e.g. 500%)', value: 'shop_multiplier', emoji: '📈' },
-                { label: 'View / Manage Live Store', value: 'shop_manage', emoji: '📋' }
+                { label: 'View / Manage Live Store', value: 'shop_manage', emoji: '📋' },
+                { label: 'Clear Entire Shop', value: 'shop_clear_all', emoji: '🗑️' }
             ])
         );
         return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
@@ -49,33 +55,53 @@ module.exports = async (interaction, client) => {
             const list = items.slice(0, 25).map(i => `• **${i.name}** - 💰 ${i.price} | CD: ${i.cooldownSeconds}s`).join('\n');
             return interaction.reply({ embeds: [new EmbedBuilder().setTitle('📋 Active Shop Items').setDescription(list).setColor('#2ecc71')], flags: 64 });
         }
+        if (selectedValue === 'shop_clear_all') {
+            await ShopItem.destroy({ where: { guildId: interaction.guild.id } });
+            return interaction.reply({ content: '🗑️ Successfully cleared and wiped all items from the server shop!', flags: 64 });
+        }
     }
 
     if (customId === 'shop_catalog_category') {
         const catKey = selectedValue.replace('shop_cat_', '');
         const categoryData = RUST_CATEGORIES[catKey];
+        
+        // Converted to single-select dropdown so you pick one item at a time cleanly without multi-select clutter
         const itemOptions = categoryData.items.slice(0, 25).map(item => ({ label: item.name, description: `Shortname: ${item.shortname} | Base: ${item.basePrice}`, value: `${catKey}__${item.shortname}` }));
         
         const row = new ActionRowBuilder().addComponents(
-            new StringSelectMenuBuilder().setCustomId('shop_catalog_multi_select').setPlaceholder('Check multiple items to add...').setMinValues(1).setMaxValues(itemOptions.length).addOptions(itemOptions)
+            new StringSelectMenuBuilder().setCustomId('shop_catalog_single_select').setPlaceholder('Click to add a single item...').addOptions(itemOptions)
         );
-        return interaction.update({ content: `📦 **${categoryData.label}**: Check one or more items below, then submit to batch add them!`, components: [row] });
+        return interaction.update({ content: `📦 **${categoryData.label}**: Select an item below to instantly add it to your shop (Duplicates are automatically blocked):`, components: [row] });
     }
 
-    if (customId === 'shop_catalog_multi_select') {
-        const checkedItems = interaction.values;
-        let addedCount = 0;
-        for (const val of checkedItems) {
-            const [catKey, shortname] = val.split('__');
-            const catalogItem = RUST_CATEGORIES[catKey]?.items.find(i => i.shortname === shortname);
-            if (catalogItem) {
-                await ShopItem.create({
-                    guildId: interaction.guild.id, name: catalogItem.name, command: `inventory.giveto "{player}" ${catalogItem.shortname} 1`, price: catalogItem.basePrice, category: catKey, cooldownSeconds: 0
-                });
-                addedCount++;
-            }
+    if (customId === 'shop_catalog_single_select') {
+        const [catKey, shortname] = selectedValue.split('__');
+        const catalogItem = RUST_CATEGORIES[catKey]?.items.find(i => i.shortname === shortname);
+        
+        if (!catalogItem) return interaction.reply({ content: '❌ Item not found in catalog.', flags: 64 });
+
+        // Check if item already exists in this guild's shop to prevent duplicates
+        const existingItem = await ShopItem.findOne({ 
+            where: { 
+                guildId: interaction.guild.id, 
+                command: `inventory.giveto "{player}" ${catalogItem.shortname} 1` 
+            } 
+        });
+
+        if (existingItem) {
+            return interaction.update({ content: `⚠️ **${catalogItem.name}** is already in your server shop! Duplicate blocked.`, components: [] });
         }
-        return interaction.update({ content: `✅ Successfully batch-added **${addedCount} items** to your server shop!`, components: [] });
+
+        const newItem = await ShopItem.create({
+            guildId: interaction.guild.id,
+            name: catalogItem.name,
+            command: `inventory.giveto "{player}" ${catalogItem.shortname} 1`,
+            price: catalogItem.basePrice,
+            category: catKey,
+            cooldownSeconds: 0
+        });
+
+        return interaction.update({ content: `✅ Successfully added **${catalogItem.name}** to your server shop for **${catalogItem.basePrice} Scrap**!`, components: [] });
     }
 
     if (customId.startsWith('shop_role_')) {
@@ -86,11 +112,7 @@ module.exports = async (interaction, client) => {
 
     // --- PLAYER SHOP ---
     if (customId === 'hub_shop_menu') {
-        const embed = new EmbedBuilder()
-            .setTitle('🛒 Server Shop')
-            .setDescription('Choose an option below to browse items by category or check the real-time categorized price list.')
-            .setColor('#e67e22');
-
+        const embed = new EmbedBuilder().setTitle('🛒 Server Shop').setDescription('Choose an option below to browse items by category or check the real-time categorized price list.').setColor('#e67e22');
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('hub_shop_browse').setLabel('Browse Store (Categories)').setStyle(ButtonStyle.Primary).setEmoji('🛍️'),
             new ButtonBuilder().setCustomId('hub_shop_pricelist').setLabel('Live Price List').setStyle(ButtonStyle.Secondary).setEmoji('📋')
@@ -143,20 +165,16 @@ module.exports = async (interaction, client) => {
         const multiplier = (config?.shopMultiplier || 100) / 100;
 
         if (dbItems.length === 0) {
-            const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('hub_shop_menu').setLabel('Go Back').setStyle(ButtonStyle.Secondary).setEmoji('🔙'));
-            return interaction.update({ content: '❌ There are currently no items for sale in the shop.', embeds: [], components: [row] });
+            return interaction.update({ content: '❌ There are currently no items for sale in the shop.', embeds: [], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('hub_shop_menu').setLabel('Go Back').setStyle(ButtonStyle.Secondary).setEmoji('🔙'))] });
         }
 
-        const embed = new EmbedBuilder().setTitle('📋 Categorized Store Price List').setDescription('Here are all items currently available for purchase across all categories:').setColor('#3498db').setFooter({ text: 'Prices reflect real-time global multipliers.' });
+        const embed = new EmbedBuilder().setTitle('📋 Categorized Store Price List').setDescription('Here are all items currently available for purchase:').setColor('#3498db').setFooter({ text: 'Prices reflect real-time multipliers.' });
 
         for (const catKey in RUST_CATEGORIES) {
             const catData = RUST_CATEGORIES[catKey];
             const itemsInCat = dbItems.filter(i => i.category === catKey);
             if (itemsInCat.length > 0) {
-                let itemListText = itemsInCat.map(i => {
-                    const finalPrice = Math.round(i.price * multiplier);
-                    return `• **${i.name}** — 💰 **${finalPrice} ${currency}** *(CD: ${i.cooldownSeconds}s)*`;
-                }).join('\n');
+                let itemListText = itemsInCat.map(i => `• **${i.name}** — 💰 **${Math.round(i.price * multiplier)} ${currency}** *(CD: ${i.cooldownSeconds}s)*`).join('\n');
                 if (itemListText.length > 1024) itemListText = itemListText.substring(0, 1021) + '...';
                 embed.addFields({ name: `${catData.emoji} ${catData.label}`, value: itemListText, inline: false });
             }
@@ -164,19 +182,14 @@ module.exports = async (interaction, client) => {
 
         const customItems = dbItems.filter(i => i.category === 'custom');
         if (customItems.length > 0) {
-            let customListText = customItems.map(i => {
-                const finalPrice = Math.round(i.price * multiplier);
-                return `• **${i.name}** — 💰 **${finalPrice} ${currency}** *(CD: ${i.cooldownSeconds}s)*`;
-            }).join('\n');
+            let customListText = customItems.map(i => `• **${i.name}** — 💰 **${Math.round(i.price * multiplier)} ${currency}** *(CD: ${i.cooldownSeconds}s)*`).join('\n');
             if (customListText.length > 1024) customListText = customListText.substring(0, 1021) + '...';
             embed.addFields({ name: '✨ Custom / Server Items', value: customListText, inline: false });
         }
 
-        const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('hub_shop_menu').setLabel('Go Back').setStyle(ButtonStyle.Secondary).setEmoji('🔙'));
-        return interaction.update({ embeds: [embed], components: [row] });
+        return interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('hub_shop_menu').setLabel('Go Back').setStyle(ButtonStyle.Secondary).setEmoji('🔙'))] });
     }
 
-    // --- MODAL SUBMISSIONS ---
     if (interaction.isModalSubmit()) {
         if (customId === 'modal_shop_custom') {
             const name = interaction.fields.getTextInputValue('item_name');
@@ -209,13 +222,10 @@ module.exports = async (interaction, client) => {
             const unitPrice = Math.round(shopItem.price * ((config?.shopMultiplier || 100) / 100));
             const totalPrice = unitPrice * qty;
 
-            if (userEconomy.wallet < totalPrice) {
-                return interaction.reply({ content: `❌ You need **${totalPrice} ${config?.economyCurrency || 'Scrap'}** for ${qty}x ${shopItem.name}, but you only have **${userEconomy.wallet}**.`, flags: 64 });
-            }
+            if (userEconomy.wallet < totalPrice) return interaction.reply({ content: `❌ You need **${totalPrice} ${config?.economyCurrency || 'Scrap'}** for ${qty}x ${shopItem.name}, but you only have **${userEconomy.wallet}**.`, flags: 64 });
 
             try {
                 await userEconomy.update({ wallet: userEconomy.wallet - totalPrice });
-                
                 let scaledCommand = shopItem.command;
                 const parts = scaledCommand.split(' ');
                 if (parts.length >= 4 && !isNaN(parts[parts.length - 1])) {
@@ -228,7 +238,6 @@ module.exports = async (interaction, client) => {
                 for (const c of finalCommand.split('\n')) {
                     if (c.trim()) await sendRconCommand(interaction.guild.id, c.trim());
                 }
-
                 return interaction.reply({ content: `✅ **Purchase Successful!** You bought **${qty}x ${shopItem.name}** for **${totalPrice} ${config?.economyCurrency || 'Scrap'}**. Delivered to your in-game inventory!`, flags: 64 });
             } catch (e) {
                 return interaction.reply({ content: `❌ RCON Error: ${e.message}`, flags: 64 });
