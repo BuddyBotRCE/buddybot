@@ -23,45 +23,29 @@ async function renderAutoEventHub(interaction) {
     const timedStatus = config.autoTimedEnabled ? '🟢 Active' : '🔴 Disabled';
 
     const embed = new EmbedBuilder()
-        .setTitle('🚁 Auto-Events Main Hub')
-        .setDescription(`**Current Live Events:**\n\n` +
+        .setTitle('🚁 Auto-Events Hub')
+        .setDescription(`**Current Active Events:**\n\n` +
             `📦 **${config.supplyEventName || 'Supply Drops'}**: ${supplyStatus} (Spawning ${config.supplySpawnCount || 1})\n` +
             `💎 **${config.eliteEventName || 'Elite Crates'}**: ${eliteStatus} (Spawning ${config.eliteSpawnCount || 1})\n` +
             `⏱️ **${config.timedEventName || 'Timed Crates'}**: ${timedStatus} (Spawning ${config.timedSpawnCount || 1})\n\n` +
-            `*Use the dropdown menus below to configure, disable, or wipe an event.*`)
+            `*Use the dropdown below to select an event to configure.*`)
         .setColor('#f1c40f');
 
-    const row1 = new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder().setCustomId('ae_hub_configure').setPlaceholder('⚙️ Select an Event to Configure...').addOptions([
-            { label: 'Configure Supply Drops', value: 'supply', emoji: '📦' },
-            { label: 'Configure Elite Crates', value: 'elite', emoji: '💎' },
-            { label: 'Configure Timed Crates', value: 'timed', emoji: '⏱️' }
-        ])
-    );
-
-    const row2 = new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder().setCustomId('ae_hub_toggle').setPlaceholder('⚡ Select an Event to Enable / Disable...').addOptions([
-            { label: 'Toggle Supply Drops', value: 'supply', emoji: '📦' },
-            { label: 'Toggle Elite Crates', value: 'elite', emoji: '💎' },
-            { label: 'Toggle Timed Crates', value: 'timed', emoji: '⏱️' }
-        ])
-    );
-
-    const row3 = new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder().setCustomId('ae_hub_wipe').setPlaceholder('🗑️ Select an Event to Wipe Data...').addOptions([
-            { label: 'Wipe Supply Drops Data', value: 'supply', emoji: '📦' },
-            { label: 'Wipe Elite Crates Data', value: 'elite', emoji: '💎' },
-            { label: 'Wipe Timed Crates Data', value: 'timed', emoji: '⏱️' }
+    const row = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder().setCustomId('ae_hub_select').setPlaceholder('🔽 Select Event to Configure...').addOptions([
+            { label: 'Supply Drops', value: 'supply', emoji: '📦' },
+            { label: 'Elite Crates', value: 'elite', emoji: '💎' },
+            { label: 'Timed Crates', value: 'timed', emoji: '⏱️' }
         ])
     );
 
     if (interaction.replied || interaction.deferred) {
-        await interaction.editReply({ embeds: [embed], components: [row1, row2, row3], content: null });
+        await interaction.editReply({ embeds: [embed], components: [row], content: null });
     } else {
         if (interaction.isStringSelectMenu() || interaction.isButton()) {
-            await interaction.update({ embeds: [embed], components: [row1, row2, row3], content: null });
+            await interaction.update({ embeds: [embed], components: [row], content: null });
         } else {
-            await interaction.reply({ embeds: [embed], components: [row1, row2, row3], flags: 64 });
+            await interaction.reply({ embeds: [embed], components: [row], flags: 64 });
         }
     }
 }
@@ -83,49 +67,35 @@ async function renderEventPanel(interaction, eventType) {
         if (x !== null && x !== undefined) {
             locDesc += `**Slot ${i}:** ✅ Mapped (\`X: ${Math.round(x)}, Y: ${Math.round(y)}, Z: ${Math.round(z)}\`)\n`;
         } else {
-            locDesc += `**Slot ${i}:** 🔴 Not Mapped\n`;
+            locDesc += `**Slot ${i}:** 🔴 Not Set\n`;
         }
     }
 
     const embed = new EmbedBuilder()
         .setTitle(`⚙️ Configuring: ${customName}`)
-        .setDescription(`**Event Status:** ${isEnabled ? '🟢 Active (Enabled)' : '🔴 Disabled'}\n` +
-            `**Quantity per timer:** ${count} item(s)\n` +
-            `**Repeat Interval:** Every ${interval} minutes\n\n` +
-            `**📍 Position Slots:**\n${locDesc}\n` +
-            `*Use the buttons below to set coordinates for each slot.*`)
+        .setDescription(`**Event Status:** ${isEnabled ? '🟢 Active' : '🔴 Disabled'}\n` +
+            `**Quantity:** ${count}\n` +
+            `**Interval:** ${interval} mins\n\n` +
+            `**📍 Current Positions:**\n${locDesc}\n` +
+            `*Use the buttons below to update settings and map locations.*`)
         .setColor(isEnabled ? '#2ecc71' : '#3498db');
 
-    const rowActions = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`ae_btn_config_${eventType}`).setLabel('Change Name & Qty').setStyle(ButtonStyle.Primary).setEmoji('⚙️'),
-        new ButtonBuilder().setCustomId(`ae_btn_test_${eventType}`).setLabel('Test Spawn').setStyle(ButtonStyle.Secondary).setEmoji('🧪'),
-        new ButtonBuilder().setCustomId(`ae_btn_toggle_${eventType}`).setLabel(isEnabled ? 'Disable Event' : 'Enable Event').setStyle(isEnabled ? ButtonStyle.Danger : ButtonStyle.Success).setEmoji('⚡'),
-        new ButtonBuilder().setCustomId(`ae_hub_back`).setLabel('Back to Hub').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+    const row1 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`ae_btn_config_${eventType}`).setLabel('Set Name, Qty & Time').setStyle(ButtonStyle.Primary).setEmoji('⚙️'),
+        new ButtonBuilder().setCustomId(`ae_btn_setpos_${eventType}`).setLabel('Set Position').setStyle(ButtonStyle.Success).setEmoji('📍'),
+        new ButtonBuilder().setCustomId(`ae_btn_test_${eventType}`).setLabel('Test Spawn').setStyle(ButtonStyle.Secondary).setEmoji('🧪')
     );
 
-    const components = [rowActions];
-    
-    let currentRow = new ActionRowBuilder();
-    for (let i = 1; i <= count; i++) {
-        const hasCoord = config[`${eventType}Slot${i}X`] !== null && config[`${eventType}Slot${i}X`] !== undefined;
-        currentRow.addComponents(
-            new ButtonBuilder()
-                .setCustomId(`ae_loc_btn_${eventType}_${i}`)
-                .setLabel(`Set Pos ${i}`)
-                .setStyle(hasCoord ? ButtonStyle.Success : ButtonStyle.Secondary)
-                .setEmoji('📍')
-        );
-
-        if (i % 5 === 0 || i === count) {
-            components.push(currentRow);
-            currentRow = new ActionRowBuilder();
-        }
-    }
+    const row2 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`ae_btn_toggle_${eventType}`).setLabel(isEnabled ? 'Disable Event' : 'Enable Event').setStyle(isEnabled ? ButtonStyle.Danger : ButtonStyle.Success).setEmoji('⚡'),
+        new ButtonBuilder().setCustomId(`ae_btn_delete_${eventType}`).setLabel('Wipe Data').setStyle(ButtonStyle.Danger).setEmoji('🗑️'),
+        new ButtonBuilder().setCustomId(`ae_hub_back`).setLabel('Go Back').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+    );
 
     if (interaction.replied || interaction.deferred) {
-        await interaction.editReply({ embeds: [embed], components, content: null });
+        await interaction.editReply({ embeds: [embed], components: [row1, row2], content: null });
     } else {
-        await interaction.update({ embeds: [embed], components, content: null });
+        await interaction.update({ embeds: [embed], components: [row1, row2], content: null });
     }
 }
 // ============================================================================
@@ -293,39 +263,12 @@ module.exports = async (interaction, client) => {
             const module = interaction.values[0];
 
             // =================================================================
-            // AUTO EVENTS: ROUTER (HUB -> SINGLE EVENT)
+            // AUTO EVENTS ROUTER - SINGLE DROPDOWN SYSTEM
             // =================================================================
-            if (interaction.customId === 'ae_hub_configure') {
+            if (interaction.customId === 'ae_hub_select') {
                 return await renderEventPanel(interaction, module);
             }
-
-            if (interaction.customId === 'ae_hub_toggle') {
-                let [config] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
-                const isEnabledPrefix = module.charAt(0).toUpperCase() + module.slice(1);
-                const currentState = config.get(`auto${isEnabledPrefix}Enabled`) || false;
-                await config.update({ [`auto${isEnabledPrefix}Enabled`]: !currentState });
-                return await renderAutoEventHub(interaction);
-            }
-
-            if (interaction.customId === 'ae_hub_wipe') {
-                let [config] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
-                const resetObj = {};
-                resetObj[`${module}SpawnCount`] = 1;
-                resetObj[`${module}Interval`] = 60;
-                resetObj[`${module}EventName`] = module === 'supply' ? 'Supply Drops' : module === 'elite' ? 'Elite Crates' : 'Timed Crates';
-                const isEnabledPrefix = module.charAt(0).toUpperCase() + module.slice(1);
-                resetObj[`auto${isEnabledPrefix}Enabled`] = false;
-
-                for (let i = 1; i <= 10; i++) { 
-                    resetObj[`${module}Slot${i}X`] = null; 
-                    resetObj[`${module}Slot${i}Y`] = null; 
-                    resetObj[`${module}Slot${i}Z`] = null; 
-                }
-                await config.update(resetObj);
-                return await renderAutoEventHub(interaction);
-            }
             // =================================================================
-
 
             if (interaction.customId === 'select_link_server_target') {
                 const serverId = module.replace('link_server_', '');
@@ -1130,6 +1073,26 @@ module.exports = async (interaction, client) => {
         // BUTTON CLICKS
         // ====================================================================
         if (interaction.isButton()) {
+            
+            if (interaction.customId === 'ae_hub_back') {
+                return await renderAutoEventHub(interaction);
+            }
+
+            if (interaction.customId.startsWith('ae_btn_config_')) {
+                const eventType = interaction.customId.replace('ae_btn_config_', '');
+                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+                const currentName = config?.get(`${eventType}EventName`) || (eventType === 'supply' ? 'Supply Drops' : eventType === 'elite' ? 'Elite Crates' : 'Timed Crates');
+                const count = config?.get(`${eventType}SpawnCount`) || 1;
+                const interval = config?.get(`${eventType}Interval`) || 60;
+
+                const modal = new ModalBuilder().setCustomId(`modal_ae_config_${eventType}`).setTitle(`Configure Event Data`);
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel("Custom Event Name").setStyle(TextInputStyle.Short).setValue(`${currentName}`).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('qty').setLabel("Quantity to Spawn (Max 10)").setStyle(TextInputStyle.Short).setValue(`${count}`).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('interval').setLabel("Repeat Interval (Minutes)").setStyle(TextInputStyle.Short).setValue(`${interval}`).setRequired(true))
+                );
+                return interaction.showModal(modal);
+            }
 
             if (interaction.customId.startsWith('ae_loc_btn_')) {
                 const parts = interaction.customId.split('_');
@@ -1143,26 +1106,6 @@ module.exports = async (interaction, client) => {
 
                 queueAdminPos(userProfile.inGameName, interaction.guild.id, interaction.user.id, interaction.channel.id, `aeslot_${eventType}_${slotNum}`, client);
                 return interaction.reply({ content: `⏳ Stand exactly where you want it. Capturing coordinates for **Slot ${slotNum}** via RCON...`, flags: 64 });
-            }
-
-            if (interaction.customId === 'ae_hub_back') {
-                return await renderAutoEventHub(interaction);
-            }
-
-            if (interaction.customId.startsWith('ae_btn_config_')) {
-                const eventType = interaction.customId.replace('ae_btn_config_', '');
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-                const currentName = config.get(`${eventType}EventName`) || (eventType === 'supply' ? 'Supply Drops' : eventType === 'elite' ? 'Elite Crates' : 'Timed Crates');
-                const count = config.get(`${eventType}SpawnCount`) || 1;
-                const interval = config.get(`${eventType}Interval`) || 60;
-
-                const modal = new ModalBuilder().setCustomId(`modal_ae_config_${eventType}`).setTitle(`Configure Event Data`);
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel("Custom Event Name").setStyle(TextInputStyle.Short).setValue(`${currentName}`).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('qty').setLabel("Quantity to Spawn (Max 10)").setStyle(TextInputStyle.Short).setValue(`${count}`).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('interval').setLabel("Repeat Interval (Minutes)").setStyle(TextInputStyle.Short).setValue(`${interval}`).setRequired(true))
-                );
-                return interaction.showModal(modal);
             }
 
             if (interaction.customId.startsWith('ae_btn_toggle_')) {
@@ -1204,7 +1147,7 @@ module.exports = async (interaction, client) => {
 
                 return interaction.editReply({ content: `✅ Successfully test-spawned **${spawned}x** items directly at mapped locations!` });
             }
-            
+
             if (interaction.customId.startsWith('btn_finalize_tpl_')) {
                 const parts = interaction.customId.split('_'); 
                 const type = parts[3]; 
@@ -1703,875 +1646,6 @@ module.exports = async (interaction, client) => {
                 const kits = await ServerKit.findAll({ where: { guildId: interaction.guild.id } });
                 const list = kits.length ? kits.map(k => `**${k.kitName}**\n\`${k.items}\``).join('\n\n') : 'No kits found.';
                 return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🎒 Server Kits').setDescription(list).setColor('#3498db')], flags: 64 });
-            }
-        }
-
-        // ====================================================================
-        // 7. MODAL SUBMISSIONS
-        // ====================================================================
-        if (interaction.isModalSubmit()) {
-
-            if (interaction.customId.startsWith('modal_ae_config_')) {
-                const eventType = interaction.customId.replace('modal_ae_config_', '');
-                const customName = interaction.fields.getTextInputValue('name').trim();
-                let qty = parseInt(interaction.fields.getTextInputValue('qty')) || 1;
-                qty = Math.max(1, Math.min(10, qty)); // Force between 1 and 10
-                const interval = parseInt(interaction.fields.getTextInputValue('interval')) || 60;
-
-                let [cfg] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
-                const updateObj = {};
-                updateObj[`${eventType}EventName`] = customName;
-                updateObj[`${eventType}SpawnCount`] = qty;
-                updateObj[`${eventType}Interval`] = interval;
-                
-                await cfg.update(updateObj);
-                return await renderEventPanel(interaction, eventType);
-            }
-
-            if (interaction.customId.startsWith('modal_admin_give_item_exec_')) {
-                const parts = interaction.customId.replace('modal_admin_give_item_exec_', '').split('_');
-                const targetUserId = parts[0];
-                const shortname = parts.slice(1).join('_'); 
-                
-                const amount = parseInt(interaction.fields.getTextInputValue('amount')) || 1;
-                const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
-
-                if (!targetUser || !targetUser.inGameName) {
-                    return interaction.reply({ content: '❌ Player unlinked or not found.', flags: 64 });
-                }
-
-                let rconResult;
-                try {
-                    rconResult = await sendRconCommand(
-                        interaction.guild.id,
-                        `inventory.giveto "${targetUser.inGameName}" ${shortname} ${amount}`
-                    );
-                } catch (e) {
-                    return interaction.reply({ content: `❌ RCON Error: ${e.message}`, flags: 64 });
-                }
-
-                if (rconResult?.error) {
-                    return interaction.reply({ content: `❌ RCON Error: ${rconResult.error.message}`, flags: 64 });
-                }
-                return interaction.reply({ content: `✅ Successfully sent **${amount}x ${shortname}** to **${targetUser.inGameName}** in-game!`, flags: 64 });
-            }
-
-            if (interaction.customId === 'modal_multiserver_add') {
-                const serverName = interaction.fields.getTextInputValue('server_name').trim();
-                const rconIp = interaction.fields.getTextInputValue('rcon_ip').trim();
-                const rconPort = interaction.fields.getTextInputValue('rcon_port').trim();
-                const rconPassword = interaction.fields.getTextInputValue('rcon_pass').trim();
-
-                await GameServer.create({
-                    guildId: interaction.guild.id,
-                    serverName,
-                    rconIp,
-                    rconPort,
-                    rconPassword
-                });
-
-                return interaction.reply({ content: `✅ Successfully added game server **${serverName}** (\`${rconIp}:${rconPort}\`)!`, flags: 64 });
-            }
-
-            if (interaction.customId === 'modal_setup_rcon') {
-                const ip = interaction.fields.getTextInputValue('rcon_ip').trim();
-                const port = interaction.fields.getTextInputValue('rcon_port').trim();
-                const pass = interaction.fields.getTextInputValue('rcon_pass').trim();
-
-                await GuildConfig.upsert({ 
-                    guildId: interaction.guild.id, 
-                    rconIp: ip, 
-                    rconPort: port, 
-                    rconPassword: pass 
-                });
-                return interaction.reply({ content: `✅ RCON credentials successfully updated!\n• Server IP: \`${ip}:${port}\`\nClick **Connect RCON** to initialize communication.`, flags: 64 });
-            }
-
-            if (interaction.customId === 'modal_clan_create') {
-                await interaction.deferReply({ flags: 64 });
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-                const user = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
-                
-                if (user.wallet < (config?.clanCreationCost || 1000)) {
-                    return interaction.editReply({ content: `❌ You do not have enough funds to create a clan.` });
-                }
-
-                const rawName = interaction.fields.getTextInputValue('clan_name').trim();
-                const rawTag = interaction.fields.getTextInputValue('clan_tag').trim().toUpperCase();
-
-                const existingClan = await Clan.findOne({ where: { guildId: interaction.guild.id, tag: rawTag } });
-                if (existingClan) {
-                    return interaction.editReply({ content: `❌ The clan tag **${rawTag}** is already taken!` });
-                }
-
-                let roleId = null;
-                let textId = null;
-                let voiceId = null;
-
-                if (config?.clanDiscordSyncEnabled) {
-                    try {
-                        const newRole = await interaction.guild.roles.create({ name: `${rawTag} Member`, color: '#e67e22', reason: 'Clan Creation Auto-Sync' });
-                        roleId = newRole.id;
-                        await interaction.member.roles.add(newRole);
-
-                        const category = await interaction.guild.channels.create({
-                            name: `🛡️ ${rawTag} Clan`,
-                            type: ChannelType.GuildCategory,
-                            permissionOverwrites: [
-                                { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
-                                { id: newRole.id, allow: [PermissionFlagsBits.ViewChannel] }
-                            ]
-                        });
-
-                        const textChan = await interaction.guild.channels.create({ name: 'clan-chat', type: ChannelType.GuildText, parent: category.id });
-                        const voiceChan = await interaction.guild.channels.create({ name: 'Clan Voice', type: ChannelType.GuildVoice, parent: category.id });
-                        textId = textChan.id;
-                        voiceId = voiceChan.id;
-                    } catch (err) {
-                        console.error('[CLAN SYNC ERROR]', err);
-                    }
-                }
-
-                await user.update({ wallet: user.wallet - (config?.clanCreationCost || 1000) });
-                
-                const newClan = await Clan.create({
-                    guildId: interaction.guild.id,
-                    name: rawName,
-                    tag: rawTag,
-                    leaderId: interaction.user.id,
-                    maxMembers: config?.clanDefaultMaxMembers || 4,
-                    discordRoleId: roleId,
-                    discordTextChannelId: textId,
-                    discordVoiceChannelId: voiceId
-                });
-
-                await ClanMember.create({
-                    guildId: interaction.guild.id,
-                    userId: interaction.user.id,
-                    clanId: newClan.id,
-                    role: 'Leader'
-                });
-
-                return interaction.editReply({ content: `✅ Successfully created clan **${rawTag} ${rawName}**!` });
-            }
-
-            if (interaction.customId === 'modal_clan_config') {
-                const cost = parseInt(interaction.fields.getTextInputValue('cost')) || 1000;
-                const maxMembers = parseInt(interaction.fields.getTextInputValue('max_members')) || 4;
-                await GuildConfig.upsert({ guildId: interaction.guild.id, clanCreationCost: cost, clanDefaultMaxMembers: maxMembers });
-                return interaction.reply({ content: `✅ Clan creation settings updated!`, flags: 64 });
-            }
-
-            if (interaction.customId === 'modal_bounty_config') {
-                const kills = parseInt(interaction.fields.getTextInputValue('kills')) || 5;
-                const reward = parseInt(interaction.fields.getTextInputValue('reward')) || 500;
-                const cooldown = parseInt(interaction.fields.getTextInputValue('cooldown')) || 60;
-                
-                await GuildConfig.upsert({ guildId: interaction.guild.id, bountyKillsToActivate: kills, bountyRewardAmount: reward, bountyCooldownMinutes: cooldown });
-                return interaction.reply({ content: `✅ Bounty system configured!\n• Activates at: **${kills} Kills**\n• Reward: **${reward} Scrap**\n• Cooldown: **${cooldown} mins**`, flags: 64 });
-            }
-
-            if (interaction.customId === 'modal_rr_create') {
-                const channelId = interaction.fields.getTextInputValue('channel_id');
-                const emoji = interaction.fields.getTextInputValue('emoji');
-                const roleId = interaction.fields.getTextInputValue('role_id');
-                const isVerify = interaction.fields.getTextInputValue('is_verify') === '1';
-                const panelText = interaction.fields.getTextInputValue('panel_text');
-
-                const targetChannel = interaction.guild.channels.cache.get(channelId);
-                if (!targetChannel) return interaction.reply({ content: '❌ Invalid Channel ID provided.', flags: 64 });
-
-                const embed = new EmbedBuilder()
-                    .setTitle(isVerify ? '✅ Server Verification' : '🔘 Reaction Roles')
-                    .setDescription(panelText)
-                    .setColor(isVerify ? '#2ecc71' : '#3498db')
-                    .setTimestamp();
-
-                const msg = await targetChannel.send({ embeds: [embed] });
-                await msg.react(emoji).catch(() => {});
-
-                await ReactionRole.create({
-                    guildId: interaction.guild.id,
-                    messageId: msg.id,
-                    emoji: emoji,
-                    roleId: roleId,
-                    isVerifyOnly: isVerify
-                });
-
-                return interaction.reply({ content: `✅ Reaction role panel successfully posted in <#${targetChannel.id}>!`, flags: 64 });
-            }
-
-            if (interaction.customId === 'modal_rr_remove') {
-                const msgId = interaction.fields.getTextInputValue('message_id');
-                const deleted = await ReactionRole.destroy({ where: { guildId: interaction.guild.id, messageId: msgId } });
-                if (deleted) {
-                    return interaction.reply({ content: `✅ Successfully removed reaction role configurations for message ID \`${msgId}\`.`, flags: 64 });
-                } else {
-                    return interaction.reply({ content: `❌ No reaction role found with that message ID.`, flags: 64 });
-                }
-            }
-
-            if (interaction.customId === 'modal_automod_config') {
-                const action = interaction.fields.getTextInputValue('action').trim().toLowerCase();
-                const caps = parseInt(interaction.fields.getTextInputValue('caps')) || 70;
-                
-                if (!['warn', 'timeout', 'ban'].includes(action)) {
-                    return interaction.reply({ content: '❌ Action must be either `warn`, `timeout`, or `ban`.', flags: 64 });
-                }
-
-                await GuildConfig.upsert({ guildId: interaction.guild.id, autoModAction: action, autoModCapsLimit: caps });
-                return interaction.reply({ content: `✅ Auto-Mod settings updated!\n• Punishment: \`${action}\`\n• Caps Limit: \`${caps}%\``, flags: 64 });
-            }
-
-            if (interaction.customId === 'modal_hub_suggestion') {
-                const title = interaction.fields.getTextInputValue('suggestion_title');
-                const desc = interaction.fields.getTextInputValue('suggestion_desc');
-                
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-                if (!config?.suggestionChannelId) return interaction.reply({ content: '❌ The server admin has not set up a suggestions channel yet.', flags: 64 });
-                
-                const channel = interaction.guild.channels.cache.get(config.suggestionChannelId);
-                if (!channel) return interaction.reply({ content: '❌ Suggestion channel could not be found. Please contact an admin.', flags: 64 });
-
-                const embed = new EmbedBuilder()
-                    .setTitle(`💡 Suggestion: ${title}`)
-                    .setDescription(desc)
-                    .setColor('#f1c40f')
-                    .setAuthor({ name: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() })
-                    .setTimestamp();
-
-                const pingText = config.suggestionPingRoleId ? `<@&${config.suggestionPingRoleId}>` : '';
-                
-                try {
-                    const msg = await channel.send({ content: pingText, embeds: [embed] });
-                    await msg.react('👍');
-                    await msg.react('👎');
-                    return interaction.reply({ content: '✅ Your suggestion has been successfully submitted! Check the suggestions channel to track votes.', flags: 64 });
-                } catch (e) {
-                    console.error('[SUGGESTION ERROR]', e);
-                    return interaction.reply({ content: '❌ Failed to send suggestion. Make sure the bot has permissions in that channel.', flags: 64 });
-                }
-            }
-
-            if (interaction.customId === 'modal_ai_credentials') {
-                const apiKey = interaction.fields.getTextInputValue('ai_key');
-                const model = interaction.fields.getTextInputValue('ai_model');
-                const baseUrl = interaction.fields.getTextInputValue('ai_url');
-                
-                let [config] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
-                await config.update({ aiApiKey: apiKey.trim(), aiModel: model.trim(), aiBaseUrl: baseUrl.trim() });
-                
-                return interaction.reply({ content: `✅ **AI Assistant Configured!**\n• Model: \`${model}\`\n• Base URL: \`${baseUrl}\`\nMembers can now mention <@${client.user.id}> to ask questions!`, flags: 64 });
-            }
-
-            if (interaction.customId === 'modal_link_account_global' || interaction.customId.startsWith('modal_link_account_')) {
-                const ign = interaction.fields.getTextInputValue('ign').trim();
-                const guildId = interaction.guild.id;
-                const userId = interaction.user.id;
-                const serverId = interaction.customId === 'modal_link_account_global' ? null : interaction.customId.replace('modal_link_account_', '');
-
-                let userRecord = await UserEconomy.findOne({ where: { guildId, userId } });
-
-                if (userRecord) {
-                    await userRecord.update({ inGameName: ign });
-                } else {
-                    await UserEconomy.create({
-                        guildId,
-                        userId,
-                        inGameName: ign,
-                        wallet: 0,
-                        bank: 0,
-                        xp: 0,
-                        level: 1
-                    });
-                }
-
-                const serverInfo = serverId ? ` to this server` : '';
-                return interaction.reply({ content: `✅ Successfully linked your Discord account to **${ign}**${serverInfo}!\nYou can now use the shop, kits, and teleports.`, flags: 64 });
-            }
-
-            if (interaction.customId === 'modal_setup_economy') {
-                await GuildConfig.upsert({ guildId: interaction.guild.id, economyCurrency: interaction.fields.getTextInputValue('currency_name') });
-                return interaction.reply({ content: `✅ Currency name updated successfully!`, flags: 64 });
-            }
-            
-            if (interaction.customId.startsWith('modal_admin_give_exec_')) {
-                const targetUserId = interaction.customId.replace('modal_admin_give_exec_', '');
-                const amount = parseInt(interaction.fields.getTextInputValue('amount'));
-                if (isNaN(amount) || amount <= 0) return interaction.reply({ content: '❌ Please enter a valid amount.', flags: 64 });
-
-                let [user] = await UserEconomy.findOrCreate({ where: { guildId: interaction.guild.id, userId: targetUserId }, defaults: { wallet: 0 } });
-                await user.update({ wallet: user.wallet + amount });
-                const nameLabel = user.inGameName ? `${user.inGameName} (<@${targetUserId}>)` : `<@${targetUserId}>`;
-                return interaction.reply({ content: `✅ Successfully gave **${amount}** currency to **${nameLabel}**! New wallet: **${user.wallet}**`, flags: 64 });
-            }
-            if (interaction.customId.startsWith('modal_admin_take_exec_')) {
-                const targetUserId = interaction.customId.replace('modal_admin_take_exec_', '');
-                const amount = parseInt(interaction.fields.getTextInputValue('amount'));
-                if (isNaN(amount) || amount <= 0) return interaction.reply({ content: '❌ Please enter a valid amount.', flags: 64 });
-
-                let [user] = await UserEconomy.findOrCreate({ where: { guildId: interaction.guild.id, userId: targetUserId }, defaults: { wallet: 0 } });
-                const newWallet = Math.max(0, user.wallet - amount);
-                await user.update({ wallet: newWallet });
-                const nameLabel = user.inGameName ? `${user.inGameName} (<@${targetUserId}>)` : `<@${targetUserId}>`;
-                return interaction.reply({ content: `✅ Successfully took **${amount}** currency from **${nameLabel}**! New wallet: **${user.wallet}**`, flags: 64 });
-            }
-
-            if (interaction.customId === 'modal_verify_email') {
-                await interaction.deferReply({ flags: 64 });
-                const email = interaction.fields.getTextInputValue('stripe_email').trim().toLowerCase();
-                const guildId = interaction.guild.id;
-
-                try {
-                    const customers = await stripe.customers.list({ email: email, limit: 1 });
-                    if (customers.data.length === 0) {
-                        return interaction.editReply({ content: `❌ No Stripe customer found with the email **${email}**. Please make sure you used the correct email.` });
-                    }
-
-                    const customerId = customers.data[0].id;
-                    const subscriptions = await stripe.subscriptions.list({ customer: customerId, status: 'active', limit: 1 });
-
-                    if (subscriptions.data.length === 0) {
-                        return interaction.editReply({ content: `❌ Found customer account **${email}**, but no **active subscriptions** were detected. Please complete checkout or contact support.` });
-                    }
-
-                    await GuildConfig.upsert({
-                        guildId: guildId,
-                        isPremiumServer: true,
-                        stripeCustomerId: customerId,
-                        subscriptionStatus: 'active',
-                        subscriptionExpiresAt: new Date(subscriptions.data[0].current_period_end * 1000)
-                    });
-
-                    const embed = new EmbedBuilder()
-                        .setTitle('⭐ Premium Subscription Verified!')
-                        .setDescription(`Successfully verified active subscription for **${email}**!\n\n**${interaction.guild.name}** is now upgraded to **⭐ Premium Tier**. All 20 minigames and auto-events are unlocked!`)
-                        .setColor('#f1c40f')
-                        .setTimestamp();
-
-                    return interaction.editReply({ embeds: [embed] });
-                } catch (error) {
-                    console.error('[STRIPE VERIFY ERROR]', error);
-                    return interaction.editReply({ content: `❌ Error communicating with Stripe API: ${error.message}` });
-                }
-            }
-
-            if (interaction.customId === 'modal_hub_deposit') {
-                const input = interaction.fields.getTextInputValue('amount').trim().toLowerCase();
-                const [user] = await UserEconomy.findOrCreate({ where: { guildId: interaction.guild.id, userId: interaction.user.id }, defaults: { wallet: 0, bank: 0 } });
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-                const currency = config?.economyCurrency || 'Scrap';
-
-                let amount = input === 'all' ? user.wallet : parseInt(input);
-                if (isNaN(amount) || amount <= 0) return interaction.reply({ content: '❌ Please enter a valid number or "all".', flags: 64 });
-                if (user.wallet < amount) return interaction.reply({ content: `❌ You only have **${user.wallet} ${currency}** in your wallet!`, flags: 64 });
-
-                await user.update({ wallet: user.wallet - amount, bank: user.bank + amount });
-                return interaction.reply({ content: `🏦 Successfully deposited **${amount} ${currency}** into your bank!\n• Wallet: **${user.wallet}**\n• Bank: **${user.bank}**`, flags: 64 });
-            }
-
-            if (interaction.customId === 'modal_hub_withdraw') {
-                const input = interaction.fields.getTextInputValue('amount').trim().toLowerCase();
-                const [user] = await UserEconomy.findOrCreate({ where: { guildId: interaction.guild.id, userId: interaction.user.id }, defaults: { wallet: 0, bank: 0 } });
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-                const currency = config?.economyCurrency || 'Scrap';
-
-                let amount = input === 'all' ? user.bank : parseInt(input);
-                if (isNaN(amount) || amount <= 0) return interaction.reply({ content: '❌ Please enter a valid number or "all".', flags: 64 });
-                if (user.bank < amount) return interaction.reply({ content: `❌ You only have **${user.bank} ${currency}** in your bank!`, flags: 64 });
-
-                await user.update({ bank: user.bank - amount, wallet: user.wallet + amount });
-                return interaction.reply({ content: `🏧 Successfully withdrew **${amount} ${currency}** to your wallet!\n• Wallet: **${user.wallet}**\n• Bank: **${user.bank}**`, flags: 64 });
-            }
-
-            if (interaction.customId === 'modal_admin_embed') {
-                const channelId = interaction.fields.getTextInputValue('channel_id');
-                const title = interaction.fields.getTextInputValue('title');
-                const description = interaction.fields.getTextInputValue('description');
-                const color = interaction.fields.getTextInputValue('color') || '#2b2d31';
-
-                const targetChannel = interaction.guild.channels.cache.get(channelId);
-                if (!targetChannel) return interaction.reply({ content: '❌ Invalid Channel ID provided.', flags: 64 });
-
-                const embed = new EmbedBuilder()
-                    .setTitle(title)
-                    .setDescription(description.replace(/\\n/g, '\n'))
-                    .setColor(color)
-                    .setTimestamp();
-
-                await targetChannel.send({ embeds: [embed] });
-                return interaction.reply({ content: `✅ Custom embed successfully posted in <#${targetChannel.id}>!`, flags: 64 });
-            }
-
-            if (interaction.customId === 'modal_econ_interest') {
-                const rate = parseFloat(interaction.fields.getTextInputValue('interest_rate'));
-                const hours = parseInt(interaction.fields.getTextInputValue('interest_hours')) || 24;
-                await GuildConfig.upsert({ guildId: interaction.guild.id, bankInterestRate: rate, bankInterestHours: hours, lastBankInterest: new Date() });
-                return interaction.reply({ content: `✅ Bank Interest configured! Players will earn **${rate}%** interest on their bank balance every **${hours} hours** automatically.`, flags: 64 });
-            }
-
-            if (interaction.customId === 'modal_casino_config') {
-                const maxBet = parseInt(interaction.fields.getTextInputValue('max_bet')) || 1000;
-                const cooldown = parseInt(interaction.fields.getTextInputValue('cooldown_sec')) || 5;
-
-                await GuildConfig.upsert({ guildId: interaction.guild.id, casinoMaxBet: maxBet, casinoCooldownSeconds: cooldown });
-                return interaction.reply({ content: `✅ Casino limits updated! Max Bet: **${maxBet} Scrap** | Cooldown: **${cooldown} seconds**`, flags: 64 });
-            }
-
-            if (interaction.customId.startsWith('modal_pve_final_')) {
-                const parts = interaction.customId.split('_');
-                const shape = parts[3];
-                const x = parseFloat(parts[4]);
-                const y = parseFloat(parts[5]);
-                const z = parseFloat(parts[6]);
-
-                const zoneName = interaction.fields.getTextInputValue('zone_name');
-                const sizeInput = interaction.fields.getTextInputValue('zone_size');
-                const colorInput = interaction.fields.getTextInputValue('zone_color').toLowerCase();
-                const zoneEnabled = interaction.fields.getTextInputValue('zone_enabled') || '1';
-                
-                const rawMsgs = interaction.fields.getTextInputValue('enter_msg').split('|');
-                const enterMessage = rawMsgs[0]?.trim() || 'You have entered a PVE Safe Zone.';
-                const exitMessage = rawMsgs[1]?.trim() || 'You have left the PVE Safe Zone.';
-
-                let finalSize = sizeInput;
-                if (shape === 'sphere') {
-                    finalSize = parseFloat(sizeInput) || 50;
-                }
-
-                await PveZone.create({
-                    guildId: interaction.guild.id,
-                    zoneName,
-                    shape,
-                    x, y, z,
-                    size: finalSize,
-                    color: colorInput,
-                    enterMessage,
-                    exitMessage
-                });
-
-                let rgbColor = "0,255,0";
-                if (colorInput.includes('blue')) rgbColor = "0,0,255";
-                else if (colorInput.includes('red')) rgbColor = "255,0,0";
-                else if (colorInput.includes('yellow')) rgbColor = "255,255,0";
-                else if (colorInput.includes('purple')) rgbColor = "128,0,128";
-                else if (colorInput.includes('cyan')) rgbColor = "0,255,255";
-
-                const rconShape = shape === 'box' ? 'Box' : 'Sphere';
-                const formattedSize = shape === 'box' ? `(${finalSize})` : finalSize;
-                
-                await sendRconCommand(interaction.guild.id, `zones.createcustomzone "${zoneName}" (${x},${y},${z}) 0 ${rconShape} ${formattedSize} 0 0 0 0 1`);
-                await sendRconCommand(interaction.guild.id, `zones.editcustomzone "${zoneName}" "enabled" "${zoneEnabled}"`);
-                await sendRconCommand(interaction.guild.id, `zones.editcustomzone "${zoneName}" "showarea" 1`);
-                await sendRconCommand(interaction.guild.id, `zones.editcustomzone "${zoneName}" "color" "(${rgbColor})"`);
-                await sendRconCommand(interaction.guild.id, `zones.editcustomzone "${zoneName}" "entermessage" "${enterMessage}"`);
-                await sendRconCommand(interaction.guild.id, `zones.editcustomzone "${zoneName}" "leavemessage" "${exitMessage}"`);
-
-                return interaction.reply({ content: `✅ Custom PVE Zone **"${zoneName}"** created and outlined in-game!`, flags: 64 });
-            }
-
-            if (interaction.customId.startsWith('modal_play_')) {
-                const gameType = interaction.customId.replace('modal_play_', '');
-                const bet = parseInt(interaction.fields.getTextInputValue('bet'));
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-                const currency = config?.economyCurrency || 'Scrap';
-                const maxBet = config?.casinoMaxBet || 1000;
-
-                if (isNaN(bet) || bet <= 0) return interaction.reply({ content: '❌ Please enter a valid bet amount.', flags: 64 });
-                if (bet > maxBet) return interaction.reply({ content: `❌ Bet exceeds the server max bet limit of **${maxBet} ${currency}**!`, flags: 64 });
-
-                const user = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
-                if (!user || user.wallet < bet) return interaction.reply({ content: '❌ You do not have enough funds in your wallet!', flags: 64 });
-
-                const now = new Date();
-                const [cd] = await CasinoCooldown.findOrCreate({ where: { guildId: interaction.guild.id, userId: interaction.user.id }, defaults: { expiresAt: now } });
-                if (new Date(cd.expiresAt) > now) {
-                    const secondsLeft = Math.ceil((new Date(cd.expiresAt) - now) / 1000);
-                    return interaction.reply({ content: `⏳ Please wait **${secondsLeft}s** before playing again!`, flags: 64 });
-                }
-
-                const cooldownSec = config?.casinoCooldownSeconds || 5;
-                await cd.update({ expiresAt: new Date(now.getTime() + cooldownSec * 1000) });
-
-                let resultMsg = '';
-                let payout = 0;
-
-                switch (gameType) {
-                    case 'coinflip':
-                        const winCF = Math.random() < 0.5;
-                        payout = winCF ? bet * 2 : 0;
-                        resultMsg = winCF ? `🪙 **COINFLIP WON!** You won **+${bet} ${currency}**!` : `🪙 **COINFLIP LOST!** You lost **-${bet} ${currency}**.`;
-                        break;
-                    case 'slots':
-                        const icons = ['🍒', '🍋', '🔔', '💎', '7️⃣'];
-                        const r1 = icons[Math.floor(Math.random() * icons.length)];
-                        const r2 = icons[Math.floor(Math.random() * icons.length)];
-                        const r3 = icons[Math.floor(Math.random() * icons.length)];
-                        if (r1 === r2 && r2 === r3) { payout = bet * 5; resultMsg = `🎰 | ${r1}|${r2}|${r3} | **JACKPOT!** Won **+${bet * 4} ${currency}**!`; }
-                        else if (r1 === r2 || r2 === r3 || r1 === r3) { payout = Math.round(bet * 1.5); resultMsg = `🎰 | ${r1}|${r2}|${r3} | **Partial Match!** Won **+${Math.round(bet * 0.5)} ${currency}**!`; }
-                        else { payout = 0; resultMsg = `🎰 | ${r1}|${r2}|${r3} | **Loss!** Lost **-${bet} ${currency}**.`; }
-                        break;
-                    case 'dice':
-                        const roll = Math.floor(Math.random() * 6) + 1;
-                        const winDice = roll > 3;
-                        payout = winDice ? Math.round(bet * 1.8) : 0;
-                        resultMsg = winDice ? `🎲 Rolled **${roll}** (High)! Won **+${payout - bet} ${currency}**!` : `🎲 Rolled **${roll}** (Low). Lost **-${bet} ${currency}**.`;
-                        break;
-                    case 'roulette':
-                        const rWin = Math.random() < 0.35;
-                        payout = rWin ? bet * 3 : 0;
-                        resultMsg = rWin ? `🎡 **Roulette Hit!** Won **+${bet * 2} ${currency}**!` : `🎡 **Roulette Miss!** Lost **-${bet} ${currency}**.`;
-                        break;
-                    case 'blackjack':
-                        const bjWin = Math.random() < 0.48;
-                        payout = bjWin ? bet * 2 : 0;
-                        resultMsg = bjWin ? `🃏 **Blackjack!** Dealer busted. Won **+${bet} ${currency}**!` : `🃏 **Blackjack!** Dealer won. Lost **-${bet} ${currency}**.`;
-                        break;
-                    default:
-                        const genericWin = Math.random() < 0.45;
-                        payout = genericWin ? Math.round(bet * 2) : 0;
-                        resultMsg = genericWin ? `🎮 **${gameType.toUpperCase()} WON!** You won **+${bet} ${currency}**!` : `🎮 **${gameType.toUpperCase()} LOST!** You lost **-${bet} ${currency}**.`;
-                        break;
-                }
-
-                await user.update({ wallet: (user.wallet - bet) + payout });
-                return interaction.reply({ content: resultMsg, flags: 64 });
-            }
-
-            if (interaction.customId === 'modal_tk_add_cat') {
-                const name = interaction.fields.getTextInputValue('cat_name');
-                const description = interaction.fields.getTextInputValue('cat_desc') || 'Support ticket category';
-                await TicketCategory.create({ guildId: interaction.guild.id, name, description });
-                return interaction.reply({ content: `✅ Custom ticket category **"${name}"** added successfully!`, flags: 64 });
-            }
-
-            if (interaction.customId === 'modal_ticket_close_reason') {
-                const closeReason = interaction.fields.getTextInputValue('close_reason');
-                await interaction.reply({ content: `🔒 Ticket closing... Reason: *${closeReason}*` });
-
-                try {
-                    const transcript = await discordTranscripts.createTranscript(interaction.channel, { returnType: 'attachment', filename: `${interaction.channel.name}.html` });
-                    const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-                    
-                    if (config?.ticketTranscriptChannelId) {
-                        const transcriptChan = client.channels.cache.get(config.ticketTranscriptChannelId);
-                        if (transcriptChan) {
-                            const logEmbed = new EmbedBuilder()
-                                .setTitle(`Ticket Closed: ${interaction.channel.name}`)
-                                .setDescription(`**Closed by:** <@${interaction.user.id}>\n**Reason:** ${closeReason}`)
-                                .setColor('#e74c3c')
-                                .setTimestamp();
-                            await transcriptChan.send({ embeds: [logEmbed], files: [transcript] });
-                        }
-                    }
-
-                    if (config?.ticketSendUserTranscript ?? true) {
-                        const overwrites = interaction.channel.permissionOverwrites.cache;
-                        let creatorId = null;
-                        for (const [id, overwrite] of overwrites) {
-                            if (id !== interaction.guild.id && id !== config.ticketAdminRoleId) {
-                                creatorId = id;
-                                break;
-                            }
-                        }
-
-                        if (creatorId) {
-                            try {
-                                const creatorUser = await client.users.fetch(creatorId);
-                                const dmTranscript = await discordTranscripts.createTranscript(interaction.channel, { returnType: 'attachment', filename: `${interaction.channel.name}.html` });
-                                const dmEmbed = new EmbedBuilder()
-                                    .setTitle(`Your support ticket in ${interaction.guild.name} was closed`)
-                                    .setDescription(`**Reason for closing:** ${closeReason}`)
-                                    .setColor('#3498db');
-                                await creatorUser.send({ embeds: [dmEmbed], files: [dmTranscript] });
-                            } catch (dmErr) {
-                                console.error('[TICKET DM ERROR]', dmErr);
-                            }
-                        }
-                    }
-                } catch (err) {
-                    console.error('[TICKET CLOSE ERROR]', err);
-                }
-
-                setTimeout(() => interaction.channel.delete().catch(()=>{}), 3000);
-                return;
-            }
-
-            if (interaction.customId.startsWith('modal_ticket_reason_')) {
-                const categoryName = interaction.customId.replace('modal_ticket_reason_', '');
-                const reason = interaction.fields.getTextInputValue('reason');
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-
-                let isPriority = config.ticketVipRoleId && interaction.member.roles.cache.has(config.ticketVipRoleId);
-                const channel = await interaction.guild.channels.create({
-                    name: `${isPriority ? '⭐-priority-' : '🎫-ticket-'}${interaction.user.username}`,
-                    type: ChannelType.GuildText, parent: config.ticketCategoryId,
-                    permissionOverwrites: [
-                        { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
-                        { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
-                        { id: config.ticketAdminRoleId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
-                    ]
-                });
-
-                const embed = new EmbedBuilder()
-                    .setTitle(`Support Ticket: ${categoryName}`)
-                    .setDescription(`**Created by:** <@${interaction.user.id}>\n**Category:** ${categoryName}\n**Reason:**\n> ${reason}`)
-                    .setColor('#e67e22')
-                    .setTimestamp();
-
-                const row = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(`ticket_claim_${interaction.user.id}`).setLabel('Claim Ticket').setStyle(ButtonStyle.Success).setEmoji('✋'),
-                    new ButtonBuilder().setCustomId('ticket_close').setLabel('Close & Delete').setStyle(ButtonStyle.Danger).setEmoji('🔒')
-                );
-
-                await channel.send({ content: `<@&${config.ticketAdminRoleId}> | <@${interaction.user.id}>`, embeds: [embed], components: [row] });
-                return interaction.reply({ content: `✅ Your support ticket has been created: <#${channel.id}>`, flags: 64 });
-            }
-
-            if (interaction.customId === 'modal_bp_xp') {
-                const rate = parseInt(interaction.fields.getTextInputValue('xp_rate')) || 10;
-                await GuildConfig.upsert({ guildId: interaction.guild.id, buddyPassXpRate: rate });
-                return interaction.reply({ content: `✅ BuddyPass XP rate multiplier set to **${rate}x**!`, flags: 64 });
-            }
-            if (interaction.customId === 'modal_bp_custom') {
-                const title = interaction.fields.getTextInputValue('title');
-                const targetType = interaction.fields.getTextInputValue('type');
-                const targetAmount = parseInt(interaction.fields.getTextInputValue('amount')) || 1;
-                const rewardXp = parseInt(interaction.fields.getTextInputValue('xp')) || 100;
-
-                await BuddyPassChallenge.create({ guildId: interaction.guild.id, title, targetType, targetAmount, rewardXp, isPreloaded: false });
-                return interaction.reply({ content: `✅ Custom challenge **"${title}"** added successfully!`, flags: 64 });
-            }
-            if (interaction.customId === 'modal_bp_level_select') {
-                const level = parseInt(interaction.fields.getTextInputValue('level'));
-                if (isNaN(level) || level < 1 || level > 50) {
-                    return interaction.reply({ content: `❌ Level must be a valid number between 1 and 50.`, flags: 64 });
-                }
-
-                const rewardOptions = [
-                    { label: '250 Scrap (Coins)', description: 'Give 250 server currency to wallet', value: `coin_250_${level}`, emoji: '💰' },
-                    { label: '500 Scrap (Coins)', description: 'Give 500 server currency to wallet', value: `coin_500_${level}`, emoji: '💰' },
-                    { label: '1000 Scrap (Coins)', description: 'Give 1000 server currency to wallet', value: `coin_1000_${level}`, emoji: '💰' },
-                    { label: '5000 Scrap (High Roller Coins)', description: 'Give 5000 server currency to wallet', value: `coin_5000_${level}`, emoji: '💎' },
-                    { label: 'Assault Rifle (AK47)', description: 'Give 1x AK47 via RCON', value: `item_rifle.ak_1_${level}`, emoji: '🔫' },
-                    { label: 'LR-300 Rifle', description: 'Give 1x LR-300 via RCON', value: `item_rifle.lr300_1_${level}`, emoji: '🔫' },
-                    { label: 'M249 Machine Gun', description: 'Give 1x M249 via RCON', value: `item_lmg.m249_1_${level}`, emoji: '💥' },
-                    { label: 'Timed Explosive (C4)', description: 'Give 2x C4 via RCON', value: `item_explosive.timed_2_${level}`, emoji: '💣' },
-                    { label: 'Satchel Charge', description: 'Give 3x Satchels via RCON', value: `item_explosive.satchel_3_${level}`, emoji: '🧨' },
-                    { label: 'Rocket (Basic)', description: 'Give 3x Rockets via RCON', value: `item_ammo.rocket.basic_3_${level}`, emoji: '🚀' },
-                    { label: '5.56 Rifle Ammo (100x)', description: 'Give 100x 5.56 ammo via RCON', value: `item_ammo.rifle_100_${level}`, emoji: '📦' },
-                    { label: 'Medical Syringes (10x)', description: 'Give 10x Medical Syringes via RCON', value: `item_syringe.medical_10_${level}`, emoji: '💉' },
-                    { label: '500 BuddyPass XP', description: 'Grant 500 XP towards leveling', value: `xp_500_${level}`, emoji: '⭐' },
-                    { label: '1000 BuddyPass XP', description: 'Grant 1000 XP towards leveling', value: `xp_1000_${level}`, emoji: '⭐' },
-                    { label: '5000 BuddyPass XP (Mega Boost)', description: 'Grant 5000 XP towards leveling', value: `xp_5000_${level}`, emoji: '🌟' }
-                ];
-
-                const row = new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder()
-                        .setCustomId('bp_reward_dropdown_select')
-                        .setPlaceholder(`Choose reward for Level ${level}...`)
-                        .addOptions(rewardOptions)
-                );
-
-                return interaction.reply({ content: `🎁 **BuddyPass Level ${level} Manager:** Select a preloaded reward from the dropdown below:`, components: [row], flags: 64 });
-            }
-
-            if (interaction.customId === 'modal_orp_config') {
-                const size = parseInt(interaction.fields.getTextInputValue('orp_size')) || 25;
-                const onlineColor = interaction.fields.getTextInputValue('orp_online');
-                const offlineColor = interaction.fields.getTextInputValue('orp_offline');
-                const hours = parseInt(interaction.fields.getTextInputValue('orp_hours')) || 24;
-
-                await OrpConfig.upsert({ guildId: interaction.guild.id, zoneSize: size, onlineColor, offlineColor, activeDurationHours: hours });
-                return interaction.reply({ content: `✅ ORP parameters updated successfully!`, flags: 64 });
-            }
-
-            if (interaction.customId.startsWith('modal_buy_qty_')) {
-                const itemId = interaction.customId.replace('modal_buy_qty_', '');
-                const qty = parseInt(interaction.fields.getTextInputValue('quantity'));
-                if (isNaN(qty) || qty <= 0) return interaction.reply({ content: '❌ Please enter a valid quantity greater than 0.', flags: 64 });
-
-                const shopItem = await ShopItem.findByPk(itemId);
-                if (!shopItem) return interaction.reply({ content: '❌ Item no longer exists.', flags: 64 });
-
-                const userEconomy = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
-                if (!userEconomy || !userEconomy.inGameName) return interaction.reply({ content: '❌ Link your Rust account first using `/playerpanel`!', flags: 64 });
-
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-                const unitPrice = Math.round(shopItem.price * ((config?.shopMultiplier || 100) / 100));
-                const totalPrice = unitPrice * qty;
-
-                if (userEconomy.wallet < totalPrice) {
-                    return interaction.reply({ content: `❌ You need **${totalPrice} ${config?.economyCurrency || 'Scrap'}** for ${qty}x ${shopItem.name}, but you only have **${userEconomy.wallet}**.`, flags: 64 });
-                }
-
-                try {
-                    await userEconomy.update({ wallet: userEconomy.wallet - totalPrice });
-                    
-                    let scaledCommand = shopItem.command;
-                    const parts = scaledCommand.split(' ');
-                    if (parts.length >= 4 && !isNaN(parts[parts.length - 1])) {
-                        const baseAmount = parseInt(parts[parts.length - 1]);
-                        parts[parts.length - 1] = (baseAmount * qty).toString();
-                        scaledCommand = parts.join(' ');
-                    }
-
-                    const finalCommand = scaledCommand.replace(/{player}/gi, `"${userEconomy.inGameName}"`);
-                    for (const c of finalCommand.split('\n')) {
-                        if (c.trim()) await sendRconCommand(interaction.guild.id, c.trim());
-                    }
-
-                    return interaction.reply({ content: `✅ **Purchase Successful!** You bought **${qty}x ${shopItem.name}** for **${totalPrice} ${config?.economyCurrency || 'Scrap'}**. Delivered to your in-game inventory!`, flags: 64 });
-                } catch (e) {
-                    return interaction.reply({ content: `❌ RCON Error: ${e.message}`, flags: 64 });
-                }
-            }
-
-            if (interaction.customId === 'modal_giveaway_start') {
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-                const channelId = config?.giveawayChannelId || interaction.channel.id;
-                const targetChannel = client.channels.cache.get(channelId);
-                const endTime = new Date(Date.now() + parseInt(interaction.fields.getTextInputValue('minutes')) * 60000);
-                const embed = new EmbedBuilder().setTitle('🎉 GIVEAWAY 🎉').setDescription(`**Prize:** ${interaction.fields.getTextInputValue('prize')}\n**Ends:** <t:${Math.floor(endTime.getTime()/1000)}:R>`).setColor('#9b59b6');
-                if (config?.giveawayBannerUrl) embed.setImage(config.giveawayBannerUrl);
-                const msg = await targetChannel.send({ embeds: [embed], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('enter_giveaway').setLabel('Enter Giveaway').setStyle(ButtonStyle.Success))] });
-                await Giveaway.create({ messageId: msg.id, guildId: interaction.guild.id, channelId: targetChannel.id, prize: interaction.fields.getTextInputValue('prize'), endTime: endTime, winnersCount: parseInt(interaction.fields.getTextInputValue('winners')) });
-                return interaction.reply({ content: `✅ Started!`, flags: 64 });
-            }
-            if (interaction.customId === 'modal_ga_banner') {
-                await GuildConfig.upsert({ guildId: interaction.guild.id, giveawayBannerUrl: interaction.fields.getTextInputValue('banner_url') });
-                return interaction.reply({ content: `✅ Banner updated!`, flags: 64 });
-            }
-            if (interaction.customId === 'modal_ga_reroll') {
-                const ga = await Giveaway.findByPk(interaction.fields.getTextInputValue('msg_id'));
-                if (!ga) return interaction.reply({ content: '❌ Not found.', flags: 64 });
-                const row = new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId(`select_ga_reroll_${ga.messageId}`).setPlaceholder('Select winner to replace...'));
-                return interaction.reply({ content: `🎲 Select winner to replace:`, components: [row], flags: 64 });
-            }
-            if (interaction.customId === 'modal_ga_cancel') {
-                const ga = await Giveaway.findByPk(interaction.fields.getTextInputValue('msg_id'));
-                if (!ga) return interaction.reply({ content: '❌ Not found.', flags: 64 });
-                await ga.update({ isActive: false });
-                return interaction.reply({ content: `✅ Cancelled.`, flags: 64 });
-            }
-            if (interaction.customId === 'modal_ga_players') {
-                const ga = await Giveaway.findByPk(interaction.fields.getTextInputValue('msg_id'));
-                if (!ga) return interaction.reply({ content: '❌ Not found.', flags: 64 });
-                const entries = JSON.parse(ga.entries);
-                return interaction.reply({ content: `👥 **Participants (${entries.length}):**\n${entries.map(id => `<@${id}>`).join(', ')}`, flags: 64 });
-            }
-
-            if (interaction.customId === 'modal_kit_start') {
-                const name = interaction.fields.getTextInputValue('kit_name');
-                activeKitBuilders.set(interaction.user.id, { name: name, items: [] });
-                const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_kit_add_item').setLabel('🔍 Add Item').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('btn_kit_save').setLabel('💾 Save Kit').setStyle(ButtonStyle.Success));
-                return interaction.reply({ content: `🎒 **Kit Builder:** ${name}\n\n*Click Add Item.*`, components: [row], flags: 64 });
-            }
-            if (interaction.customId === 'modal_kit_search') {
-                const term = interaction.fields.getTextInputValue('search_term').toLowerCase();
-                const matches = RUST_ITEMS.filter(i => i.n.toLowerCase().includes(term) || i.s.toLowerCase().includes(term)).slice(0, 24);
-                const options = matches.map(m => ({ label: m.n, description: m.s, value: m.s }));
-                options.push({ label: 'Not finding it? Add Custom Shortname', value: 'custom_shortname' });
-                const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('select_kit_item').setPlaceholder('Select an item...').addOptions(options));
-                return interaction.reply({ content: `🔍 Search results for "**${term}**":`, components: [row], flags: 64 }); 
-            }
-            if (interaction.customId.startsWith('modal_kit_amount_')) {
-                let shortname = interaction.customId.replace('modal_kit_amount_', '');
-                if (shortname === 'custom_shortname') shortname = interaction.fields.getTextInputValue('custom_name');
-                const builder = activeKitBuilders.get(interaction.user.id);
-                builder.items.push(`${shortname} ${interaction.fields.getTextInputValue('item_amount')}`);
-                const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_kit_add_item').setLabel('🔍 Add Another Item').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('btn_kit_save').setLabel('💾 Save Kit').setStyle(ButtonStyle.Success));
-                return interaction.update({ content: `🎒 **Kit Builder:** ${builder.name}\n\n**Items:**\n${builder.items.map(i => `• \`${i}\``).join('\n')}`, components: [row] });
-            }
-
-            if (interaction.customId.startsWith('modal_admin_give_item_exec_')) {
-                try {
-                    await sendRconCommand(interaction.guild.id, `inventory.giveto "${interaction.customId.replace('modal_admin_give_item_exec_', '')}" ${interaction.fields.getTextInputValue('item_name')} ${interaction.fields.getTextInputValue('item_amount')}`);
-                    return interaction.reply({ content: `✅ Sent!`, flags: 64 });
-                } catch(e) { return interaction.reply({ content: `❌ Error`, flags: 64 }); }
-            }
-            if (interaction.customId === 'modal_admin_rcon') {
-                try {
-                    await sendRconCommand(interaction.guild.id, interaction.fields.getTextInputValue('rcon_command'));
-                    return interaction.reply({ content: `✅ Executed!`, flags: 64 });
-                } catch(e) { return interaction.reply({ content: `❌ Error`, flags: 64 }); }
-            }
-            if (interaction.customId === 'modal_setup_rcon') {
-                await GuildConfig.upsert({ guildId: interaction.guild.id, rconIp: interaction.fields.getTextInputValue('rcon_ip'), rconPort: interaction.fields.getTextInputValue('rcon_port'), rconPassword: interaction.fields.getTextInputValue('rcon_pass') });
-                return interaction.reply({ content: `✅ Saved RCON Credentials!`, flags: 64 });
-            }
-
-            if (interaction.customId.startsWith('modal_add_catalog_item_')) {
-                const shortname = interaction.customId.replace('modal_add_catalog_item_', '');
-                const name = interaction.fields.getTextInputValue('custom_name');
-                const amount = interaction.fields.getTextInputValue('amount');
-                const cd = parseInt(interaction.fields.getTextInputValue('cooldown')) || 0;
-                let basePrice = 100;
-                for (const catKey in RUST_CATEGORIES) {
-                    const found = RUST_CATEGORIES[catKey].items.find(i => i.shortname === shortname);
-                    if (found) { basePrice = found.basePrice; break; }
-                }
-                let catKeyCategory = 'custom';
-                for (const catKey in RUST_CATEGORIES) {
-                    if (RUST_CATEGORIES[catKey].items.some(i => i.shortname === shortname)) { catKeyCategory = catKey; break; }
-                }
-                const newItem = await ShopItem.create({ guildId: interaction.guild.id, name, command: `inventory.giveto "{player}" ${shortname} ${amount}`, price: basePrice, category: catKeyCategory, cooldownSeconds: cd });
-                const roleMenu = new RoleSelectMenuBuilder().setCustomId(`shop_role_${newItem.id}`).setPlaceholder('Select required Discord role (Optional)...');
-                return interaction.reply({ content: `✅ **${name}** added to store! Optional role restriction:`, components: [new ActionRowBuilder().addComponents(roleMenu)], flags: 64 });
-            }
-            if (interaction.customId === 'modal_shop_custom') {
-                const name = interaction.fields.getTextInputValue('item_name');
-                const cmd = interaction.fields.getTextInputValue('item_cmd');
-                const price = parseInt(interaction.fields.getTextInputValue('item_price')) || 100;
-                const cd = parseInt(interaction.fields.getTextInputValue('item_cooldown')) || 0;
-                const newItem = await ShopItem.create({ guildId: interaction.guild.id, name, command: cmd, price, category: 'custom', cooldownSeconds: cd });
-                const roleMenu = new RoleSelectMenuBuilder().setCustomId(`shop_role_${newItem.id}`).setPlaceholder('Select required Discord role (Optional)...');
-                return interaction.reply({ content: `✅ Custom item **${name}** added! Optional role restriction:`, components: [new ActionRowBuilder().addComponents(roleMenu)], flags: 64 });
-            }
-            if (interaction.customId === 'modal_shop_multiplier') {
-                const mult = parseInt(interaction.fields.getTextInputValue('multiplier'));
-                await GuildConfig.upsert({ guildId: interaction.guild.id, shopMultiplier: mult });
-                return interaction.reply({ content: `✅ Global price multiplier set to **${mult}%**!`, flags: 64 });
-            }
-            
-            if (interaction.customId.startsWith('modal_setup_')) {
-                return interaction.reply({ content: `✅ Config saved!`, flags: 64 });
-            }
-            if (interaction.customId === 'modal_wipe_full' || interaction.customId.startsWith('modal_wipe_sel_')) {
-                if (interaction.fields.getTextInputValue('confirm_text') !== 'WIPE') return interaction.reply({ content: '❌ Cancelled.', flags: 64 });
-                let updateData = {}; 
-                if (interaction.customId === 'modal_wipe_full') {
-                    const allZones = await PveZone.findAll({ where: { guildId: interaction.guild.id } });
-                    for (const z of allZones) {
-                        try { await sendRconCommand(interaction.guild.id, `zones.deletecustomzone "${z.zoneName}"`); } catch (e) {}
-                    }
-                    await PveZone.destroy({ where: { guildId: interaction.guild.id } });
-                    updateData = { 
-                        wallet: 0, xp: 0, level: 1, homeX: null, homeY: null, homeZ: null,
-                        autoSupplyEnabled: false, autoEliteEnabled: false, autoTimedEnabled: false,
-                        supplySpawnCount: 1, eliteSpawnCount: 1, timedSpawnCount: 1
-                    };
-                    for (let i = 1; i <= 10; i++) {
-                        updateData[`supplySlot${i}X`] = null; updateData[`supplySlot${i}Y`] = null; updateData[`supplySlot${i}Z`] = null;
-                        updateData[`eliteSlot${i}X`] = null; updateData[`eliteSlot${i}Y`] = null; updateData[`eliteSlot${i}Z`] = null;
-                        updateData[`timedSlot${i}X`] = null; updateData[`timedSlot${i}Y`] = null; updateData[`timedSlot${i}Z`] = null;
-                    }
-                } else {
-                    const sel = interaction.customId.replace('modal_wipe_sel_', '').split('-');
-                    if (sel.includes('wipe_econ')) updateData.wallet = 0;
-                    if (sel.includes('wipe_bp')) { updateData.xp = 0; updateData.level = 1; }
-                    if (sel.includes('wipe_tp')) { updateData.homeX = null; updateData.homeY = null; updateData.homeZ = null; }
-                    if (sel.includes('wipe_zones')) {
-                        const selZones = await PveZone.findAll({ where: { guildId: interaction.guild.id } });
-                        for (const z of selZones) {
-                            try { await sendRconCommand(interaction.guild.id, `zones.deletecustomzone "${z.zoneName}"`); } catch (e) {}
-                        }
-                        await PveZone.destroy({ where: { guildId: interaction.guild.id } });
-                    }
-                }
-                await GuildConfig.update(updateData, { where: { guildId: interaction.guild.id } });
-                await UserEconomy.update(updateData, { where: { guildId: interaction.guild.id } });
-                return interaction.reply({ content: `☢️ Server WIPED successfully! All auto event configurations cleared.` });
             }
         }
     } 
