@@ -4,12 +4,18 @@ const { GuildConfig, ReactionRole } = require('../database/db');
 module.exports = async (interaction, client) => {
     try {
         const customId = interaction.customId || '';
-        const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
+        
+        // Safely extract selected value from any select menu type (String, Channel, or Role)
+        let selectedValue = '';
+        if (interaction.isStringSelectMenu() || interaction.isChannelSelectMenu() || interaction.isRoleSelectMenu()) {
+            selectedValue = interaction.values?.[0] || '';
+        }
+
         console.log(`[RR HANDLER DEBUG] CustomID: ${customId} | Selected: ${selectedValue}`);
 
         // --- ADMIN MENU SELECT ENTRY ---
         if ((customId === 'admin_menu_select' && selectedValue === 'setup_reactionroles') || customId === 'rr_action_select') {
-            const activeRoles = await ReactionRole.count({ where: { guildId: interaction.guild.id } });
+            const activeRoles = await ReactionRole.count({ where: { guildId: interaction.guild.id, messageId: 'PENDING_DEPLOY' } });
             
             const embed = new EmbedBuilder()
                 .setTitle('🎭 Reaction Roles Setup')
@@ -35,28 +41,28 @@ module.exports = async (interaction, client) => {
                 new ButtonBuilder().setCustomId('btn_rr_clear').setLabel('Clear Queue').setStyle(ButtonStyle.Danger).setEmoji('🗑️')
             );
 
-            return interaction.reply({ 
-                embeds: [embed], 
-                components: [channelRow, roleRow, actionRow], 
-                flags: 64 
-            });
+            if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
+                return await interaction.reply({ embeds: [embed], components: [channelRow, roleRow, actionRow], flags: 64 });
+            } else {
+                return await interaction.update({ embeds: [embed], components: [channelRow, roleRow, actionRow] });
+            }
         }
 
         // --- HANDLE CHANNEL SELECTION ---
         if (interaction.isChannelSelectMenu() && customId === 'select_rr_channel') {
-            const channelId = interaction.values[0];
+            const channelId = selectedValue;
             await GuildConfig.upsert({ guildId: interaction.guild.id, rrTempChannelId: channelId });
-            return interaction.reply({ content: `✅ Reaction Role target channel set to <#${channelId}>! Now select roles below.`, flags: 64 });
+            return await interaction.reply({ content: `✅ Reaction Role target channel set to <#${channelId}>! Now select roles below.`, flags: 64 });
         }
 
         // --- HANDLE ROLE SELECTION & PROMPT FOR PRESET EMOJI ---
         if (interaction.isRoleSelectMenu() && customId === 'select_rr_role') {
-            const roleId = interaction.values[0];
+            const roleId = selectedValue;
             const roleObj = interaction.guild.roles.cache.get(roleId);
 
             const existing = await ReactionRole.findOne({ where: { guildId: interaction.guild.id, roleId: roleId, messageId: 'PENDING_DEPLOY' } });
             if (existing) {
-                return interaction.reply({ content: `⚠️ The role **${roleObj?.name || roleId}** is already in the queue!`, flags: 64 });
+                return await interaction.reply({ content: `⚠️ The role **${roleObj?.name || roleId}** is already in the queue!`, flags: 64 });
             }
 
             const emojiMenu = new ActionRowBuilder().addComponents(
@@ -82,13 +88,13 @@ module.exports = async (interaction, client) => {
                 .setDescription('Select an imported preset emoji from the dropdown menu below to assign it to this role button.')
                 .setColor('#2ecc71');
 
-            return interaction.reply({ embeds: [embed], components: [emojiMenu], flags: 64 });
+            return await interaction.reply({ embeds: [embed], components: [emojiMenu], flags: 64 });
         }
 
         // --- HANDLE PRESET EMOJI SELECTION FROM DROPDOWN ---
         if (interaction.isStringSelectMenu() && customId.startsWith('select_rr_emoji_')) {
             const roleId = customId.replace('select_rr_emoji_', '');
-            const selectedEmoji = interaction.values[0];
+            const selectedEmoji = selectedValue;
             const roleObj = interaction.guild.roles.cache.get(roleId);
 
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
@@ -105,10 +111,9 @@ module.exports = async (interaction, client) => {
             });
 
             const totalQueued = await ReactionRole.count({ where: { guildId: interaction.guild.id, messageId: 'PENDING_DEPLOY' } });
-            return interaction.update({ 
+            return await interaction.reply({ 
                 content: `✅ Successfully added role **${roleObj?.name || 'Role'}** with preset emoji ${selectedEmoji} to the queue! *(Total queued: ${totalQueued})*.`, 
-                embeds: [], 
-                components: [] 
+                flags: 64 
             });
         }
 
@@ -125,28 +130,28 @@ module.exports = async (interaction, client) => {
                         .setRequired(true)
                 )
             );
-            return interaction.showModal(modal);
+            return await interaction.showModal(modal);
         }
 
         // --- HANDLE MODAL SUBMISSION FOR RICH TEXT ---
         if (interaction.isModalSubmit() && customId === 'modal_rr_customize') {
             const desc = interaction.fields.getTextInputValue('panel_description');
             await GuildConfig.upsert({ guildId: interaction.guild.id, rrTempDescription: desc });
-            return interaction.reply({ content: `✅ Panel description saved successfully!`, flags: 64 });
+            return await interaction.reply({ content: `✅ Panel description saved successfully!`, flags: 64 });
         }
 
-        // --- CLEAR QUEUE BUTTON (FIXED TO WIPE ALL GUILD QUEUE ENTRIES) ---
+        // --- CLEAR QUEUE BUTTON ---
         if (interaction.isButton() && customId === 'btn_rr_clear') {
             await ReactionRole.destroy({ where: { guildId: interaction.guild.id } });
             await GuildConfig.update({ rrTempDescription: null, rrTempChannelId: null }, { where: { guildId: interaction.guild.id } });
-            return interaction.reply({ content: '🗑️ Cleared all queued reaction roles and temporary config for this server.', flags: 64 });
+            return await interaction.reply({ content: '🗑️ Cleared all queued reaction roles and temporary config for this server.', flags: 64 });
         }
 
         // --- DEPLOY REACTION ROLE PANEL ---
         if (interaction.isButton() && customId === 'btn_rr_deploy') {
             const roles = await ReactionRole.findAll({ where: { guildId: interaction.guild.id, messageId: 'PENDING_DEPLOY' } });
             if (roles.length === 0) {
-                return interaction.reply({ content: '❌ Please select at least one role using the role dropdown menu first!', flags: 64 });
+                return await interaction.reply({ content: '❌ Please select at least one role using the role dropdown menu first!', flags: 64 });
             }
 
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
@@ -157,7 +162,7 @@ module.exports = async (interaction, client) => {
                 try {
                     targetChannel = await interaction.guild.channels.fetch(targetChannelId);
                 } catch {
-                    return interaction.reply({ content: '❌ Target channel not found or inaccessible. Please re-select the channel from the dropdown.', flags: 64 });
+                    return await interaction.reply({ content: '❌ Target channel not found or inaccessible. Please re-select the channel from the dropdown.', flags: 64 });
                 }
             }
 
@@ -192,7 +197,7 @@ module.exports = async (interaction, client) => {
             await ReactionRole.update({ messageId: sentMessage.id }, { where: { guildId: interaction.guild.id, messageId: 'PENDING_DEPLOY' } });
             await config.update({ rrTempDescription: null, rrTempChannelId: null });
 
-            return interaction.reply({ content: `✅ Reaction panel successfully deployed to <#${targetChannelId}>!`, flags: 64 });
+            return await interaction.reply({ content: `✅ Reaction panel successfully deployed to <#${targetChannelId}>!`, flags: 64 });
         }
 
         // --- USER CLICKS A REACTION ROLE BUTTON ---
@@ -201,27 +206,27 @@ module.exports = async (interaction, client) => {
             const rrData = await ReactionRole.findByPk(rrId);
 
             if (!rrData) {
-                return interaction.reply({ content: '❌ This reaction role configuration no longer exists.', flags: 64 });
+                return await interaction.reply({ content: '❌ This reaction role configuration no longer exists.', flags: 64 });
             }
 
             const role = interaction.guild.roles.cache.get(rrData.roleId);
             if (!role) {
-                return interaction.reply({ content: '❌ The assigned role no longer exists on this server.', flags: 64 });
+                return await interaction.reply({ content: '❌ The assigned role no longer exists on this server.', flags: 64 });
             }
 
             const member = interaction.member;
             if (member.roles.cache.has(role.id)) {
                 await member.roles.remove(role);
-                return interaction.reply({ content: `❌ Removed role **${role.name}** from you.`, flags: 64 });
+                return await interaction.reply({ content: `❌ Removed role **${role.name}** from you.`, flags: 64 });
             } else {
                 await member.roles.add(role);
-                return interaction.reply({ content: `✅ Added role **${role.name}** to you!`, flags: 64 });
+                return await interaction.reply({ content: `✅ Added role **${role.name}** to you!`, flags: 64 });
             }
         }
 
     } catch (error) {
         console.error('[REACTION ROLE HANDLER ERROR]', error);
-        if (!interaction.replied && !interaction.deferred) {
+        if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
             await interaction.reply({ content: '❌ An error occurred processing reaction roles.', flags: 64 }).catch(() => {});
         }
     }
