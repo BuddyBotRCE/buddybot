@@ -145,11 +145,34 @@ module.exports = async (interaction, client) => {
                 return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
             }
 
-            if (customId === 'btn_clan_bank_deposit' || customId === 'btn_clan_bank_withdraw') {
-                const action = customId === 'btn_clan_bank_deposit' ? 'deposit' : 'withdraw';
-                const modal = new ModalBuilder().setCustomId(`modal_clan_bank_${action}`).setTitle(`Clan Bank - ${action.toUpperCase()}`);
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel("Amount (or type 'all')").setStyle(TextInputStyle.Short).setRequired(true)));
-                return interaction.showModal(modal);
+            if (customId === 'modal_clan_bank_deposit' || customId === 'modal_clan_bank_withdraw') {
+                const isDeposit = (customId === 'modal_clan_bank_deposit');
+                const input = interaction.fields.getTextInputValue('amount').trim().toLowerCase();
+                
+                const memberData = await ClanMember.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
+                const clan = await Clan.findByPk(memberData.clanId);
+                const user = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
+                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+                const currency = config?.economyCurrency || 'Scrap';
+
+                if (isDeposit) {
+                    let amount = input === 'all' ? user.wallet : parseInt(input);
+                    if (isNaN(amount) || amount <= 0) return interaction.reply({ content: '❌ Please enter a valid number.', flags: 64 });
+                    if (user.wallet < amount) return interaction.reply({ content: `❌ You only have **${user.wallet} ${currency}** in your wallet!`, flags: 64 });
+
+                    await user.update({ wallet: user.wallet - amount });
+                    await clan.update({ bankBalance: clan.bankBalance + amount });
+                    return interaction.reply({ content: `🏦 Successfully deposited **${amount} ${currency}** into the clan bank!`, flags: 64 });
+                } else {
+                    if (memberData.role !== 'Leader') return interaction.reply({ content: `❌ Only the clan leader can withdraw funds from the clan bank!`, flags: 64 });
+                    let amount = input === 'all' ? clan.bankBalance : parseInt(input);
+                    if (isNaN(amount) || amount <= 0) return interaction.reply({ content: '❌ Please enter a valid number.', flags: 64 });
+                    if (clan.bankBalance < amount) return interaction.reply({ content: `❌ The clan bank only has **${clan.bankBalance} ${currency}**!`, flags: 64 });
+
+                    await clan.update({ bankBalance: clan.bankBalance - amount });
+                    await user.update({ wallet: user.wallet + amount });
+                    return interaction.reply({ content: `🏧 Successfully withdrew **${amount} ${currency}** from the clan bank to your wallet!`, flags: 64 });
+                }
             }
 
             // --- MANAGE MEMBERS ---
