@@ -27,8 +27,8 @@ const bindHandler = require(handlerPath('bindHandler'));
 const adminHandler = require(handlerPath('adminHandler'));
 
 module.exports = async (interaction, client) => {
+    console.log(`[INTERACTION DEBUG] Type: ${interaction.type} | CustomID: ${interaction.customId || 'N/A'} | Command: ${interaction.commandName || 'N/A'}`);
     try {
-        // 1. Handle Slash Commands (/adminpanel, /playerpanel, etc.)
         if (interaction.isChatInputCommand()) {
             const command = client.commands.get(interaction.commandName);
             if (!command) return;
@@ -38,9 +38,6 @@ module.exports = async (interaction, client) => {
         const customId = interaction.customId || '';
         const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
 
-        // ====================================================================
-        // 🚦 2. ADMIN DROPDOWN MENU ROUTER
-        // ====================================================================
         if (customId === 'admin_menu_select') {
             if (selectedValue === 'setup_autoevents') return await autoEventsHandler(interaction, client);
             if (selectedValue === 'setup_economy') return await economyHandler(interaction, client);
@@ -56,14 +53,8 @@ module.exports = async (interaction, client) => {
             if (selectedValue === 'setup_kits') return await kitHandler(interaction, client);
             if (selectedValue === 'setup_pvezones') return await pveHandler(interaction, client);
             if (selectedValue === 'setup_binds') return await bindHandler(interaction, client);
-            
-            // Catch-all for other admin setups (logging, automod, wipes, etc.)
             return await adminHandler(interaction, client);
         }
-
-        // ====================================================================
-        // 🚦 3. COMPONENT & MODAL ROUTING STATION
-        // ====================================================================
 
         if (customId.startsWith('ae_') || customId.startsWith('modal_ae_') || customId.startsWith('btn_finalize_tpl_aeslot')) {
             return await autoEventsHandler(interaction, client);
@@ -87,7 +78,7 @@ module.exports = async (interaction, client) => {
             return await shopHandler(interaction, client);
         }
 
-        // --- CLANS ROUTER (Captures all button clicks, select menus, and modals for clans) ---
+        // --- CLANS ROUTER ---
         if (customId.includes('clan') || customId.includes('bank') || customId.startsWith('modal_clan_') || customId.startsWith('btn_clan_') || customId.startsWith('btn_bank_') || customId.startsWith('select_clan_')) {
             return await clanHandler(interaction, client);
         }
@@ -111,7 +102,6 @@ module.exports = async (interaction, client) => {
             return await bindHandler(interaction, client);
         }
 
-        // --- CATCH ALL REMAINING LOGIC ---
         return await adminHandler(interaction, client);
 
     } catch (error) {
