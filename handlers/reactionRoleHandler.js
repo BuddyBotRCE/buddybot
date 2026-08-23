@@ -5,7 +5,6 @@ module.exports = async (interaction, client) => {
     try {
         const customId = interaction.customId || '';
         
-        // Bulletproof value extraction for any select menu type
         let selectedValue = '';
         if (interaction.isStringSelectMenu() || interaction.isChannelSelectMenu() || interaction.isRoleSelectMenu()) {
             selectedValue = interaction.values?.[0] 
@@ -103,7 +102,7 @@ module.exports = async (interaction, client) => {
         // --- HANDLE PRESET EMOJI SELECTION FROM DROPDOWN ---
         if (interaction.isStringSelectMenu() && customId.startsWith('select_rr_emoji_')) {
             const roleId = customId.replace('select_rr_emoji_', '');
-            const selectedEmoji = selectedValue;
+            const selectedEmoji = selectedValue || '🔥'; // Fallback emoji if empty
             const roleObj = interaction.guild.roles.cache.get(roleId);
 
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
