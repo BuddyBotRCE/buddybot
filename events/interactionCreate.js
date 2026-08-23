@@ -7,7 +7,7 @@ const { GuildConfig, GameServer, UserEconomy, CustomBind, ServerKit, OrpConfig, 
 const { connectRcon, sendRconCommand, queueAdminPos } = require('../utils/rconManager');
 const { RUST_CATEGORIES } = require('../utils/rustCatalog');
 
-// --- BULLETPROOF ABSOLUTE PATH IMPORTS ---
+// --- BULLETPROOF ABSOLUTE PATH IMPORTS FOR HANDLERS ---
 const handlerPath = (fileName) => path.join(__dirname, '..', 'handlers', fileName);
 
 const autoEventsHandler = require(handlerPath('autoEventsHandler'));
@@ -28,7 +28,7 @@ const adminHandler = require(handlerPath('adminHandler'));
 
 module.exports = async (interaction, client) => {
     try {
-        // --- 2. HANDLE STANDARD SLASH COMMANDS ---
+        // 1. Handle Slash Commands (/adminpanel, /playerpanel, etc.)
         if (interaction.isChatInputCommand()) {
             const command = client.commands.get(interaction.commandName);
             if (!command) return;
@@ -39,7 +39,7 @@ module.exports = async (interaction, client) => {
         const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
 
         // ====================================================================
-        // 🚦 3. ADMIN PANEL DROPDOWN ROUTER
+        // 🚦 2. ADMIN DROPDOWN MENU ROUTER
         // ====================================================================
         if (customId === 'admin_menu_select') {
             if (selectedValue === 'setup_autoevents') return await autoEventsHandler(interaction, client);
@@ -57,12 +57,12 @@ module.exports = async (interaction, client) => {
             if (selectedValue === 'setup_pvezones') return await pveHandler(interaction, client);
             if (selectedValue === 'setup_binds') return await bindHandler(interaction, client);
             
-            // Everything else (Logging, Automod, Wipes, Reaction Roles) goes to Admin
+            // Catch-all for other admin setups (logging, automod, wipes, etc.)
             return await adminHandler(interaction, client);
         }
 
         // ====================================================================
-        // 🚦 4. BUTTON & MODAL ROUTER
+        // 🚦 3. COMPONENT & MODAL ROUTING STATION
         // ====================================================================
 
         if (customId.startsWith('ae_') || customId.startsWith('modal_ae_') || customId.startsWith('btn_finalize_tpl_aeslot')) {
@@ -86,9 +86,12 @@ module.exports = async (interaction, client) => {
         if (customId.includes('shop') || customId.startsWith('buy_item_')) {
             return await shopHandler(interaction, client);
         }
-        if (customId.includes('clan')) {
+
+        // --- CLANS ROUTER (Captures all button clicks, select menus, and modals for clans) ---
+        if (customId.includes('clan') || customId.startsWith('modal_clan_') || customId.startsWith('btn_clan_') || customId.startsWith('select_clan_')) {
             return await clanHandler(interaction, client);
         }
+
         if (customId.startsWith('bp_') || customId.includes('buddypass')) {
             return await buddyPassHandler(interaction, client);
         }
@@ -109,12 +112,14 @@ module.exports = async (interaction, client) => {
         }
 
         // --- CATCH ALL REMAINING LOGIC ---
-        // Includes: RCON configs, Server Links, Wipes, Reaction Roles, Admin Tools, Leaderboards
         return await adminHandler(interaction, client);
 
     } catch (error) {
         console.error('[INTERACTION ERROR]', error);
-        if (interaction.deferred || interaction.replied) await interaction.followUp({ content: 'Error occurred.', flags: 64 }).catch(()=>{});
-        else await interaction.reply({ content: 'Error occurred.', flags: 64 }).catch(()=>{});
+        if (interaction.deferred || interaction.replied) {
+            await interaction.followUp({ content: '❌ An error occurred processing this interaction.', flags: 64 }).catch(() => {});
+        } else {
+            await interaction.reply({ content: '❌ An error occurred processing this interaction.', flags: 64 }).catch(() => {});
+        }
     }
 };
