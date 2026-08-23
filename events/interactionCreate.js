@@ -104,6 +104,9 @@ module.exports = async (interaction, client) => {
         if (customId.includes('bind') || customId.startsWith('tpl_') || customId === 'btn_dismiss_coord' || customId.startsWith('btn_finalize_tpl_') || customId.startsWith('modal_final_')) {
             return await bindHandler(interaction, client);
         }
+        if (customId.includes('verify') || customId.includes('verification')) {
+            return await verificationHandler(interaction, client);
+        }
 
         return await adminHandler(interaction, client);
 
