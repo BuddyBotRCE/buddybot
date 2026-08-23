@@ -1,7 +1,6 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder, ChannelType, PermissionFlagsBits } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder, StringSelectMenuBuilder, ChannelType, PermissionFlagsBits } = require('discord.js');
 const { GuildConfig, UserEconomy, Clan, ClanMember, ClanInvite } = require('../database/db');
 
-// Helper function to render the main clan dashboard
 async function renderClanHub(interaction, member, editMode = false) {
     const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
     const currency = config?.economyCurrency || 'Scrap';
@@ -125,14 +124,57 @@ module.exports = async (interaction, client) => {
                 return interaction.showModal(modal);
             }
 
-            // SUB-MENU BUTTONS
+            // --- CLEAN BANK MENU (Deposit / Withdraw Buttons) ---
             if (customId.startsWith('btn_clan_bank_')) {
-                const modal = new ModalBuilder().setCustomId('modal_clan_bank_action').setTitle('Clan Bank Management');
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('action').setLabel("Type 'deposit' or 'withdraw'").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel("Amount").setStyle(TextInputStyle.Short).setRequired(true))
+                const memberData = await ClanMember.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
+                const clan = await Clan.findByPk(memberData.clanId);
+                const user = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
+                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+                const currency = config?.economyCurrency || 'Scrap';
+
+                const embed = new EmbedBuilder()
+                    .setTitle(`🏦 Clan Bank: ${clan.name}`)
+                    .setDescription(`• **Clan Bank Balance:** ${clan.bankBalance} ${currency}\n• **Your Wallet Balance:** ${user?.wallet || 0} ${currency}\n\nClick an option below to deposit or withdraw funds:`)
+                    .setColor('#2ecc71');
+
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('btn_clan_bank_deposit').setLabel('Deposit').setStyle(ButtonStyle.Success).setEmoji('📥'),
+                    new ButtonBuilder().setCustomId('btn_clan_bank_withdraw').setLabel('Withdraw').setStyle(ButtonStyle.Primary).setEmoji('📤')
                 );
+
+                return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+            }
+
+            if (customId === 'btn_clan_bank_deposit' || customId === 'btn_clan_bank_withdraw') {
+                const action = customId === 'btn_clan_bank_deposit' ? 'deposit' : 'withdraw';
+                const modal = new ModalBuilder().setCustomId(`modal_clan_bank_${action}`).setTitle(`Clan Bank - ${action.toUpperCase()}`);
+                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel("Amount (or type 'all')").setStyle(TextInputStyle.Short).setRequired(true)));
                 return interaction.showModal(modal);
+            }
+
+            // --- MANAGE MEMBERS ---
+            if (customId.startsWith('btn_clan_manage_')) {
+                const memberData = await ClanMember.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
+                const members = await ClanMember.findAll({ where: { clanId: memberData.clanId } });
+                const memberList = members.map(m => `• <@${m.userId}> — \`${m.role}\``).join('\n');
+
+                const embed = new EmbedBuilder().setTitle('👥 Manage Clan Members').setDescription(`**Roster:**\n${memberList}`).setColor('#3498db');
+                const kickOptions = members.filter(m => m.userId !== interaction.user.id).map(m => ({ label: `Kick member ID: ${m.userId.substring(0, 10)}...`, value: `kick_${m.userId}` }));
+                
+                const row = kickOptions.length > 0 ? new ActionRowBuilder().addComponents(
+                    new StringSelectMenuBuilder().setCustomId('select_clan_kick').setPlaceholder('Select a member to kick...').addOptions(kickOptions)
+                ) : null;
+
+                return interaction.reply({ embeds: [embed], components: row ? [row] : [], flags: 64 });
+            }
+
+            // --- CLAN WARS ---
+            if (customId.startsWith('btn_clan_wars_')) {
+                const embed = new EmbedBuilder()
+                    .setTitle('⚔️ Clan Wars Hub')
+                    .setDescription(`Clan Wars are currently in **Pre-Season / Development**. Soon you will be able to declare war on rival clans, compete for territory, and raid rival clan banks!`)
+                    .setColor('#e74c3c');
+                return interaction.reply({ embeds: [embed], flags: 64 });
             }
 
             if (customId.startsWith('btn_clan_invite_')) {
@@ -178,7 +220,7 @@ module.exports = async (interaction, client) => {
             }
         }
 
-        // --- USER SELECT MENUS ---
+        // --- SELECT MENUS ---
         if (interaction.isUserSelectMenu()) {
             if (customId === 'select_clan_invite_target') {
                 const targetUserId = interaction.values[0];
@@ -186,6 +228,14 @@ module.exports = async (interaction, client) => {
                 
                 await ClanInvite.create({ guildId: interaction.guild.id, clanId: memberData.clanId, userId: targetUserId });
                 return interaction.reply({ content: `✅ Successfully sent a clan invite to <@${targetUserId}>!`, flags: 64 });
+            }
+        }
+
+        if (interaction.isStringSelectMenu()) {
+            if (customId === 'select_clan_kick') {
+                const targetUserId = selectedValue.replace('kick_', '');
+                await ClanMember.destroy({ where: { guildId: interaction.guild.id, userId: targetUserId } });
+                return interaction.update({ content: `✅ Successfully kicked member from the clan.`, components: [] });
             }
         }
 
@@ -243,7 +293,6 @@ module.exports = async (interaction, client) => {
 
                 await ClanMember.create({ guildId: interaction.guild.id, userId: interaction.user.id, clanId: newClan.id, role: 'Leader' });
 
-                // Instantly auto-switch reply into the main clan dashboard view!
                 return await renderClanHub(interaction, interaction.member, true);
             }
 
@@ -255,30 +304,33 @@ module.exports = async (interaction, client) => {
                 return interaction.reply({ content: `✅ Base codes successfully updated!`, flags: 64 });
             }
 
-            if (customId === 'modal_clan_bank_action') {
-                const action = interaction.fields.getTextInputValue('action').trim().toLowerCase();
-                const amount = parseInt(interaction.fields.getTextInputValue('amount'));
-                if (isNaN(amount) || amount <= 0) return interaction.reply({ content: '❌ Please enter a valid number.', flags: 64 });
-
+            if (customId === 'modal_clan_bank_deposit' || customId === 'modal_clan_bank_withdraw') {
+                const isDeposit = customId === 'modal_clan_bank_deposit';
+                const input = interaction.fields.getTextInputValue('amount').trim().toLowerCase();
+                
                 const memberData = await ClanMember.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
                 const clan = await Clan.findByPk(memberData.clanId);
                 const user = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
                 const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
                 const currency = config?.economyCurrency || 'Scrap';
 
-                if (action === 'deposit') {
+                if (isDeposit) {
+                    let amount = input === 'all' ? user.wallet : parseInt(input);
+                    if (isNaN(amount) || amount <= 0) return interaction.reply({ content: '❌ Please enter a valid number.', flags: 64 });
                     if (user.wallet < amount) return interaction.reply({ content: `❌ You only have **${user.wallet} ${currency}** in your wallet!`, flags: 64 });
+
                     await user.update({ wallet: user.wallet - amount });
                     await clan.update({ bankBalance: clan.bankBalance + amount });
-                    return interaction.reply({ content: `🏦 Deposited **${amount} ${currency}** into the clan bank!`, flags: 64 });
-                } else if (action === 'withdraw') {
-                    if (memberData.role !== 'Leader') return interaction.reply({ content: `❌ Only the clan leader can withdraw funds from the bank!`, flags: 64 });
+                    return interaction.reply({ content: `🏦 Successfully deposited **${amount} ${currency}** into the clan bank!`, flags: 64 });
+                } else {
+                    if (memberData.role !== 'Leader') return interaction.reply({ content: `❌ Only the clan leader can withdraw funds from the clan bank!`, flags: 64 });
+                    let amount = input === 'all' ? clan.bankBalance : parseInt(input);
+                    if (isNaN(amount) || amount <= 0) return interaction.reply({ content: '❌ Please enter a valid number.', flags: 64 });
                     if (clan.bankBalance < amount) return interaction.reply({ content: `❌ The clan bank only has **${clan.bankBalance} ${currency}**!`, flags: 64 });
+
                     await clan.update({ bankBalance: clan.bankBalance - amount });
                     await user.update({ wallet: user.wallet + amount });
-                    return interaction.reply({ content: `🏧 Withdrew **${amount} ${currency}** from the clan bank to your wallet!`, flags: 64 });
-                } else {
-                    return interaction.reply({ content: `❌ Invalid action. Type either \`deposit\` or \`withdraw\`.`, flags: 64 });
+                    return interaction.reply({ content: `🏧 Successfully withdrew **${amount} ${currency}** from the clan bank to your wallet!`, flags: 64 });
                 }
             }
         }
