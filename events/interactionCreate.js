@@ -63,8 +63,8 @@ module.exports = async (interaction, client) => {
         // 🚦 3. COMPONENT & MODAL ROUTING STATION (STRICT CHECKS)
         // ====================================================================
 
-        // --- REACTION ROLES ROUTER (STRICT PREFIX MATCHING) ---
-        if (customId.startsWith('rr_') || customId.includes('reaction') || customId.startsWith('select_rr')) {
+        // --- REACTION ROLES ROUTER (CATCHES ALL RR COMPONENTS & MODALS) ---
+        if (customId.startsWith('rr_') || customId.startsWith('select_rr_') || customId.startsWith('btn_rr_') || customId.startsWith('modal_rr_') || customId.includes('reaction')) {
             return await reactionRoleHandler(interaction, client);
         }
 

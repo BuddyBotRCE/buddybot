@@ -5,10 +5,13 @@ module.exports = async (interaction, client) => {
     try {
         const customId = interaction.customId || '';
         
-        // Safely extract selected value from any select menu type (String, Channel, or Role)
+        // Bulletproof value extraction for any select menu type
         let selectedValue = '';
         if (interaction.isStringSelectMenu() || interaction.isChannelSelectMenu() || interaction.isRoleSelectMenu()) {
-            selectedValue = interaction.values?.[0] || '';
+            selectedValue = interaction.values?.[0] 
+                || interaction.channels?.first()?.id 
+                || interaction.roles?.first()?.id 
+                || '';
         }
 
         console.log(`[RR HANDLER DEBUG] CustomID: ${customId} | Selected: ${selectedValue}`);
@@ -51,6 +54,9 @@ module.exports = async (interaction, client) => {
         // --- HANDLE CHANNEL SELECTION ---
         if (interaction.isChannelSelectMenu() && customId === 'select_rr_channel') {
             const channelId = selectedValue;
+            if (!channelId) {
+                return await interaction.reply({ content: '❌ Could not determine selected channel. Please try again.', flags: 64 });
+            }
             await GuildConfig.upsert({ guildId: interaction.guild.id, rrTempChannelId: channelId });
             return await interaction.reply({ content: `✅ Reaction Role target channel set to <#${channelId}>! Now select roles below.`, flags: 64 });
         }
@@ -58,6 +64,9 @@ module.exports = async (interaction, client) => {
         // --- HANDLE ROLE SELECTION & PROMPT FOR PRESET EMOJI ---
         if (interaction.isRoleSelectMenu() && customId === 'select_rr_role') {
             const roleId = selectedValue;
+            if (!roleId) {
+                return await interaction.reply({ content: '❌ Could not determine selected role. Please try again.', flags: 64 });
+            }
             const roleObj = interaction.guild.roles.cache.get(roleId);
 
             const existing = await ReactionRole.findOne({ where: { guildId: interaction.guild.id, roleId: roleId, messageId: 'PENDING_DEPLOY' } });
