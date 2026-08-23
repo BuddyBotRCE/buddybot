@@ -1,23 +1,30 @@
 // ============================================================================
 // MASTER ROUTER: events/interactionCreate.js
 // ============================================================================
+const path = require('path');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelSelectMenuBuilder, RoleSelectMenuBuilder, UserSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType, PermissionFlagsBits } = require('discord.js');
+const { GuildConfig, GameServer, UserEconomy, CustomBind, ServerKit, OrpConfig, PlayerOrpBase, PveZone, ReactionRole } = require('../database/db');
+const { connectRcon, sendRconCommand, queueAdminPos } = require('../utils/rconManager');
+const { RUST_CATEGORIES } = require('../utils/rustCatalog');
 
-// --- 1. IMPORT ALL OUR MODULAR HANDLERS ---
-const autoEventsHandler = require('../handlers/autoEventsHandler');
-const economyHandler = require('../handlers/economyHandler');
-const premiumHandler = require('../handlers/premiumHandler');
-const suggestionHandler = require('../handlers/suggestionHandler');
-const ticketHandler = require('../handlers/ticketHandler');
-const giveawayHandler = require('../handlers/giveawayHandler');
-const shopHandler = require('../handlers/shopHandler');
-const clanHandler = require('../handlers/clanHandler');
-const buddyPassHandler = require('../handlers/buddyPassHandler');
-const casinoHandler = require('../handlers/casinoHandler');
-const bountyHandler = require('../handlers/bountyHandler');
-const kitHandler = require('../handlers/kitHandler');
-const pveHandler = require('../handlers/pveHandler');
-const bindHandler = require('../handlers/bindHandler');
-const adminHandler = require('../handlers/adminHandler');
+// --- BULLETPROOF ABSOLUTE PATH IMPORTS ---
+const handlerPath = (fileName) => path.join(__dirname, '..', 'handlers', fileName);
+
+const autoEventsHandler = require(handlerPath('autoEventsHandler'));
+const economyHandler = require(handlerPath('economyHandler'));
+const premiumHandler = require(handlerPath('premiumHandler'));
+const suggestionHandler = require(handlerPath('suggestionHandler'));
+const ticketHandler = require(handlerPath('ticketHandler'));
+const giveawayHandler = require(handlerPath('giveawayHandler'));
+const shopHandler = require(handlerPath('shopHandler'));
+const clanHandler = require(handlerPath('clanHandler'));
+const buddyPassHandler = require(handlerPath('buddyPassHandler'));
+const casinoHandler = require(handlerPath('casinoHandler'));
+const bountyHandler = require(handlerPath('bountyHandler'));
+const kitHandler = require(handlerPath('kitHandler'));
+const pveHandler = require(handlerPath('pveHandler'));
+const bindHandler = require(handlerPath('bindHandler'));
+const adminHandler = require(handlerPath('adminHandler'));
 
 module.exports = async (interaction, client) => {
     try {
