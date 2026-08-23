@@ -1,5 +1,5 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, RoleSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { GuildConfig, ShopItem, UserEconomy } = require('../database/db');
+const { GuildConfig, ShopItem, UserEconomy, ShopCooldown } = require('../database/db');
 const { sendRconCommand } = require('../utils/rconManager');
 const { RUST_CATEGORIES } = require('../utils/rustCatalog');
 const { Op } = require('sequelize');
@@ -186,7 +186,10 @@ module.exports = async (interaction, client) => {
 
         if (availableItems.length === 0) return interaction.update({ content: `❌ No items currently available in **${categoryData?.label || 'Custom'}**.`, components: [] });
 
-        const options = availableItems.map(i => ({ label: i.name, description: `Price: ${Math.round(i.price * multiplier)} | CD: ${i.cooldownSeconds}s`, value: `buy_item_${i.id}` }));
+        const options = availableItems.map(i => {
+            const finalPrice = Math.round(i.price * multiplier);
+            return { label: i.name, description: `Price: ${finalPrice} Scrap`, value: `buy_item_${i.id}` };
+        });
         const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('player_shop_buy_select').setPlaceholder('Select item to buy...').addOptions(options));
         return interaction.update({ content: `🛒 **${categoryData?.label || 'Shop'}**: Select an item to purchase:`, components: [row] });
     }
@@ -217,7 +220,11 @@ module.exports = async (interaction, client) => {
             const catData = RUST_CATEGORIES[catKey];
             const itemsInCat = dbItems.filter(i => i.category === catKey);
             if (itemsInCat.length > 0) {
-                let itemListText = itemsInCat.map(i => `• **${i.name}** — 💰 **${Math.round(i.price * multiplier)} ${currency}** *(CD: ${i.cooldownSeconds}s)*`).join('\n');
+                let itemListText = itemsInCat.map(i => {
+                    const finalPrice = Math.round(i.price * multiplier);
+                    const cdText = i.cooldownSeconds > 0 ? ` *(CD: ${i.cooldownSeconds}s)*` : '';
+                    return `• **${i.name}** — 💰 **${finalPrice} ${currency}**${cdText}`;
+                }).join('\n');
                 if (itemListText.length > 1024) itemListText = itemListText.substring(0, 1021) + '...';
                 embed.addFields({ name: `${catData.emoji} ${catData.label}`, value: itemListText, inline: false });
             }
@@ -225,7 +232,11 @@ module.exports = async (interaction, client) => {
 
         const customItems = dbItems.filter(i => i.category === 'custom');
         if (customItems.length > 0) {
-            let customListText = customItems.map(i => `• **${i.name}** — 💰 **${Math.round(i.price * multiplier)} ${currency}** *(CD: ${i.cooldownSeconds}s)*`).join('\n');
+            let customListText = customItems.map(i => {
+                const finalPrice = Math.round(i.price * multiplier);
+                const cdText = i.cooldownSeconds > 0 ? ` *(CD: ${i.cooldownSeconds}s)*` : '';
+                return `• **${i.name}** — 💰 **${finalPrice} ${currency}**${cdText}`;
+            }).join('\n');
             if (customListText.length > 1024) customListText = customListText.substring(0, 1021) + '...';
             embed.addFields({ name: '✨ Custom / Server Items', value: customListText, inline: false });
         }
@@ -258,14 +269,34 @@ module.exports = async (interaction, client) => {
             const shopItem = await ShopItem.findByPk(itemId);
             if (!shopItem) return interaction.reply({ content: '❌ Item no longer exists.', flags: 64 });
 
+            // COOLDOWN CHECK
+            if (shopItem.cooldownSeconds > 0) {
+                const now = new Date();
+                const [cooldownRecord] = await ShopCooldown.findOrCreate({
+                    where: { guildId: interaction.guild.id, userId: interaction.user.id, itemId: shopItem.id },
+                    defaults: { expiresAt: now }
+                });
+
+                if (new Date(cooldownRecord.expiresAt) > now) {
+                    const secondsLeft = Math.ceil((new Date(cooldownRecord.expiresAt) - now) / 1000);
+                    const minutesLeft = Math.floor(secondsLeft / 60);
+                    const timeString = minutesLeft > 0 ? `${minutesLeft}m ${secondsLeft % 60}s` : `${secondsLeft}s`;
+                    return interaction.reply({ content: `⏳ You are on cooldown for **${shopItem.name}**! Please wait **${timeString}** before purchasing it again.`, flags: 64 });
+                }
+
+                // Update cooldown expiration
+                await cooldownRecord.update({ expiresAt: new Date(now.getTime() + shopItem.cooldownSeconds * 1000) });
+            }
+
             const userEconomy = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
             if (!userEconomy || !userEconomy.inGameName) return interaction.reply({ content: '❌ Link your Rust account first using `/playerpanel`!', flags: 64 });
 
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+            const currency = config?.economyCurrency || 'Scrap';
             const unitPrice = Math.round(shopItem.price * ((config?.shopMultiplier || 100) / 100));
             const totalPrice = unitPrice * qty;
 
-            if (userEconomy.wallet < totalPrice) return interaction.reply({ content: `❌ You need **${totalPrice} ${config?.economyCurrency || 'Scrap'}** for ${qty}x ${shopItem.name}, but you only have **${userEconomy.wallet}**.`, flags: 64 });
+            if (userEconomy.wallet < totalPrice) return interaction.reply({ content: `❌ You need **${totalPrice} ${currency}** for ${qty}x ${shopItem.name}, but you only have **${userEconomy.wallet}**.`, flags: 64 });
 
             try {
                 await userEconomy.update({ wallet: userEconomy.wallet - totalPrice });
@@ -281,7 +312,7 @@ module.exports = async (interaction, client) => {
                 for (const c of finalCommand.split('\n')) {
                     if (c.trim()) await sendRconCommand(interaction.guild.id, c.trim());
                 }
-                return interaction.reply({ content: `✅ **Purchase Successful!** You bought **${qty}x ${shopItem.name}** for **${totalPrice} ${config?.economyCurrency || 'Scrap'}**. Delivered to your in-game inventory!`, flags: 64 });
+                return interaction.reply({ content: `✅ **Purchase Successful!** You bought **${qty}x ${shopItem.name}** for **${totalPrice} ${currency}**. Delivered to your in-game inventory!`, flags: 64 });
             } catch (e) {
                 return interaction.reply({ content: `❌ RCON Error: ${e.message}`, flags: 64 });
             }
