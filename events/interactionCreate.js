@@ -12,14 +12,14 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 const activeKitBuilders = new Map(); 
 
-// --- HELPER FUNCTION: GENERATE AUTO-EVENT MENU DYNAMICALLY ---
+// --- HELPER FUNCTION: DYNAMIC AUTO-EVENT MENU REFRESH ---
 async function renderAutoEventPanel(interaction, eventType) {
-    const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+    let [config] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
     
-    const customName = eventType === 'supply' ? (config?.supplyEventName || 'Supply Drops') : eventType === 'elite' ? (config?.eliteEventName || 'Elite Crates') : (config?.timedEventName || 'Timed Crates');
-    const count = eventType === 'supply' ? (config?.supplySpawnCount || 1) : eventType === 'elite' ? (config?.eliteSpawnCount || 1) : (config?.timedSpawnCount || 1);
-    const interval = eventType === 'supply' ? (config?.supplyInterval || 60) : eventType === 'elite' ? (config?.eliteInterval || 60) : (config?.timedInterval || 60);
-    const isEnabled = eventType === 'supply' ? (config?.autoSupplyEnabled || false) : eventType === 'elite' ? (config?.autoEliteEnabled || false) : (config?.autoTimedEnabled || false);
+    const customName = eventType === 'supply' ? (config.supplyEventName || 'Supply Drops') : eventType === 'elite' ? (config.eliteEventName || 'Elite Crates') : (config.timedEventName || 'Timed Crates');
+    const count = eventType === 'supply' ? (config.supplySpawnCount || 1) : eventType === 'elite' ? (config.eliteSpawnCount || 1) : (config.timedSpawnCount || 1);
+    const interval = eventType === 'supply' ? (config.supplyInterval || 60) : eventType === 'elite' ? (config.eliteInterval || 60) : (config.timedInterval || 60);
+    const isEnabled = eventType === 'supply' ? (config.autoSupplyEnabled || false) : eventType === 'elite' ? (config.autoEliteEnabled || false) : (config.autoTimedEnabled || false);
 
     const embed = new EmbedBuilder()
         .setTitle(`⚙️ Auto Event Manager: ${customName}`)
@@ -31,14 +31,14 @@ async function renderAutoEventPanel(interaction, eventType) {
         .setColor(isEnabled ? '#2ecc71' : '#e74c3c');
 
     const qtyOptions = [];
-    for (let i = 1; i <= 10; i++) qtyOptions.push({ label: `Set Quantity: ${i}`, value: `${i}`, emoji: '🔢' });
+    for (let i = 1; i <= 10; i++) qtyOptions.push({ label: `Spawn Quantity: ${i}`, value: `${i}`, emoji: '🔢' });
     const rowQty = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder().setCustomId(`ae_qty_select_${eventType}`).setPlaceholder(`Current Quantity: ${count} (Click to change)...`).addOptions(qtyOptions)
     );
 
     const slotOptions = [];
     for (let i = 1; i <= count; i++) {
-        const x = config ? config[`${eventType}Slot${i}X`] : null;
+        const x = config[`${eventType}Slot${i}X`];
         const hasCoord = x !== null && x !== undefined;
         slotOptions.push({
             label: `Capture Position for Slot ${i} of ${count}`,
@@ -63,10 +63,14 @@ async function renderAutoEventPanel(interaction, eventType) {
             ])
     );
 
-    if (interaction.deferred) {
-        await interaction.editReply({ embeds: [embed], components: [rowQty, rowLoc, rowActions] });
-    } else {
-        await interaction.update({ embeds: [embed], components: [rowQty, rowLoc, rowActions] });
+    try {
+        if (interaction.replied || interaction.deferred) {
+            await interaction.editReply({ embeds: [embed], components: [rowQty, rowLoc, rowActions] });
+        } else {
+            await interaction.update({ embeds: [embed], components: [rowQty, rowLoc, rowActions] });
+        }
+    } catch (err) {
+        console.error('Auto Event Panel Render Error:', err);
     }
 }
 
@@ -234,7 +238,6 @@ module.exports = async (interaction, client) => {
             // =================================================================
             // AUTO EVENTS: 100% PURE DROPDOWN SYSTEM
             // =================================================================
-
             if (interaction.customId === 'ae_event_select_main') {
                 return await renderAutoEventPanel(interaction, module);
             }
@@ -243,12 +246,11 @@ module.exports = async (interaction, client) => {
                 const eventType = interaction.customId.replace('ae_qty_select_', '');
                 const qty = parseInt(module);
                 
-                const updateObj = {};
-                if (eventType === 'supply') updateObj.supplySpawnCount = qty;
-                else if (eventType === 'elite') updateObj.eliteSpawnCount = qty;
-                else if (eventType === 'timed') updateObj.timedSpawnCount = qty;
+                let [cfg] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
+                if (eventType === 'supply') await cfg.update({ supplySpawnCount: qty });
+                else if (eventType === 'elite') await cfg.update({ eliteSpawnCount: qty });
+                else if (eventType === 'timed') await cfg.update({ timedSpawnCount: qty });
                 
-                await GuildConfig.upsert({ guildId: interaction.guild.id, ...updateObj });
                 return await renderAutoEventPanel(interaction, eventType);
             }
 
@@ -268,11 +270,11 @@ module.exports = async (interaction, client) => {
             if (interaction.customId.startsWith('ae_action_select_')) {
                 const eventType = interaction.customId.replace('ae_action_select_', '');
                 const action = module;
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+                let [config] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
 
                 if (action === 'config') {
-                    const currentName = eventType === 'supply' ? (config?.supplyEventName || 'Supply Drops') : eventType === 'elite' ? (config?.eliteEventName || 'Elite Crates') : (config?.timedEventName || 'Timed Crates');
-                    const interval = eventType === 'supply' ? (config?.supplyInterval || 60) : eventType === 'elite' ? (config?.eliteInterval || 60) : (config?.timedInterval || 60);
+                    const currentName = eventType === 'supply' ? (config.supplyEventName || 'Supply Drops') : eventType === 'elite' ? (config.eliteEventName || 'Elite Crates') : (config.timedEventName || 'Timed Crates');
+                    const interval = eventType === 'supply' ? (config.supplyInterval || 60) : eventType === 'elite' ? (config.eliteInterval || 60) : (config.timedInterval || 60);
 
                     const modal = new ModalBuilder().setCustomId(`modal_ae_config_${eventType}`).setTitle(`Configure Name & Timer`);
                     modal.addComponents(
@@ -284,12 +286,10 @@ module.exports = async (interaction, client) => {
 
                 if (action === 'toggle') {
                     let currentState = false;
-                    const updateObj = {};
-                    if (eventType === 'supply') { currentState = config?.autoSupplyEnabled || false; updateObj.autoSupplyEnabled = !currentState; } 
-                    else if (eventType === 'elite') { currentState = config?.autoEliteEnabled || false; updateObj.autoEliteEnabled = !currentState; } 
-                    else if (eventType === 'timed') { currentState = config?.autoTimedEnabled || false; updateObj.autoTimedEnabled = !currentState; }
+                    if (eventType === 'supply') { currentState = config.autoSupplyEnabled || false; await config.update({ autoSupplyEnabled: !currentState }); } 
+                    else if (eventType === 'elite') { currentState = config.autoEliteEnabled || false; await config.update({ autoEliteEnabled: !currentState }); } 
+                    else if (eventType === 'timed') { currentState = config.autoTimedEnabled || false; await config.update({ autoTimedEnabled: !currentState }); }
 
-                    await GuildConfig.upsert({ guildId: interaction.guild.id, ...updateObj });
                     return await renderAutoEventPanel(interaction, eventType);
                 }
 
@@ -305,16 +305,14 @@ module.exports = async (interaction, client) => {
                         resetObj.timedSpawnCount = 1; resetObj.autoTimedEnabled = false; resetObj.timedEventName = 'Timed Crates';
                         for (let i = 1; i <= 10; i++) { resetObj[`timedSlot${i}X`] = null; resetObj[`timedSlot${i}Y`] = null; resetObj[`timedSlot${i}Z`] = null; }
                     }
-                    await GuildConfig.upsert({ guildId: interaction.guild.id, ...resetObj });
+                    await config.update(resetObj);
                     return await renderAutoEventPanel(interaction, eventType);
                 }
 
                 if (action === 'test') {
                     await interaction.deferReply({ flags: 64 });
-                    if (!config) return interaction.editReply({ content: `❌ Configuration not found.` });
-
                     const count = eventType === 'supply' ? (config.supplySpawnCount || 1) : eventType === 'elite' ? (config.eliteSpawnCount || 1) : (config.timedSpawnCount || 1);
-                    const shortname = eventType === 'supply' ? 'supply_drop' : eventType === 'elite' ? 'crate_elite' : 'hackablelockedcrate';
+                    const shortname = eventType === 'supply' ? 'supply_drop' : eventType === 'elite' ? 'codelockedhackablecrate' : 'hackablelockedcrate';
                     let spawned = 0;
 
                     for (let i = 1; i <= count; i++) {
@@ -336,7 +334,7 @@ module.exports = async (interaction, client) => {
                     return interaction.editReply({ content: `✅ Test-spawned **${spawned}x** items successfully at mapped locations!` });
                 }
             }
-
+            // =================================================================
 
             if (interaction.customId === 'select_link_server_target') {
                 const serverId = module.replace('link_server_', '');
@@ -1370,6 +1368,7 @@ module.exports = async (interaction, client) => {
                 );
                 return interaction.showModal(modal);
             }
+
             if (interaction.customId === 'btn_bounty_clear') {
                 await ActiveBounty.destroy({ where: { guildId: interaction.guild.id } });
                 return interaction.reply({ content: '🗑️ All active bounties have been cleared from the database.', flags: 64 });
@@ -1668,19 +1667,15 @@ module.exports = async (interaction, client) => {
                 const customName = interaction.fields.getTextInputValue('name').trim();
                 const interval = parseInt(interaction.fields.getTextInputValue('interval')) || 60;
 
-                const updateObj = {};
+                let [cfg] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
                 if (eventType === 'supply') {
-                    updateObj.supplyEventName = customName;
-                    updateObj.supplyInterval = interval;
+                    await cfg.update({ supplyEventName: customName, supplyInterval: interval });
                 } else if (eventType === 'elite') {
-                    updateObj.eliteEventName = customName;
-                    updateObj.eliteInterval = interval;
+                    await cfg.update({ eliteEventName: customName, eliteInterval: interval });
                 } else if (eventType === 'timed') {
-                    updateObj.timedEventName = customName;
-                    updateObj.timedInterval = interval;
+                    await cfg.update({ timedEventName: customName, timedInterval: interval });
                 }
 
-                await GuildConfig.upsert({ guildId: interaction.guild.id, ...updateObj });
                 return await renderAutoEventPanel(interaction, eventType);
             }
 
@@ -2442,7 +2437,7 @@ module.exports = async (interaction, client) => {
 
             if (interaction.customId.startsWith('modal_admin_give_item_exec_')) {
                 try {
-                    await sendRconCommand(interaction.guild.id, `inventory.giveto "${interaction.customId.replace('modal_give_item_exec_', '')}" ${interaction.fields.getTextInputValue('item_name')} ${interaction.fields.getTextInputValue('item_amount')}`);
+                    await sendRconCommand(interaction.guild.id, `inventory.giveto "${interaction.customId.replace('modal_admin_give_item_exec_', '')}" ${interaction.fields.getTextInputValue('item_name')} ${interaction.fields.getTextInputValue('item_amount')}`);
                     return interaction.reply({ content: `✅ Sent!`, flags: 64 });
                 } catch(e) { return interaction.reply({ content: `❌ Error`, flags: 64 }); }
             }
