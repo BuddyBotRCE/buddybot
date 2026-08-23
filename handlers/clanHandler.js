@@ -124,9 +124,9 @@ module.exports = async (interaction, client) => {
                 return interaction.showModal(modal);
             }
 
-            // --- SPECIFIC BANK ACTION BUTTONS (CHECK THESE FIRST!) ---
-            if (customId === 'btn_clan_bank_deposit' || customId === 'btn_clan_bank_withdraw') {
-                const action = customId === 'btn_clan_bank_deposit' ? 'deposit' : 'withdraw';
+            // --- SPECIFIC BANK ACTION BUTTONS (CHECKED FIRST) ---
+            if (customId === 'clan_modal_dep' || customId === 'clan_modal_with') {
+                const action = customId === 'clan_modal_dep' ? 'deposit' : 'withdraw';
                 const modal = new ModalBuilder().setCustomId(`modal_clan_bank_${action}`).setTitle(`Clan Bank - ${action.toUpperCase()}`);
                 modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel("Amount (or type 'all')").setStyle(TextInputStyle.Short).setRequired(true)));
                 return interaction.showModal(modal);
@@ -146,8 +146,8 @@ module.exports = async (interaction, client) => {
                     .setColor('#2ecc71');
 
                 const row = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('btn_clan_bank_deposit').setLabel('Deposit').setStyle(ButtonStyle.Success).setEmoji('📥'),
-                    new ButtonBuilder().setCustomId('btn_clan_bank_withdraw').setLabel('Withdraw').setStyle(ButtonStyle.Primary).setEmoji('📤')
+                    new ButtonBuilder().setCustomId('clan_modal_dep').setLabel('Deposit').setStyle(ButtonStyle.Success).setEmoji('📥'),
+                    new ButtonBuilder().setCustomId('clan_modal_with').setLabel('Withdraw').setStyle(ButtonStyle.Primary).setEmoji('📤')
                 );
 
                 return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
