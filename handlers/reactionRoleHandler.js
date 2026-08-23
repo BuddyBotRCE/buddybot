@@ -1,4 +1,4 @@
-const { EmbedBuilder, ActionRowBuilder, ChannelSelectMenuBuilder, RoleSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ChannelSelectMenuBuilder, RoleSelectMenuBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType } = require('discord.js');
 const { GuildConfig, ReactionRole } = require('../database/db');
 
 module.exports = async (interaction, client) => {
@@ -12,7 +12,7 @@ module.exports = async (interaction, client) => {
             
             const embed = new EmbedBuilder()
                 .setTitle('🎭 Reaction Roles Setup')
-                .setDescription(`Create interactive button-based role panels with custom emojis and rich text descriptions.\n\n• **Queued Roles:** ${activeRoles}`)
+                .setDescription(`Create interactive button-based role panels with custom presets and rich text descriptions.\n\n• **Queued Roles:** ${activeRoles}`)
                 .setColor('#3498db');
 
             const channelRow = new ActionRowBuilder().addComponents(
@@ -48,7 +48,7 @@ module.exports = async (interaction, client) => {
             return interaction.reply({ content: `✅ Reaction Role target channel set to <#${channelId}>! Now select roles below.`, flags: 64 });
         }
 
-        // --- HANDLE ROLE SELECTION & PROMPT FOR EMOJI ---
+        // --- HANDLE ROLE SELECTION & PROMPT FOR PRESET EMOJI ---
         if (interaction.isRoleSelectMenu() && customId === 'select_rr_role') {
             const roleId = interaction.values[0];
             const roleObj = interaction.guild.roles.cache.get(roleId);
@@ -58,54 +58,59 @@ module.exports = async (interaction, client) => {
                 return interaction.reply({ content: `⚠️ The role **${roleObj?.name || roleId}** is already in the queue!`, flags: 64 });
             }
 
-            // Embed roleId directly into the modal customId to avoid database state issues
-            const modal = new ModalBuilder()
-                .setCustomId(`modal_rr_add_role_${roleId}`)
-                .setTitle(`Configure Button: ${roleObj?.name || 'Role'}`);
-
-            modal.addComponents(
-                new ActionRowBuilder().addComponents(
-                    new TextInputBuilder()
-                        .setCustomId('button_label')
-                        .setLabel("Button Label")
-                        .setStyle(TextInputStyle.Short)
-                        .setValue(roleObj?.name || 'Get Role')
-                        .setRequired(true)
-                ),
-                new ActionRowBuilder().addComponents(
-                    new TextInputBuilder()
-                        .setCustomId('button_emoji')
-                        .setLabel("Button Emoji (Type any emoji like 🔥 or 🛡️)")
-                        .setStyle(TextInputStyle.Short)
-                        .setValue('🏷️')
-                        .setRequired(true)
-                )
+            // Present an imported preset list of emojis in a dropdown menu
+            const emojiMenu = new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId(`select_rr_emoji_${roleId}`)
+                    .setPlaceholder('✨ Select a Preset Emoji for this Role...')
+                    .addOptions([
+                        { label: 'Fire / PvP', value: '🔥', description: 'Flame emoji', emoji: '🔥' },
+                        { label: 'Shield / Defense', value: '🛡️', description: 'Shield emoji', emoji: '🛡️' },
+                        { label: 'Swords / Combat', value: '⚔️', description: 'Swords emoji', emoji: '⚔️' },
+                        { label: 'Star / VIP', value: '⭐', description: 'Star emoji', emoji: '⭐' },
+                        { label: 'Gaming Controller', value: '🎮', description: 'Controller emoji', emoji: '🎮' },
+                        { label: 'Robot / Automation', value: '🤖', description: 'Robot emoji', emoji: '🤖' },
+                        { label: 'Diamond / Premium', value: '💎', description: 'Gem emoji', emoji: '💎' },
+                        { label: 'Rocket / Launch', value: '🚀', description: 'Rocket emoji', emoji: '🚀' },
+                        { label: 'Crown / Leader', value: '👑', description: 'Crown emoji', emoji: '👑' },
+                        { label: 'Target / Notification', value: '🎯', description: 'Target emoji', emoji: '🎯' }
+                    ])
             );
 
-            return interaction.showModal(modal);
+            const embed = new EmbedBuilder()
+                .setTitle(`🎨 Choose Emoji for: ${roleObj?.name || 'Role'}`)
+                .setDescription('Select an imported preset emoji from the dropdown menu below to assign it to this role button.')
+                .setColor('#2ecc71');
+
+            return interaction.reply({ embeds: [embed], components: [emojiMenu], flags: 64 });
         }
 
-        // --- HANDLE MODAL SUBMISSION FOR ROLE EMOJI & LABEL ---
-        if (interaction.isModalSubmit() && customId.startsWith('modal_rr_add_role_')) {
-            const roleId = customId.replace('modal_rr_add_role_', '');
-            const label = interaction.fields.getTextInputValue('button_label').trim();
-            const emoji = interaction.fields.getTextInputValue('button_emoji').trim();
-            
+        // --- HANDLE PRESET EMOJI SELECTION FROM DROPDOWN ---
+        if (interaction.isStringSelectMenu() && customId.startsWith('select_rr_emoji_')) {
+            const roleId = customId.replace('select_rr_emoji_', '');
+            const selectedEmoji = interaction.values[0];
+            const roleObj = interaction.guild.roles.cache.get(roleId);
+
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
             const targetChannelId = config?.rrTempChannelId || interaction.channelId;
 
+            // Save to database queue with the chosen preset emoji
             await ReactionRole.create({
                 guildId: interaction.guild.id,
                 channelId: targetChannelId,
                 roleId: roleId,
-                buttonLabel: label,
+                buttonLabel: roleObj?.name || 'Get Role',
                 buttonStyle: 'Primary',
                 messageId: 'PENDING_DEPLOY',
-                emoji: emoji || '🏷️'
+                emoji: selectedEmoji
             });
 
             const totalQueued = await ReactionRole.count({ where: { guildId: interaction.guild.id, messageId: 'PENDING_DEPLOY' } });
-            return interaction.reply({ content: `✅ Added role with label **${label}** and emoji **${emoji}** to the queue! *(Total queued: ${totalQueued})*.`, flags: 64 });
+            return interaction.update({ 
+                content: `✅ Successfully added role **${roleObj?.name || 'Role'}** with preset emoji ${selectedEmoji} to the queue! *(Total queued: ${totalQueued})*.`, 
+                embeds: [], 
+                components: [] 
+            });
         }
 
         // --- OPEN CUSTOMIZATION MODAL (RICH TEXT) ---
