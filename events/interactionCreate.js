@@ -78,8 +78,8 @@ module.exports = async (interaction, client) => {
             return await shopHandler(interaction, client);
         }
 
-        // --- CLANS ROUTER ---
-        if (customId.includes('clan') || customId.includes('bank') || customId.startsWith('modal_clan_') || customId.startsWith('btn_clan_') || customId.startsWith('btn_bank_') || customId.startsWith('select_clan_')) {
+        // --- CLANS ROUTER (Updated to catch all modal_clan_ and clan_modal_ IDs) ---
+        if (customId.includes('clan') || customId.includes('bank') || customId.startsWith('modal_clan_') || customId.startsWith('btn_clan_') || customId.startsWith('btn_bank_') || customId.startsWith('clan_modal_') || customId.startsWith('select_clan_')) {
             return await clanHandler(interaction, client);
         }
 
