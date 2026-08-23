@@ -170,16 +170,37 @@ module.exports = async (interaction, client) => {
 
             // --- CLAN WARS ---
             if (customId.startsWith('btn_clan_wars_')) {
+                const memberData = await ClanMember.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
+                const myClan = await Clan.findByPk(memberData.clanId);
+                
+                // Find all other rival clans on the server
+                const rivalClans = await Clan.findAll({
+                    where: {
+                        guildId: interaction.guild.id,
+                        id: { [require('sequelize').Op.ne]: myClan.id }
+                    }
+                });
+
                 const embed = new EmbedBuilder()
                     .setTitle('⚔️ Clan Wars Hub')
-                    .setDescription(`Clan Wars are currently in **Pre-Season / Development**. Soon you will be able to declare war on rival clans, compete for territory, and raid rival clan banks!`)
+                    .setDescription(`Welcome to the Clan Wars arena, **${myClan.tag}**!\n\nDeclare war on rival clans to fight for server dominance. Select a target clan below to issue a challenge:`)
                     .setColor('#e74c3c');
-                return interaction.reply({ embeds: [embed], flags: 64 });
-            }
 
-            if (customId.startsWith('btn_clan_invite_')) {
-                const row = new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId('select_clan_invite_target').setPlaceholder('Select player to invite to your clan...'));
-                return interaction.reply({ content: '📩 **Invite Player:** Select a user from the list below:', components: [row], flags: 64 });
+                if (rivalClans.length === 0) {
+                    return interaction.reply({ content: '⚔️ There are currently no rival clans on the server to declare war on!', flags: 64 });
+                }
+
+                const options = rivalClans.slice(0, 25).map(c => ({
+                    label: `${c.tag} ${c.name}`,
+                    description: `Bank: ${c.bankBalance} Scrap`,
+                    value: `declare_war_${c.id}`
+                }));
+
+                const row = new ActionRowBuilder().addComponents(
+                    new StringSelectMenuBuilder().setCustomId('select_clan_war_target').setPlaceholder('Select rival clan to challenge...').addOptions(options)
+                );
+
+                return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
             }
 
             if (customId.startsWith('btn_clan_leave_') || customId.startsWith('btn_clan_disband_')) {
@@ -231,11 +252,17 @@ module.exports = async (interaction, client) => {
             }
         }
 
-        if (interaction.isStringSelectMenu()) {
+       if (interaction.isStringSelectMenu()) {
             if (customId === 'select_clan_kick') {
                 const targetUserId = selectedValue.replace('kick_', '');
                 await ClanMember.destroy({ where: { guildId: interaction.guild.id, userId: targetUserId } });
                 return interaction.update({ content: `✅ Successfully kicked member from the clan.`, components: [] });
+            }
+
+            if (customId === 'select_clan_war_target') {
+                const targetClanId = selectedValue.replace('declare_war_', '');
+                const targetClan = await Clan.findByPk(targetClanId);
+                return interaction.update({ content: `⚔️ **War Challenge Issued!** Your clan has officially declared war on **${targetClan.tag} ${targetClan.name}**! *(Automated raid mechanics & territory scoring coming online next).*`, components: [] });
             }
         }
 
