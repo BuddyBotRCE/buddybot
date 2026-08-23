@@ -1,4 +1,4 @@
-const { EmbedBuilder, ActionRowBuilder, ChannelSelectMenuBuilder, RoleSelectMenuBuilder, ButtonBuilder, ButtonStyle, ChannelType } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ChannelSelectMenuBuilder, RoleSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType } = require('discord.js');
 const { GuildConfig, ReactionRole } = require('../database/db');
 
 module.exports = async (interaction, client) => {
@@ -12,7 +12,7 @@ module.exports = async (interaction, client) => {
             
             const embed = new EmbedBuilder()
                 .setTitle('🎭 Reaction Roles Setup')
-                .setDescription(`Create interactive button-based role panels. Use the dropdowns below to choose your channel and add multiple roles to the queue.\n\n• **Queued / Active Roles:** ${activeRoles}`)
+                .setDescription(`Create interactive button-based role panels with custom emojis and rich text descriptions.\n\n• **Queued / Active Roles:** ${activeRoles}`)
                 .setColor('#3498db');
 
             const channelRow = new ActionRowBuilder().addComponents(
@@ -25,10 +25,11 @@ module.exports = async (interaction, client) => {
             const roleRow = new ActionRowBuilder().addComponents(
                 new RoleSelectMenuBuilder()
                     .setCustomId('select_rr_role')
-                    .setPlaceholder('🏷️ 2. Select Role(s) to Add (Repeat for Multiple)...')
+                    .setPlaceholder('🏷️ 2. Select Role to Add (Queues with default 🏷️)...')
             );
 
             const actionRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('btn_rr_modal_config').setLabel('Customize Text & Emojis').setStyle(ButtonStyle.Primary).setEmoji('✏️'),
                 new ButtonBuilder().setCustomId('btn_rr_deploy').setLabel('Deploy Panel').setStyle(ButtonStyle.Success).setEmoji('📦'),
                 new ButtonBuilder().setCustomId('btn_rr_clear').setLabel('Clear Queue').setStyle(ButtonStyle.Danger).setEmoji('🗑️')
             );
@@ -47,20 +48,18 @@ module.exports = async (interaction, client) => {
             return interaction.reply({ content: `✅ Reaction Role target channel set to <#${channelId}>! Now select roles below.`, flags: 64 });
         }
 
-        // --- HANDLE ROLE SELECTION (Satisfies DB schema constraints) ---
+        // --- HANDLE ROLE SELECTION ---
         if (interaction.isRoleSelectMenu() && customId === 'select_rr_role') {
             const roleId = interaction.values[0];
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
             const targetChannelId = config?.rrTempChannelId || interaction.channelId;
             const roleObj = interaction.guild.roles.cache.get(roleId);
 
-            // Prevent duplicates
             const existing = await ReactionRole.findOne({ where: { guildId: interaction.guild.id, roleId: roleId } });
             if (existing) {
                 return interaction.reply({ content: `⚠️ The role **${roleObj?.name || roleId}** is already in the queue!`, flags: 64 });
             }
 
-            // Save role config to database queue satisfying required fields
             await ReactionRole.create({
                 guildId: interaction.guild.id,
                 channelId: targetChannelId,
@@ -72,42 +71,75 @@ module.exports = async (interaction, client) => {
             });
 
             const totalQueued = await ReactionRole.count({ where: { guildId: interaction.guild.id } });
-            return interaction.reply({ content: `✅ Added **${roleObj?.name || 'Role'}** to the reaction role queue! *(Total queued: ${totalQueued}). Select another role or click **Deploy Panel**.*`, flags: 64 });
+            return interaction.reply({ content: `✅ Added **${roleObj?.name || 'Role'}** to the queue! *(Total queued: ${totalQueued}). Click **Customize Text & Emojis** to change button icons.*`, flags: 64 });
+        }
+
+        // --- OPEN CUSTOMIZATION MODAL (RICH TEXT & EMOJIS) ---
+        if (interaction.isButton() && customId === 'btn_rr_modal_config') {
+            const roles = await ReactionRole.findAll({ where: { guildId: interaction.guild.id, messageId: 'PENDING_DEPLOY' } });
+            if (roles.length === 0) {
+                return interaction.reply({ content: '❌ Please select at least one role from the dropdown first before customizing!', flags: 64 });
+            }
+
+            const modal = new ModalBuilder().setCustomId('modal_rr_customize').setTitle('Customize Reaction Panel Text');
+            
+            // Allow typing detailed descriptions (up to 4000 characters per Discord modal input limit)
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('panel_description')
+                        .setLabel("Panel Description / Rules (Rich Text)")
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setPlaceholder("Type your detailed rules, info, or description here...")
+                        .setRequired(true)
+                )
+            );
+
+            return interaction.showModal(modal);
         }
 
         // --- CLEAR QUEUE BUTTON ---
         if (interaction.isButton() && customId === 'btn_rr_clear') {
             await ReactionRole.destroy({ where: { guildId: interaction.guild.id } });
-            return interaction.reply({ content: '🗑️ Cleared all queued reaction roles for this server.', flags: 64 });
+            await GuildConfig.update({ rrTempDescription: null }, { where: { guildId: interaction.guild.id } });
+            return interaction.reply({ content: '🗑️ Cleared all queued reaction roles and text for this server.', flags: 64 });
         }
 
         // --- DEPLOY REACTION ROLE PANEL ---
         if (interaction.isButton() && customId === 'btn_rr_deploy') {
-            const roles = await ReactionRole.findAll({ where: { guildId: interaction.guild.id } });
+            const roles = await ReactionRole.findAll({ where: { guildId: interaction.guild.id, messageId: 'PENDING_DEPLOY' } });
             if (roles.length === 0) {
                 return interaction.reply({ content: '❌ Please select at least one role using the role dropdown menu first!', flags: 64 });
             }
 
+            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
             const targetChannelId = roles[0].channelId;
             const targetChannel = interaction.guild.channels.cache.get(targetChannelId);
             if (!targetChannel) {
                 return interaction.reply({ content: '❌ Target channel not found. Please re-select the channel.', flags: 64 });
             }
 
-            const embed = new EmbedBuilder()
-                .setTitle('🎭 Server Roles')
-                .setDescription('Click the buttons below to assign or remove roles instantly!')
-                .setColor('#f1c40f');
+            const customDescription = config?.rrTempDescription || 'Click the buttons below to assign or remove roles instantly!';
 
-            // Build buttons dynamically for every role in the database queue
-            const buttons = roles.map((rr) => 
-                new ButtonBuilder()
+            const embed = new EmbedBuilder()
+                .setTitle('🎭 Server Roles & Verification')
+                .setDescription(customDescription)
+                .setColor('#f1c40f')
+                .setTimestamp();
+
+            // Build buttons dynamically with custom emojis attached
+            const buttons = roles.map((rr) => {
+                const btn = new ButtonBuilder()
                     .setCustomId(`rr_toggle_${rr.id}`)
                     .setLabel(rr.buttonLabel)
-                    .setStyle(ButtonStyle.Primary)
-            );
+                    .setStyle(ButtonStyle.Primary);
+                
+                if (rr.emoji) {
+                    btn.setEmoji(rr.emoji);
+                }
+                return btn;
+            });
 
-            // Group buttons into rows of up to 5 (Discord limit per action row)
             const rows = [];
             for (let i = 0; i < buttons.length; i += 5) {
                 rows.push(new ActionRowBuilder().addComponents(buttons.slice(i, i + 5)));
@@ -115,10 +147,17 @@ module.exports = async (interaction, client) => {
 
             const sentMessage = await targetChannel.send({ embeds: [embed], components: rows });
 
-            // Update queued rows with the real message ID
             await ReactionRole.update({ messageId: sentMessage.id }, { where: { guildId: interaction.guild.id, messageId: 'PENDING_DEPLOY' } });
+            await config.update({ rrTempDescription: null });
 
-            return interaction.reply({ content: `✅ Multi-role Reaction panel successfully deployed to <#${targetChannelId}> with ${roles.length} roles!`, flags: 64 });
+            return interaction.reply({ content: `✅ Reaction panel successfully deployed to <#${targetChannelId}> with custom text and emojis!`, flags: 64 });
+        }
+
+        // --- HANDLE MODAL SUBMISSION FOR RICH TEXT ---
+        if (interaction.isModalSubmit() && customId === 'modal_rr_customize') {
+            const desc = interaction.fields.getTextInputValue('panel_description');
+            await GuildConfig.upsert({ guildId: interaction.guild.id, rrTempDescription: desc });
+            return interaction.reply({ content: `✅ Panel description saved successfully! You can now click **Deploy Panel** whenever you're ready.`, flags: 64 });
         }
 
         // --- USER CLICKS A REACTION ROLE BUTTON ---
