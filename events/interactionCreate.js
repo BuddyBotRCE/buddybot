@@ -56,6 +56,15 @@ module.exports = async (interaction, client) => {
             return await adminHandler(interaction, client);
         }
 
+        // ====================================================================
+        // 🚦 3. COMPONENT & MODAL ROUTING STATION (CLANS FIRST TO PREVENT CONFLICTS)
+        // ====================================================================
+
+        // --- CLANS ROUTER (PLACED FIRST SO 'deposit' DOESN'T HIJACK IT) ---
+        if (customId.includes('clan') || customId.includes('bank') || customId.startsWith('modal_clan_') || customId.startsWith('btn_clan_') || customId.startsWith('btn_bank_') || customId.startsWith('clan_modal_') || customId.startsWith('select_clan_')) {
+            return await clanHandler(interaction, client);
+        }
+
         if (customId.startsWith('ae_') || customId.startsWith('modal_ae_') || customId.startsWith('btn_finalize_tpl_aeslot')) {
             return await autoEventsHandler(interaction, client);
         }
@@ -77,12 +86,6 @@ module.exports = async (interaction, client) => {
         if (customId.includes('shop') || customId.startsWith('buy_item_')) {
             return await shopHandler(interaction, client);
         }
-
-        // --- CLANS ROUTER (Updated to catch all modal_clan_ and clan_modal_ IDs) ---
-        if (customId.includes('clan') || customId.includes('bank') || customId.startsWith('modal_clan_') || customId.startsWith('btn_clan_') || customId.startsWith('btn_bank_') || customId.startsWith('clan_modal_') || customId.startsWith('select_clan_')) {
-            return await clanHandler(interaction, client);
-        }
-
         if (customId.startsWith('bp_') || customId.includes('buddypass')) {
             return await buddyPassHandler(interaction, client);
         }
