@@ -15,29 +15,33 @@ module.exports = async (interaction, client) => {
 
         console.log(`[RR HANDLER DEBUG] CustomID: ${customId} | Selected: ${selectedValue}`);
 
-        // --- ADMIN MENU SELECT ENTRY ---
-        if ((customId === 'admin_menu_select' && selectedValue === 'setup_reactionroles') || customId === 'rr_action_select') {
-            const activeRoles = await ReactionRole.count({ where: { guildId: interaction.guild.id, messageId: 'PENDING_DEPLOY' } });
-            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-            const hasCustomText = config?.getDataValue('rrTempDescription') ? '✅ Loaded (Ready)' : '❌ Using Default';
-            const targetCh = config?.getDataValue('rrTempChannelId') ? `<#${config.getDataValue('rrTempChannelId')}>` : '❌ Not Set';
+        // Helper function to render the main setup interface state dynamically
+        async const renderSetupPanel = async (inter, messageOverride = '') => {
+            const guildId = inter.guild.id;
+            const activeRoles = await ReactionRole.count({ where: { guildId, messageId: 'PENDING_DEPLOY' } });
+            const config = await GuildConfig.findOne({ where: { guildId } });
             
+            const targetChannelId = config?.getDataValue('rrTempChannelId');
+            const targetChText = targetChannelId ? `<#${targetChannelId}>` : '❌ Not Selected Yet';
+            const customText = config?.getDataValue('rrTempDescription');
+            const customTextStatus = customText ? `✅ Loaded (${customText.length} chars)` : '❌ Using Default Text';
+
             const embed = new EmbedBuilder()
                 .setTitle('🎭 Reaction & Verification Roles Setup')
-                .setDescription(`Create interactive button panels with custom emojis, rich text descriptions, and permanent storage.\n\n• **Target Channel:** ${targetCh}\n• **Queued Roles:** ${activeRoles}\n• **Custom Text Status:** ${hasCustomText}`)
+                .setDescription(`${messageOverride ? `**${messageOverride}**\n\n` : ''}Configure your interactive verification or role panel below.\n\n• **Target Channel:** ${targetChText}\n• **Queued Roles:** ${activeRoles}\n• **Custom Description:** ${customTextStatus}`)
                 .setColor('#3498db');
 
             const channelRow = new ActionRowBuilder().addComponents(
                 new ChannelSelectMenuBuilder()
                     .setCustomId('select_rr_channel')
-                    .setPlaceholder('📂 1. Select Target Channel for Panel...')
+                    .setPlaceholder(targetChannelId ? `📂 Target: #${inter.guild.channels.cache.get(targetChannelId)?.name || targetChannelId}` : '📂 1. Select Target Channel for Panel...')
                     .addChannelTypes(ChannelType.GuildText)
             );
 
             const roleRow = new ActionRowBuilder().addComponents(
                 new RoleSelectMenuBuilder()
                     .setCustomId('select_rr_role')
-                    .setPlaceholder('🏷️ 2. Select Role to Add...')
+                    .setPlaceholder('🏷️ 2. Select Role to Add to Panel...')
             );
 
             const actionRow = new ActionRowBuilder().addComponents(
@@ -46,11 +50,18 @@ module.exports = async (interaction, client) => {
                 new ButtonBuilder().setCustomId('btn_rr_clear').setLabel('Clear Queue').setStyle(ButtonStyle.Danger).setEmoji('🗑️')
             );
 
-            if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-                return await interaction.reply({ embeds: [embed], components: [channelRow, roleRow, actionRow], flags: 64 });
-            } else {
-                return await interaction.update({ embeds: [embed], components: [channelRow, roleRow, actionRow] });
+            const payload = { embeds: [embed], components: [channelRow, roleRow, actionRow], flags: 64 };
+
+            if (inter.isRepliable() && !inter.replied && !inter.deferred) {
+                return await inter.reply(payload);
+            } else if (inter.isUpdate() || inter.deferred || inter.replied) {
+                return await inter.update(payload).catch(() => inter.followUp(payload));
             }
+        };
+
+        // --- ADMIN MENU SELECT ENTRY OR REFRESH ---
+        if ((customId === 'admin_menu_select' && selectedValue === 'setup_reactionroles') || customId === 'rr_action_select' || customId === 'btn_rr_refresh') {
+            return await renderSetupPanel(interaction);
         }
 
         // --- HANDLE CHANNEL SELECTION ---
@@ -60,8 +71,7 @@ module.exports = async (interaction, client) => {
                 return await interaction.reply({ content: '❌ Could not determine selected channel. Please try again.', flags: 64 });
             }
             await GuildConfig.upsert({ guildId: interaction.guild.id, rrTempChannelId: channelId });
-            console.log(`[RR CHANNEL SAVED] Guild: ${interaction.guild.id} | Channel: ${channelId}`);
-            return await interaction.reply({ content: `✅ Target channel successfully set to <#${channelId}>! Now select roles below.`, flags: 64 });
+            return await renderSetupPanel(interaction, `✅ Target channel set to <#${channelId}>!`);
         }
 
         // --- HANDLE ROLE SELECTION & PROMPT FOR PRESET EMOJI ---
@@ -122,11 +132,8 @@ module.exports = async (interaction, client) => {
                 emoji: selectedEmoji
             });
 
-            const totalQueued = await ReactionRole.count({ where: { guildId: interaction.guild.id, messageId: 'PENDING_DEPLOY' } });
-            return await interaction.reply({ 
-                content: `✅ Successfully added **${roleObj?.name || 'Role'}** with emoji ${selectedEmoji} to the queue! *(Total queued: ${totalQueued})*.`, 
-                flags: 64 
-            });
+            // Re-render setup panel with success note
+            return await renderSetupPanel(interaction, `✅ Successfully added role **${roleObj?.name || 'Role'}** with emoji ${selectedEmoji}!`);
         }
 
         // --- OPEN CUSTOMIZATION MODAL (RICH TEXT) ---
@@ -154,9 +161,10 @@ module.exports = async (interaction, client) => {
         if (interaction.isModalSubmit() && customId === 'modal_rr_customize') {
             const desc = interaction.fields.getTextInputValue('panel_description');
             
-            let [config] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
-            config.set('rrTempDescription', desc);
-            await config.save();
+            await GuildConfig.upsert({ 
+                guildId: interaction.guild.id, 
+                rrTempDescription: desc 
+            });
 
             console.log(`[RR TEXT SAVED] Guild: ${interaction.guild.id} | Length: ${desc.length} chars`);
             return await interaction.reply({ content: `✅ Panel text successfully saved (${desc.length} characters)! Click **Deploy Panel** whenever you are ready.`, flags: 64 });
@@ -166,7 +174,7 @@ module.exports = async (interaction, client) => {
         if (interaction.isButton() && customId === 'btn_rr_clear') {
             await ReactionRole.destroy({ where: { guildId: interaction.guild.id } });
             await GuildConfig.update({ rrTempDescription: null, rrTempChannelId: null }, { where: { guildId: interaction.guild.id } });
-            return await interaction.reply({ content: '🗑️ Cleared all queued roles and temporary config for this server.', flags: 64 });
+            return await renderSetupPanel(interaction, '🗑️ Cleared all queued roles and temporary configuration.');
         }
 
         // --- DEPLOY REACTION ROLE PANEL ---
@@ -177,10 +185,7 @@ module.exports = async (interaction, client) => {
             }
 
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-            
-            // Explicitly check config channel, falling back to the first role's channel, then current channel
             const targetChannelId = config?.getDataValue('rrTempChannelId') || roles[0].getDataValue('channelId') || interaction.channelId;
-            console.log(`[RR DEPLOY TARGET] Resolved Channel ID: ${targetChannelId}`);
             
             let targetChannel = interaction.guild.channels.cache.get(targetChannelId);
             if (!targetChannel || typeof targetChannel.send !== 'function') {
@@ -195,9 +200,9 @@ module.exports = async (interaction, client) => {
                 targetChannel = interaction.channel;
             }
 
-            // Retrieve custom description safely from GuildConfig
+            // Pull custom description directly from DB instance
             const customDescription = config?.getDataValue('rrTempDescription') || 'Click the button below to verify and get your role instantly!';
-            console.log(`[RR DEPLOY TEXT] Description Length: ${customDescription.length}`);
+            console.log(`[RR DEPLOY] Channel: ${targetChannel.id} | Description Length: ${customDescription.length}`);
 
             const embed = new EmbedBuilder()
                 .setTitle('🔐 Server Verification & Roles')
@@ -225,14 +230,8 @@ module.exports = async (interaction, client) => {
 
             const sentMessage = await targetChannel.send({ embeds: [embed], components: rows });
 
-            // Stamp message ID onto active records
-            await ReactionRole.update({ 
-                messageId: sentMessage.id
-            }, { 
-                where: { guildId: interaction.guild.id, messageId: 'PENDING_DEPLOY' } 
-            });
-
-            // Clear temporary cache
+            // Stamp message ID and clear temp settings
+            await ReactionRole.update({ messageId: sentMessage.id }, { where: { guildId: interaction.guild.id, messageId: 'PENDING_DEPLOY' } });
             await config.update({ rrTempDescription: null, rrTempChannelId: null });
 
             return await interaction.reply({ content: `✅ Verification & Reaction panel successfully deployed to <#${targetChannel.id}> with your custom description!`, flags: 64 });
