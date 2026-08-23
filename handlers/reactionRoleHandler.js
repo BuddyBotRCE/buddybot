@@ -102,7 +102,7 @@ module.exports = async (interaction, client) => {
         // --- HANDLE PRESET EMOJI SELECTION FROM DROPDOWN ---
         if (interaction.isStringSelectMenu() && customId.startsWith('select_rr_emoji_')) {
             const roleId = customId.replace('select_rr_emoji_', '');
-            const selectedEmoji = selectedValue || '🔥'; // Fallback emoji if empty
+            const selectedEmoji = selectedValue || '🔥';
             const roleObj = interaction.guild.roles.cache.get(roleId);
 
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
@@ -166,12 +166,16 @@ module.exports = async (interaction, client) => {
             const targetChannelId = config?.rrTempChannelId || roles[0].channelId;
             
             let targetChannel = interaction.guild.channels.cache.get(targetChannelId);
-            if (!targetChannel) {
+            if (!targetChannel || typeof targetChannel.send !== 'function') {
                 try {
                     targetChannel = await interaction.guild.channels.fetch(targetChannelId);
                 } catch {
-                    return await interaction.reply({ content: '❌ Target channel not found or inaccessible. Please re-select the channel from the dropdown.', flags: 64 });
+                    targetChannel = null;
                 }
+            }
+
+            if (!targetChannel || typeof targetChannel.send !== 'function') {
+                targetChannel = interaction.channel; // Fallback to current interaction channel if target is invalid
             }
 
             const customDescription = config?.rrTempDescription || 'Click the buttons below to assign or remove roles instantly!';
@@ -205,7 +209,7 @@ module.exports = async (interaction, client) => {
             await ReactionRole.update({ messageId: sentMessage.id }, { where: { guildId: interaction.guild.id, messageId: 'PENDING_DEPLOY' } });
             await config.update({ rrTempDescription: null, rrTempChannelId: null });
 
-            return await interaction.reply({ content: `✅ Reaction panel successfully deployed to <#${targetChannelId}>!`, flags: 64 });
+            return await interaction.reply({ content: `✅ Reaction panel successfully deployed to <#${targetChannel.id}>!`, flags: 64 });
         }
 
         // --- USER CLICKS A REACTION ROLE BUTTON ---
