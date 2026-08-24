@@ -31,20 +31,14 @@ module.exports = async (interaction, client) => {
         let selectedValue = '';
         if (interaction.isStringSelectMenu()) selectedValue = interaction.values[0] || '';
 
-        // --- ENTRY FROM ADMIN PANEL ---
-        if (customId === 'admin_menu_select' && selectedValue === 'setup_automod') {
-            amSessions.set(guildId, { selectedModule: null, selectedAction: 'delete' });
-            return await renderAutoModPanel(interaction);
-        }
-
-        // Ensure session exists
+        // --- 1. INITIALIZE SESSION AT THE VERY TOP ---
         if (!amSessions.has(guildId)) {
             amSessions.set(guildId, { selectedModule: null, selectedAction: 'delete' });
         }
         const session = amSessions.get(guildId);
 
-        // Helper to render the dashboard
-        async function renderAutoModPanel(inter, messageOverride = '') {
+        // --- 2. RENDER HELPER FUNCTION ---
+        const renderAutoModPanel = async (inter, messageOverride = '') => {
             let [config] = await GuildConfig.findOrCreate({ where: { guildId: inter.guild.id } });
 
             // Generate live status board
@@ -96,6 +90,14 @@ module.exports = async (interaction, client) => {
             } else {
                 return await inter.update(payload).catch(() => inter.followUp(payload));
             }
+        };
+
+        // --- 3. ENTRY FROM ADMIN PANEL ---
+        if (customId === 'admin_menu_select' && selectedValue === 'setup_automod') {
+            session.selectedModule = null; // Clear out any old selections
+            session.selectedAction = 'delete';
+            amSessions.set(guildId, session);
+            return await renderAutoModPanel(interaction);
         }
 
         // --- HANDLE DROPDOWNS ---
@@ -115,7 +117,6 @@ module.exports = async (interaction, client) => {
         // --- HANDLE BUTTONS ---
         if (interaction.isButton()) {
             if (customId === 'btn_am_back') {
-                // To keep it simple, we just instruct them to run the command again
                 return await interaction.update({ content: '🔙 Closed Auto-Mod setup. Type `/adminpanel` to return to the main menu.', embeds: [], components: [] });
             }
 
