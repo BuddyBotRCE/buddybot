@@ -1,11 +1,11 @@
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { PveZone } = require('../database/db');
-const { sendRconCommand } = require('../utils/rconManager');
+const { sendRconCommand, queueAdminPos } = require('../utils/rconManager'); // Hooked into your RCON Manager!
 
 // In-memory session manager for building Custom Zones
 const czSessions = new Map();
 
-module.exports = async (interaction, client) => {
+const customZoneHandler = async (interaction, client) => {
     try {
         const customId = interaction.customId || '';
         const guildId = interaction.guild.id;
@@ -79,19 +79,16 @@ module.exports = async (interaction, client) => {
                     ])
             );
 
-            // ROW 3: Setup Options Dropdown (Triggers Modals)
+            // ROW 3: Setup Buttons (Triggers typing modals)
             const row3Setup = new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder().setCustomId('cz_setup_select').setPlaceholder('⚙️ 3. Configure Zone Details...')
-                    .addOptions([
-                        { label: 'Set Zone Name', description: 'Name your custom zone (No Spaces)', value: 'cz_set_name', emoji: '🏷️' },
-                        { label: 'Set Custom Size (Radius)', description: 'Enter an exact radius in meters', value: 'cz_set_radius', emoji: '📏' },
-                        { label: 'Set Enter & Exit Messages', description: 'Text displayed when a player enters/leaves', value: 'cz_set_messages', emoji: '💬' }
-                    ])
+                new ButtonBuilder().setCustomId('btn_cz_name').setLabel('Set Zone Name').setStyle(ButtonStyle.Primary).setEmoji('🏷️'),
+                new ButtonBuilder().setCustomId('btn_cz_radius').setLabel('Set Custom Size').setStyle(ButtonStyle.Primary).setEmoji('📏'),
+                new ButtonBuilder().setCustomId('btn_cz_msgs').setLabel('Set Messages').setStyle(ButtonStyle.Primary).setEmoji('💬')
             );
 
             // ROW 4: Final Action Buttons
             const row4Buttons = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('btn_cz_pos').setLabel('Set Position').setStyle(ButtonStyle.Primary).setEmoji('📍'),
+                new ButtonBuilder().setCustomId('btn_cz_pos').setLabel('Get Admin Pos').setStyle(ButtonStyle.Success).setEmoji('📍'),
                 new ButtonBuilder().setCustomId('btn_cz_deploy').setLabel(session.isEditing ? 'Update Zone' : 'Deploy Zone').setStyle(ButtonStyle.Success).setEmoji('📦'),
                 new ButtonBuilder().setCustomId('btn_cz_delete').setLabel('Delete').setStyle(ButtonStyle.Danger).setEmoji('🗑️').setDisabled(!session.isEditing),
                 new ButtonBuilder().setCustomId('btn_cz_clear').setLabel('Clear').setStyle(ButtonStyle.Secondary).setEmoji('🧹')
@@ -141,28 +138,6 @@ module.exports = async (interaction, client) => {
 
                 return await renderZonePanel(interaction, `✅ Successfully loaded zone: **${existingZone.zoneName}**`);
             }
-
-            // NEW: Setup Dropdown -> Triggers Modals
-            if (customId === 'cz_setup_select') {
-                if (selectedValue === 'cz_set_name') {
-                    const modal = new ModalBuilder().setCustomId('modal_cz_name').setTitle('Set Zone Name');
-                    modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_name_val').setLabel("Zone Name (No spaces, e.g. vip_arena)").setStyle(TextInputStyle.Short).setValue(session.zoneName || '').setRequired(true)));
-                    return await interaction.showModal(modal);
-                }
-                if (selectedValue === 'cz_set_radius') {
-                    const modal = new ModalBuilder().setCustomId('modal_cz_radius').setTitle('Set Custom Radius');
-                    modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_radius_val').setLabel("Enter custom radius in meters (e.g. 75)").setStyle(TextInputStyle.Short).setValue(session.radius ? session.radius.toString() : '').setRequired(true)));
-                    return await interaction.showModal(modal);
-                }
-                if (selectedValue === 'cz_set_messages') {
-                    const modal = new ModalBuilder().setCustomId('modal_cz_msgs').setTitle('Zone Messages');
-                    modal.addComponents(
-                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_enter').setLabel("Enter Message").setStyle(TextInputStyle.Paragraph).setValue(session.enterMessage || '').setRequired(false)),
-                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_exit').setLabel("Exit Message").setStyle(TextInputStyle.Paragraph).setValue(session.exitMessage || '').setRequired(false))
-                    );
-                    return await interaction.showModal(modal);
-                }
-            }
         }
 
         // =========================================================
@@ -175,22 +150,43 @@ module.exports = async (interaction, client) => {
                 return await renderZonePanel(interaction, '🧹 Draft cleared. Ready to make a new zone!');
             }
 
-            if (customId === 'btn_cz_pos') {
-                const modal = new ModalBuilder().setCustomId('modal_cz_pos').setTitle('Set Zone Coordinates');
+            if (customId === 'btn_cz_name') {
+                const modal = new ModalBuilder().setCustomId('modal_cz_name').setTitle('Set Zone Name');
+                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_name_val').setLabel("Zone Name (No spaces, e.g. vip_arena)").setStyle(TextInputStyle.Short).setValue(session.zoneName || '').setRequired(true)));
+                return await interaction.showModal(modal);
+            }
+
+            if (customId === 'btn_cz_radius') {
+                const modal = new ModalBuilder().setCustomId('modal_cz_radius').setTitle('Set Custom Radius');
+                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_radius_val').setLabel("Enter custom radius in meters (e.g. 75)").setStyle(TextInputStyle.Short).setValue(session.radius ? session.radius.toString() : '').setRequired(true)));
+                return await interaction.showModal(modal);
+            }
+
+            if (customId === 'btn_cz_msgs') {
+                const modal = new ModalBuilder().setCustomId('modal_cz_msgs').setTitle('Zone Messages');
                 modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_x').setLabel("X Coordinate").setStyle(TextInputStyle.Short).setValue(session.posX || '').setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_y').setLabel("Y Coordinate (Height)").setStyle(TextInputStyle.Short).setValue(session.posY || '').setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_z').setLabel("Z Coordinate").setStyle(TextInputStyle.Short).setValue(session.posZ || '').setRequired(true))
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_enter').setLabel("Enter Message").setStyle(TextInputStyle.Paragraph).setValue(session.enterMessage || '').setRequired(false)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_exit').setLabel("Exit Message").setStyle(TextInputStyle.Paragraph).setValue(session.exitMessage || '').setRequired(false))
                 );
                 return await interaction.showModal(modal);
             }
 
+            // --- THE NEW "GET ADMIN POS" BUTTON ---
+            if (customId === 'btn_cz_pos') {
+                if (typeof queueAdminPos === 'function') {
+                    // Triggers your pre-built function from rconManager.js
+                    await queueAdminPos(interaction);
+                    return;
+                } else {
+                    return await interaction.reply({ content: '❌ `queueAdminPos` function not properly configured in rconManager.js.', flags: 64 });
+                }
+            }
+
             if (customId === 'btn_cz_deploy') {
                 if (!session.zoneName || !session.radius || !session.posX || !session.posY || !session.posZ) {
-                    return await interaction.reply({ content: '❌ You must set a Zone Name, Radius, and Position before deploying!', flags: 64 });
+                    return await interaction.reply({ content: '❌ You must set a Zone Name, Radius, and grab your Admin Position before deploying!', flags: 64 });
                 }
 
-                // Database Save / Update
                 if (session.isEditing) {
                     await PveZone.update({
                         zoneName: session.zoneName, radius: session.radius, zoneColor: session.zoneColor || 'green',
@@ -250,13 +246,6 @@ module.exports = async (interaction, client) => {
                 czSessions.set(guildId, session);
                 return await renderZonePanel(interaction, `✅ Custom radius set to **${session.radius}m**!`);
             }
-            if (customId === 'modal_cz_pos') {
-                session.posX = interaction.fields.getTextInputValue('cz_x').trim();
-                session.posY = interaction.fields.getTextInputValue('cz_y').trim();
-                session.posZ = interaction.fields.getTextInputValue('cz_z').trim();
-                czSessions.set(guildId, session);
-                return await renderZonePanel(interaction, `✅ Coordinates securely locked in!`);
-            }
             if (customId === 'modal_cz_msgs') {
                 session.enterMessage = interaction.fields.getTextInputValue('cz_enter').trim();
                 session.exitMessage = interaction.fields.getTextInputValue('cz_exit').trim();
@@ -272,3 +261,8 @@ module.exports = async (interaction, client) => {
         }
     }
 };
+
+// EXPORT THE MEMORY MAP SO YOUR WEBHOOK CAN INJECT COORDINATES!
+customZoneHandler.czSessions = czSessions;
+
+module.exports = customZoneHandler;
