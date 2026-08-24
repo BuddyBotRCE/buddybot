@@ -27,7 +27,7 @@ module.exports = {
                     { label: 'Auto-Moderation Suite', value: 'setup_automod', emoji: '🛡️' },
                     { label: 'Custom Zones Builder', value: 'setup_custom_zones', description: 'Create and manage map zones', emoji: '🗺️' },
                     { label: 'Auto-Events (Premium)', value: 'setup_autoevents', emoji: '🚁' },
-                    { label: 'License & Tier Manager', value: 'setup_tier', emoji: '🏷️' },
+                    { label: 'Premium', value: 'setup_tier', emoji: '🏷️' },
                     { label: 'Ticket System', value: 'setup_tickets', emoji: '🎫' },
                     { label: 'Giveaways Manager', value: 'setup_giveaways', emoji: '🎉' },
                     { label: 'Custom Binds', value: 'setup_binds', emoji: '🗣️' },
