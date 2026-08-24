@@ -30,8 +30,6 @@ async function connectRcon(guildId, client) {
                 const msg = parsed.Message;
                 const msgLower = msg.toLowerCase();
 
-                if (msgLower.includes('invalid player') || msgLower.includes('unknown command')) return;
-
                 console.log('[RCON RAW MESSAGE]', msg);
 
                 const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
@@ -53,44 +51,39 @@ async function connectRcon(guildId, client) {
                             if (chan) chan.send({ embeds: [new EmbedBuilder().setColor('#9b59b6').setDescription(`🌍 **World Event:**\n\`\`\`${msg}\`\`\``).setTimestamp()] }).catch(()=>{});
                         }
                     }
-                    if (/ joined \[.*\]/i.test(msg) || / disconnecting:/i.test(msg)) {
-                        if (currentConfig.logGameChannelId) {
-                            const chan = guild.channels.cache.get(currentConfig.logGameChannelId);
-                            const isJoin = msg.includes('joined');
-                            if (chan) chan.send({ embeds: [new EmbedBuilder().setColor(isJoin ? '#2ecc71' : '#e74c3c').setDescription(`${isJoin ? '📥' : '📤'} **Connection Activity:**\n\`${msg}\``).setTimestamp()] }).catch(()=>{});
-                        }
-                    }
                 }
 
-                // 1. POSITION TRACKER FOR `server.printpos`
-                if (/(-?\d+\.\d+)/.test(msg)) {
+                // 1. POSITION TRACKER (Parses Console Edition `players` table or vector lists)
+                if (adminPosQueue.size > 0) {
                     for (const [adminName, setupData] of adminPosQueue.entries()) {
-                        if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
-                        const channel = client.channels.cache.get(setupData.channelId);
-
-                        if (channel) {
-                            let posX = 0.00, posY = 50.00, posZ = 0.00;
+                        // Check if the message contains the admin's name or coordinate tuples
+                        if (msg.includes(adminName) || /(-?\d+\.\d+)/.test(msg)) {
                             const matches = msg.match(/-?\d+\.\d+/g);
                             if (matches && matches.length >= 3) {
-                                posX = parseFloat(matches[0]);
-                                posY = parseFloat(matches[1]);
-                                posZ = parseFloat(matches[2]);
-                            }
+                                if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
+                                const channel = client.channels.cache.get(setupData.channelId);
 
-                            if (setupData.type === 'custom_bind') {
-                                await bindHandler.autoSavePosition(guildId, posX.toFixed(2), posY.toFixed(2), posZ.toFixed(2));
-                                channel.send({ content: `✅ <@${setupData.adminId}> **Position Captured!**\nCoordinates: \`X: ${posX.toFixed(2)}, Y: ${posY.toFixed(2)}, Z: ${posZ.toFixed(2)}\`\n*Return to Discord panel to continue.*` }).catch(()=>{});
-                            } else {
-                                const coords = `${posX.toFixed(2)}_${posY.toFixed(2)}_${posZ.toFixed(2)}`;
-                                const row = new ActionRowBuilder().addComponents(
-                                    new ButtonBuilder().setCustomId(`btn_finalize_tpl_${setupData.type}_${coords}`).setLabel('📍 Finalize Setup').setStyle(ButtonStyle.Success),
-                                    new ButtonBuilder().setCustomId('btn_dismiss_coord').setLabel('❌ Dismiss').setStyle(ButtonStyle.Secondary)
-                                );
-                                channel.send({ content: `<@${setupData.adminId}> 📍 Coordinates grabbed: **${posX.toFixed(2)}, ${posY.toFixed(2)}, ${posZ.toFixed(2)}**`, components: [row] });
+                                let posX = parseFloat(matches[0]);
+                                let posY = parseFloat(matches[1]);
+                                let posZ = parseFloat(matches[2]);
+
+                                if (channel) {
+                                    if (setupData.type === 'custom_bind') {
+                                        await bindHandler.autoSavePosition(guildId, posX.toFixed(2), posY.toFixed(2), posZ.toFixed(2));
+                                        channel.send({ content: `✅ <@${setupData.adminId}> **Position Captured Successfully!**\nCoordinates: \`X: ${posX.toFixed(2)}, Y: ${posY.toFixed(2)}, Z: ${posZ.toFixed(2)}\`\n*Return to Discord panel to continue.*` }).catch(()=>{});
+                                    } else {
+                                        const coords = `${posX.toFixed(2)}_${posY.toFixed(2)}_${posZ.toFixed(2)}`;
+                                        const row = new ActionRowBuilder().addComponents(
+                                            new ButtonBuilder().setCustomId(`btn_finalize_tpl_${setupData.type}_${coords}`).setLabel('📍 Finalize Setup').setStyle(ButtonStyle.Success),
+                                            new ButtonBuilder().setCustomId('btn_dismiss_coord').setLabel('❌ Dismiss').setStyle(ButtonStyle.Secondary)
+                                        );
+                                        channel.send({ content: `<@${setupData.adminId}> 📍 Coordinates grabbed: **${posX.toFixed(2)}, ${posY.toFixed(2)}, ${posZ.toFixed(2)}**`, components: [row] });
+                                    }
+                                }
+                                adminPosQueue.delete(adminName);
+                                break;
                             }
                         }
-                        adminPosQueue.delete(adminName);
-                        break;
                     }
                 }
 
@@ -110,9 +103,9 @@ async function connectRcon(guildId, client) {
 
                     let killerDb = null;
                     let victimDb = null;
-                    const players = await UserEconomy.findAll({ where: { guildId: guildId } });
+                    const playersList = await UserEconomy.findAll({ where: { guildId: guildId } });
 
-                    for (const p of players) {
+                    for (const p of playersList) {
                         if (p.inGameName && msg.includes(p.inGameName)) {
                             if (msgLower.includes('killed') && msg.indexOf(p.inGameName) < msg.indexOf('killed')) {
                                 if (killType.includes('PvP')) {
@@ -201,15 +194,15 @@ function queueAdminPos(adminName, guildId, adminId, channelId, type = 'custom_bi
             adminPosQueue.delete(adminName);
             const channel = client.channels.cache.get(channelId);
             if (channel) {
-                channel.send({ content: `<@${adminId}> ⚠️ RCON coordinate response timed out. Make sure your in-game name matches your profile name!` }).catch(()=>{});
+                channel.send({ content: `<@${adminId}> ⚠️ RCON coordinate lookup timed out. Make sure your exact in-game name matches your profile!` }).catch(()=>{});
             }
         }
     }, 5000);
 
     adminPosQueue.set(adminName, { guildId, adminId, channelId, type, timeoutTimer });
 
-    // Explicitly using server.printpos with exact player name target
-    sendRconCommand(guildId, `server.printpos "${adminName}"`).catch(() => {});
+    // Console Edition native command to fetch online player positions and stats
+    sendRconCommand(guildId, `players`).catch(() => {});
 }
 
 async function triggerCustomEvent(guildId, eventType, data = {}) {
