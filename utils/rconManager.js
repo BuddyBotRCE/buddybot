@@ -53,13 +53,14 @@ async function connectRcon(guildId, client) {
                     }
                 }
 
-                // 1. POSITION TRACKER (Parses Console Edition `players` table or vector lists)
+                // 1. ROBUST ADMIN POSITION QUEUE INTERCEPTOR
                 if (adminPosQueue.size > 0) {
-                    for (const [adminName, setupData] of adminPosQueue.entries()) {
-                        // Check if the message contains the admin's name or coordinate tuples
-                        if (msg.includes(adminName) || /(-?\d+\.\d+)/.test(msg)) {
-                            const matches = msg.match(/-?\d+\.\d+/g);
-                            if (matches && matches.length >= 3) {
+                    // Check if message contains numbers or player details
+                    const matches = msg.match(/-?\d+\.\d+/g);
+                    if (matches && matches.length >= 3) {
+                        for (const [adminName, setupData] of adminPosQueue.entries()) {
+                            // If message references the admin or contains valid coordinate vectors
+                            if (msg.includes(adminName) || matches.length >= 3) {
                                 if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
                                 const channel = client.channels.cache.get(setupData.channelId);
 
@@ -70,7 +71,7 @@ async function connectRcon(guildId, client) {
                                 if (channel) {
                                     if (setupData.type === 'custom_bind') {
                                         await bindHandler.autoSavePosition(guildId, posX.toFixed(2), posY.toFixed(2), posZ.toFixed(2));
-                                        channel.send({ content: `✅ <@${setupData.adminId}> **Position Captured Successfully!**\nCoordinates: \`X: ${posX.toFixed(2)}, Y: ${posY.toFixed(2)}, Z: ${posZ.toFixed(2)}\`\n*Return to Discord panel to continue.*` }).catch(()=>{});
+                                        channel.send({ content: `✅ <@${setupData.adminId}> **Position Captured Successfully!**\nCoordinates: \`X: ${posX.toFixed(2)}, Y: ${posY.toFixed(2)}, Z: ${posZ.toFixed(2)}\`\n*Return to your Discord panel to continue.*` }).catch(()=>{});
                                     } else {
                                         const coords = `${posX.toFixed(2)}_${posY.toFixed(2)}_${posZ.toFixed(2)}`;
                                         const row = new ActionRowBuilder().addComponents(
@@ -194,15 +195,19 @@ function queueAdminPos(adminName, guildId, adminId, channelId, type = 'custom_bi
             adminPosQueue.delete(adminName);
             const channel = client.channels.cache.get(channelId);
             if (channel) {
-                channel.send({ content: `<@${adminId}> ⚠️ RCON coordinate lookup timed out. Make sure your exact in-game name matches your profile!` }).catch(()=>{});
+                const fallbackRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('btn_bind_manual_target').setLabel('Enter Coordinates Manually').setStyle(ButtonStyle.Primary).setEmoji('⌨️')
+                );
+                channel.send({ content: `<@${adminId}> ⚠️ RCON automatic coordinate lookup timed out (Console Edition limitation). Click below to enter your X,Y,Z coordinates manually:`, components: [fallbackRow] }).catch(()=>{});
             }
         }
-    }, 5000);
+    }, 6000);
 
     adminPosQueue.set(adminName, { guildId, adminId, channelId, type, timeoutTimer });
 
-    // Console Edition native command to fetch online player positions and stats
+    // Query both player list and server status info to catch coordinate outputs
     sendRconCommand(guildId, `players`).catch(() => {});
+    sendRconCommand(guildId, `status`).catch(() => {});
 }
 
 async function triggerCustomEvent(guildId, eventType, data = {}) {
