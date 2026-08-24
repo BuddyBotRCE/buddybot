@@ -177,7 +177,7 @@ async function sendRconCommand(guildId, commandStr) {
     return true;
 }
 
-function queueAdminPos(adminName, guildId, adminId, channelId, type = 'custom_bind', client) {
+async function queueAdminPos(adminName, guildId, adminId, channelId, type = 'custom_bind', client) {
     if (adminPosQueue.has(adminName)) {
         const old = adminPosQueue.get(adminName);
         if (old.timeoutTimer) clearTimeout(old.timeoutTimer);
@@ -188,15 +188,14 @@ function queueAdminPos(adminName, guildId, adminId, channelId, type = 'custom_bi
             adminPosQueue.delete(adminName);
             const channel = client.channels.cache.get(channelId);
             if (channel) {
-                channel.send({ content: `<@${adminId}> ⚠️ RCON coordinate request timed out. Make sure you are online on the server.` }).catch(()=>{});
+                channel.send({ content: `<@${adminId}> ⚠️ Position request timed out. Make sure you are online in-game!` }).catch(()=>{});
             }
         }
     }, 5000);
 
     adminPosQueue.set(adminName, { guildId, adminId, channelId, type, timeoutTimer });
 
-    // RUST CONSOLE EDITION NATIVE POSITION COMMANDS
-    sendRconCommand(guildId, `entity.find_self`).catch(() => {});
+    // Rust Console Edition command to list connected players and their live coordinates
     sendRconCommand(guildId, `players`).catch(() => {});
 }
 
