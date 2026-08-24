@@ -1,259 +1,154 @@
-const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { CustomBind, ServerKit } = require('../database/db');
-const { queueAdminPos } = require('../utils/rconManager'); 
+const { Sequelize, DataTypes } = require('sequelize');
+const path = require('path');
 
-const bindSessions = new Map();
+let sequelize;
 
-const ACTION_TYPES = {
-    kit: { name: '🎁 Kit Bind', desc: 'Gives a player a server kit', emoji: '🎁' },
-    teleport: { name: '📍 Teleport Bind', desc: 'Teleports player to saved coordinates', emoji: '📍' },
-    recycler: { name: '♻️ Portable Recycler', desc: 'Spawns a recycler facing player view', emoji: '♻️' },
-    custom: { name: '⚡ Custom RCON', desc: 'Fires a raw custom server command', emoji: '⚡' }
-};
+if (process.env.DATABASE_URL) {
+    sequelize = new Sequelize(process.env.DATABASE_URL, {
+        dialect: 'postgres',
+        logging: false,
+        dialectOptions: { ssl: { require: true, rejectUnauthorized: false } }
+    });
+    console.log('[DATABASE] Connected to production PostgreSQL database.');
+} else {
+    const storagePath = process.env.DATABASE_STORAGE || path.join(__dirname, '../database.sqlite');
+    sequelize = new Sequelize({ dialect: 'sqlite', storage: storagePath, logging: false });
+    console.log('[DATABASE] Connected to local SQLite database.');
+}
 
-const bindHandler = async (interaction, client) => {
-    try {
-        const customId = interaction.customId || '';
-        const guildId = interaction.guild.id;
-        let selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
+// --- EXISTING MODELS ---
+const GuildConfig = sequelize.define('GuildConfig', {
+    guildId: { type: DataTypes.STRING, primaryKey: true },
+    rconIp: { type: DataTypes.STRING, allowNull: true },
+    rconPort: { type: DataTypes.STRING, allowNull: true },
+    rconPassword: { type: DataTypes.STRING, allowNull: true },
+    crossChatChannelId: { type: DataTypes.STRING, allowNull: true },
+    killfeedChannelId: { type: DataTypes.STRING, allowNull: true },
+    giveawayChannelId: { type: DataTypes.STRING, allowNull: true },
+    giveawayBannerUrl: { type: DataTypes.STRING, allowNull: true },
+    ticketCategoryId: { type: DataTypes.STRING, allowNull: true },
+    ticketTranscriptChannelId: { type: DataTypes.STRING, allowNull: true },
+    ticketAdminRoleId: { type: DataTypes.STRING, allowNull: true },
+    ticketVipRoleId: { type: DataTypes.STRING, allowNull: true },
+    ticketSendUserTranscript: { type: DataTypes.BOOLEAN, defaultValue: true },
+    economyCurrency: { type: DataTypes.STRING, defaultValue: 'Scrap' },
+    shopMultiplier: { type: DataTypes.INTEGER, defaultValue: 100 },
+    bankInterestRate: { type: DataTypes.FLOAT, defaultValue: 0 },
+    bankInterestHours: { type: DataTypes.INTEGER, defaultValue: 24 },
+    lastBankInterest: { type: DataTypes.DATE, allowNull: true },
+    casinoMaxBet: { type: DataTypes.INTEGER, defaultValue: 1000 },
+    casinoCooldownSeconds: { type: DataTypes.INTEGER, defaultValue: 5 },
+    buddyPassXpRate: { type: DataTypes.INTEGER, defaultValue: 10 },
+    voteUrl: { type: DataTypes.STRING, allowNull: true },
+    voteRewardAmount: { type: DataTypes.INTEGER, defaultValue: 250 },
+    isPremiumServer: { type: DataTypes.BOOLEAN, defaultValue: false },
+    stripeCustomerId: { type: DataTypes.STRING, allowNull: true },
+    subscriptionStatus: { type: DataTypes.STRING, defaultValue: 'inactive' },
+    subscriptionExpiresAt: { type: DataTypes.DATE, allowNull: true },
+    statusChannelId: { type: DataTypes.STRING, allowNull: true },
+    statusMessageId: { type: DataTypes.STRING, allowNull: true },
+    aiProvider: { type: DataTypes.STRING, defaultValue: 'openai' },
+    aiModel: { type: DataTypes.STRING, defaultValue: 'gpt-4o-mini' },
+    aiApiKey: { type: DataTypes.STRING, allowNull: true },
+    aiBaseUrl: { type: DataTypes.STRING, defaultValue: 'https://api.openai.com/v1' },
+    logAdminChannelId: { type: DataTypes.STRING, allowNull: true },
+    logGameChannelId: { type: DataTypes.STRING, allowNull: true },
+    logDiscordChannelId: { type: DataTypes.STRING, allowNull: true },
+    suggestionChannelId: { type: DataTypes.STRING, allowNull: true },
+    suggestionPingRoleId: { type: DataTypes.STRING, allowNull: true },
+    bountyKillsToActivate: { type: DataTypes.INTEGER, defaultValue: 5 },
+    bountyRewardAmount: { type: DataTypes.INTEGER, defaultValue: 500 },
+    bountyCooldownMinutes: { type: DataTypes.INTEGER, defaultValue: 60 },
+    clanCreationCost: { type: DataTypes.INTEGER, defaultValue: 1000 },
+    clanDefaultMaxMembers: { type: DataTypes.INTEGER, defaultValue: 4 },
+    clanDiscordSyncEnabled: { type: DataTypes.BOOLEAN, defaultValue: false },
+    autoModEnabled: { type: DataTypes.BOOLEAN, defaultValue: false },
+    autoModCapsLimit: { type: DataTypes.INTEGER, defaultValue: 70 },
+    autoModAction: { type: DataTypes.STRING, defaultValue: 'timeout' },
+    autoModMutedWords: { type: DataTypes.TEXT, defaultValue: '[]' },
+    
+    // Auto-Mod Settings
+    amCapsEnabled: { type: DataTypes.BOOLEAN, defaultValue: false },
+    amCapsLimit: { type: DataTypes.INTEGER, defaultValue: 70 },
+    amCapsAction: { type: DataTypes.STRING, defaultValue: 'delete' },
+    amSpamEnabled: { type: DataTypes.BOOLEAN, defaultValue: false },
+    amSpamLimit: { type: DataTypes.INTEGER, defaultValue: 5 },
+    amSpamAction: { type: DataTypes.STRING, defaultValue: 'delete' },
+    amMentionsEnabled: { type: DataTypes.BOOLEAN, defaultValue: false },
+    amMentionsLimit: { type: DataTypes.INTEGER, defaultValue: 4 },
+    amMentionsAction: { type: DataTypes.STRING, defaultValue: 'delete' },
+    amLinkEnabled: { type: DataTypes.BOOLEAN, defaultValue: false },
+    amLinkAction: { type: DataTypes.STRING, defaultValue: 'delete' },
+    amInviteEnabled: { type: DataTypes.BOOLEAN, defaultValue: false },
+    amInviteAction: { type: DataTypes.STRING, defaultValue: 'delete' },
+    amWordsEnabled: { type: DataTypes.BOOLEAN, defaultValue: false },
+    amWordsList: { type: DataTypes.TEXT, defaultValue: '' },
+    amWordsAction: { type: DataTypes.STRING, defaultValue: 'delete' }
+});
 
-        // --- INITIALIZE SESSION ---
-        if (!bindSessions.has(guildId)) {
-            bindSessions.set(guildId, { step: 'menu', bindId: null, actionType: 'kit', targetValue: '', rotation: '', posX: '', posY: '', posZ: '', name: '', cooldown: 0, cost: 0, emote: '⭐' });
-        }
-        const session = bindSessions.get(guildId);
+const GameServer = sequelize.define('GameServer', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, serverName: { type: DataTypes.STRING, allowNull: false }, rconIp: { type: DataTypes.STRING, allowNull: false }, rconPort: { type: DataTypes.STRING, allowNull: false }, rconPassword: { type: DataTypes.STRING, allowNull: false }});
+const UserEconomy = sequelize.define('UserEconomy', { guildId: { type: DataTypes.STRING, primaryKey: true }, userId: { type: DataTypes.STRING, primaryKey: true }, wallet: { type: DataTypes.INTEGER, defaultValue: 0 }, bank: { type: DataTypes.INTEGER, defaultValue: 0 }, inGameName: { type: DataTypes.STRING, allowNull: true }, lastDaily: { type: DataTypes.DATE, allowNull: true }, lastVoteTime: { type: DataTypes.DATE, allowNull: true }, xp: { type: DataTypes.INTEGER, defaultValue: 0 }, level: { type: DataTypes.INTEGER, defaultValue: 1 }, pvpKills: { type: DataTypes.INTEGER, defaultValue: 0 }, pveKills: { type: DataTypes.INTEGER, defaultValue: 0 }, deaths: { type: DataTypes.INTEGER, defaultValue: 0 }, currentKillstreak: { type: DataTypes.INTEGER, defaultValue: 0 } });
+const Giveaway = sequelize.define('Giveaway', { messageId: { type: DataTypes.STRING, primaryKey: true }, guildId: { type: DataTypes.STRING }, channelId: { type: DataTypes.STRING }, prize: { type: DataTypes.STRING }, endTime: { type: DataTypes.DATE }, winnersCount: { type: DataTypes.INTEGER, defaultValue: 1 }, entries: { type: DataTypes.TEXT, defaultValue: '[]' }, isActive: { type: DataTypes.BOOLEAN, defaultValue: true } });
 
-        // --- RENDER MAIN DASHBOARD ---
-        const renderDashboard = async (inter, messageOverride = '') => {
-            const allBinds = await CustomBind.findAll({ where: { guildId } });
-            
-            let listText = allBinds.length === 0 ? '*No custom binds created yet.*' : '';
-            for (const b of allBinds) {
-                const info = ACTION_TYPES[b.actionType] || ACTION_TYPES.custom;
-                listText += `${info.emoji} **${b.name}** [Type: \`${b.actionType}\`] | Cooldown: ${b.cooldown}s | Cost: ${b.cost}\n`;
-            }
+// --- UPDATED CUSTOM BINDS MODEL ---
+const CustomBind = sequelize.define('CustomBind', { 
+    guildId: { type: DataTypes.STRING }, 
+    name: { type: DataTypes.STRING, defaultValue: 'Custom Bind' }, 
+    actionType: { type: DataTypes.STRING, defaultValue: 'custom' }, // 'kit', 'teleport', 'recycler', 'custom'
+    targetValue: { type: DataTypes.TEXT, allowNull: true }, // Stores kit name or coordinates
+    rotation: { type: DataTypes.STRING, allowNull: true }, // Stores player view angle for recyclers/teleports
+    emote: { type: DataTypes.STRING, defaultValue: '⭐' }, 
+    command: { type: DataTypes.TEXT, allowNull: true }, 
+    cooldown: { type: DataTypes.INTEGER, defaultValue: 0 }, 
+    cost: { type: DataTypes.INTEGER, defaultValue: 0 }, 
+    roleId: { type: DataTypes.STRING, allowNull: true } 
+});
 
-            const embed = new EmbedBuilder()
-                .setTitle('🔗 Custom Binds Manager')
-                .setDescription(`${messageOverride ? `**${messageOverride}**\n\n` : ''}Create and manage interactive binds for Kits, Teleports, Portable Recyclers, and Custom RCON commands.\n\n**Active Binds:**\n${listText}`)
-                .setColor('#e67e22');
+const BindCooldown = sequelize.define('BindCooldown', { guildId: { type: DataTypes.STRING, primaryKey: true }, userId: { type: DataTypes.STRING, primaryKey: true }, bindId: { type: DataTypes.INTEGER, primaryKey: true }, expiresAt: { type: DataTypes.DATE } });
+const ServerKit = sequelize.define('ServerKit', { guildId: { type: DataTypes.STRING }, kitName: { type: DataTypes.STRING }, items: { type: DataTypes.TEXT } });
+const ShopItem = sequelize.define('ShopItem', { guildId: { type: DataTypes.STRING }, name: { type: DataTypes.STRING }, command: { type: DataTypes.STRING }, price: { type: DataTypes.INTEGER }, category: { type: DataTypes.STRING, defaultValue: 'custom' }, cooldownSeconds: { type: DataTypes.INTEGER, defaultValue: 0 }, requiredRoleId: { type: DataTypes.STRING, allowNull: true } });
+const ShopCooldown = sequelize.define('ShopCooldown', { guildId: { type: DataTypes.STRING, primaryKey: true }, userId: { type: DataTypes.STRING, primaryKey: true }, itemId: { type: DataTypes.INTEGER, primaryKey: true }, expiresAt: { type: DataTypes.DATE } });
+const CasinoCooldown = sequelize.define('CasinoCooldown', { guildId: { type: DataTypes.STRING, primaryKey: true }, userId: { type: DataTypes.STRING, primaryKey: true }, expiresAt: { type: DataTypes.DATE } });
+const OrpConfig = sequelize.define('OrpConfig', { guildId: { type: DataTypes.STRING, primaryKey: true }, zoneSize: { type: DataTypes.INTEGER, defaultValue: 25 }, onlineColor: { type: DataTypes.STRING, defaultValue: 'green' }, offlineColor: { type: DataTypes.STRING, defaultValue: 'blue' }, activeDurationHours: { type: DataTypes.INTEGER, defaultValue: 24 } });
+const PlayerOrpBase = sequelize.define('PlayerOrpBase', { guildId: { type: DataTypes.STRING }, inGameName: { type: DataTypes.STRING }, x: { type: DataTypes.FLOAT }, y: { type: DataTypes.FLOAT }, z: { type: DataTypes.FLOAT } });
+const BuddyPassChallenge = sequelize.define('BuddyPassChallenge', { guildId: { type: DataTypes.STRING }, title: { type: DataTypes.STRING }, targetType: { type: DataTypes.STRING }, targetAmount: { type: DataTypes.INTEGER }, rewardXp: { type: DataTypes.INTEGER }, isPreloaded: { type: DataTypes.BOOLEAN, defaultValue: false } });
+const BuddyPassReward = sequelize.define('BuddyPassReward', { guildId: { type: DataTypes.STRING, primaryKey: true }, level: { type: DataTypes.INTEGER, primaryKey: true }, rewardType: { type: DataTypes.STRING }, rewardValue: { type: DataTypes.STRING } });
+const TicketCategory = sequelize.define('TicketCategory', { guildId: { type: DataTypes.STRING }, name: { type: DataTypes.STRING }, description: { type: DataTypes.STRING } });
+const PveZone = sequelize.define('PveZone', { guildId: { type: DataTypes.STRING }, zoneName: { type: DataTypes.STRING }, radius: { type: DataTypes.STRING, allowNull: true }, zoneColor: { type: DataTypes.STRING, defaultValue: 'green' }, posX: { type: DataTypes.STRING, allowNull: true }, posY: { type: DataTypes.STRING, allowNull: true }, posZ: { type: DataTypes.STRING, allowNull: true }, enterMessage: { type: DataTypes.STRING }, exitMessage: { type: DataTypes.STRING }, allowBuild: { type: DataTypes.BOOLEAN, defaultValue: false }, allowPvp: { type: DataTypes.BOOLEAN, defaultValue: false }, allowPve: { type: DataTypes.BOOLEAN, defaultValue: false }, shape: { type: DataTypes.STRING, defaultValue: 'sphere' }, x: { type: DataTypes.FLOAT }, y: { type: DataTypes.FLOAT }, z: { type: DataTypes.FLOAT }, size: { type: DataTypes.STRING }, color: { type: DataTypes.STRING, defaultValue: 'green' } });
+const ActiveBounty = sequelize.define('ActiveBounty', { guildId: { type: DataTypes.STRING }, userId: { type: DataTypes.STRING }, inGameName: { type: DataTypes.STRING }, reward: { type: DataTypes.INTEGER } });
+const BountyCooldown = sequelize.define('BountyCooldown', { guildId: { type: DataTypes.STRING, primaryKey: true }, userId: { type: DataTypes.STRING, primaryKey: true }, expiresAt: { type: DataTypes.DATE } });
+const Clan = sequelize.define('Clan', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, name: { type: DataTypes.STRING, allowNull: false }, tag: { type: DataTypes.STRING, allowNull: false }, leaderId: { type: DataTypes.STRING, allowNull: false }, bankBalance: { type: DataTypes.INTEGER, defaultValue: 0 }, taxRate: { type: DataTypes.INTEGER, defaultValue: 0 }, maxMembers: { type: DataTypes.INTEGER, defaultValue: 4 }, baseCodes: { type: DataTypes.STRING, allowNull: true }, discordRoleId: { type: DataTypes.STRING, allowNull: true }, discordTextChannelId: { type: DataTypes.STRING, allowNull: true }, discordVoiceChannelId: { type: DataTypes.STRING, allowNull: true } });
+const ClanMember = sequelize.define('ClanMember', { guildId: { type: DataTypes.STRING, primaryKey: true }, userId: { type: DataTypes.STRING, primaryKey: true }, clanId: { type: DataTypes.INTEGER, allowNull: false }, role: { type: DataTypes.STRING, defaultValue: 'Member' } });
+const ClanInvite = sequelize.define('ClanInvite', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, clanId: { type: DataTypes.INTEGER, allowNull: false }, userId: { type: DataTypes.STRING, allowNull: false } });
+const ClanWar = sequelize.define('ClanWar', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, challengerClanId: { type: DataTypes.INTEGER, allowNull: false }, targetClanId: { type: DataTypes.INTEGER, allowNull: false }, status: { type: DataTypes.STRING, defaultValue: 'active' } });
+const ReactionRole = sequelize.define('ReactionRole', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, messageId: { type: DataTypes.STRING, allowNull: false }, emoji: { type: DataTypes.STRING, allowNull: false }, roleId: { type: DataTypes.STRING, allowNull: false }, isVerifyOnly: { type: DataTypes.BOOLEAN, defaultValue: false } });
 
-            // ROW 1: Existing Binds Dropdown
-            let bindOptions = allBinds.map(b => ({ label: b.name, description: `Type: ${b.actionType} | CD: ${b.cooldown}s`, value: `edit_bind_${b.id}`, emoji: '📂' }));
-            if (bindOptions.length === 0) bindOptions.push({ label: 'No binds available', value: 'none' });
+// Auto Events Models
+const AutoEvent = sequelize.define('AutoEvent', {
+    id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+    guildId: { type: DataTypes.STRING, allowNull: false },
+    name: { type: DataTypes.STRING, allowNull: false },
+    eventType: { type: DataTypes.STRING, defaultValue: 'hackable' },
+    interval: { type: DataTypes.INTEGER, defaultValue: 60 },
+    amount: { type: DataTypes.INTEGER, defaultValue: 1 },
+    isEnabled: { type: DataTypes.BOOLEAN, defaultValue: false }
+});
 
-            const row1Load = new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder().setCustomId('bind_select_existing').setPlaceholder('📂 Select an existing bind to edit...').addOptions(bindOptions.slice(0, 25))
-            );
+const AutoEventLocation = sequelize.define('AutoEventLocation', {
+    id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+    guildId: { type: DataTypes.STRING, allowNull: false },
+    eventId: { type: DataTypes.INTEGER, allowNull: false },
+    slot: { type: DataTypes.INTEGER, allowNull: false },
+    posX: { type: DataTypes.STRING, allowNull: false },
+    posY: { type: DataTypes.STRING, allowNull: false },
+    posZ: { type: DataTypes.STRING, allowNull: false }
+});
 
-            // ROW 2: Create New Bind Button
-            const row2Create = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('btn_bind_start_create').setLabel('Create New Custom Bind').setStyle(ButtonStyle.Success).setEmoji('✨')
-            );
+async function initDb() { 
+    await sequelize.authenticate(); 
+    await sequelize.sync({ alter: true }); 
+    console.log('[DATABASE] Tables synchronized successfully.'); 
+}
+initDb();
 
-            const payload = { embeds: [embed], components: [row1Load, row2Create], flags: 64 };
-            if (inter.isRepliable() && !inter.replied && !inter.deferred) return await inter.reply(payload);
-            return await inter.update(payload).catch(() => inter.followUp(payload));
-        };
-
-        // --- RENDER CREATION / EDIT WIZARD ---
-        const renderWizard = async (inter, messageOverride = '') => {
-            const embed = new EmbedBuilder()
-                .setTitle('🛠️ Custom Bind Builder Wizard')
-                .setDescription(`${messageOverride ? `**${messageOverride}**\n\n` : ''}Configure your bind parameters below before saving.`)
-                .addFields(
-                    { name: '1️⃣ Action Type', value: `${ACTION_TYPES[session.actionType]?.emoji || '⭐'} **${session.actionType.toUpperCase()}**`, inline: true },
-                    { name: '2️⃣ Target / Data', value: `\`${session.targetValue || 'Not Set'}\``, inline: true },
-                    { name: '3️⃣ Emote & Settings', value: `• Name: **${session.name || 'Unnamed'}**\n• Emote: ${session.emote}\n• Cooldown: ${session.cooldown}s | Cost: ${session.cost} Scrap`, inline: false }
-                )
-                .setColor('#3498db');
-
-            // ROW 1: Choose Action Type Dropdown
-            const row1Type = new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder().setCustomId('bind_type_select').setPlaceholder(`Action: ${ACTION_TYPES[session.actionType].name}`)
-                    .addOptions(Object.keys(ACTION_TYPES).map(k => ({ label: ACTION_TYPES[k].name, description: ACTION_TYPES[k].desc, value: k, emoji: ACTION_TYPES[k].emoji })))
-            );
-
-            // ROW 2: Dynamic Target Config (Kit Dropdown OR Get Pos Button)
-            let row2Target;
-            if (session.actionType === 'kit') {
-                const kits = await ServerKit.findAll({ where: { guildId } });
-                let kitOpts = kits.map(k => ({ label: k.kitName, value: k.kitName, emoji: '🎁' }));
-                if (kitOpts.length === 0) kitOpts.push({ label: 'No kits found in DB', value: 'none' });
-
-                row2Target = new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder().setCustomId('bind_kit_select').setPlaceholder(session.targetValue ? `Selected Kit: ${session.targetValue}` : '🎁 Select Server Kit...').addOptions(kitOpts.slice(0, 25))
-                );
-            } else if (session.actionType === 'teleport' || session.actionType === 'recycler') {
-                row2Target = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('btn_bind_getpos').setLabel(session.posX ? '📍 Position Captured (Update)' : '📍 Get Admin Pos & View Angle').setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder().setCustomId('btn_bind_manual_target').setLabel('Manual RCON Command').setStyle(ButtonStyle.Secondary).setEmoji('⌨️')
-                );
-            } else {
-                row2Target = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('btn_bind_manual_target').setLabel('Set Custom Command / Value').setStyle(ButtonStyle.Primary).setEmoji('✏️')
-                );
-            }
-
-            // ROW 3: General Settings (Name, Cooldown, Cost, Emote)
-            const row3Settings = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('btn_bind_settings').setLabel('Set Name, CD & Cost').setStyle(ButtonStyle.Secondary).setEmoji('⚙️')
-            );
-
-            // ROW 4: Save / Cancel
-            const row4Action = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('btn_bind_save').setLabel(session.bindId ? 'Update Bind' : 'Save & Create Bind').setStyle(ButtonStyle.Success).setEmoji('💾'),
-                new ButtonBuilder().setCustomId('btn_bind_cancel').setLabel('Cancel / Back').setStyle(ButtonStyle.Danger).setEmoji('✖️')
-            );
-
-            const components = [row1Type, row2Target, row3Settings, row4Action];
-            const payload = { embeds: [embed], components, flags: 64 };
-            if (inter.isRepliable() && !inter.replied && !inter.deferred) return await inter.reply(payload);
-            return await inter.update(payload).catch(() => inter.followUp(payload));
-        };
-
-        // --- ENTRY FROM ADMIN PANEL ---
-        if (customId === 'admin_menu_select' && (selectedValue === 'setup_binds' || selectedValue.includes('bind'))) {
-            return await renderDashboard(interaction);
-        }
-
-        // --- DROPDOWN HANDLERS ---
-        if (interaction.isStringSelectMenu()) {
-            if (customId === 'bind_select_existing') {
-                if (selectedValue === 'none') return await interaction.deferUpdate();
-                const bind = await CustomBind.findByPk(selectedValue.replace('edit_bind_', ''));
-                if (!bind) return await interaction.reply({ content: '❌ Bind not found.', flags: 64 });
-
-                session.bindId = bind.id;
-                session.actionType = bind.actionType;
-                session.targetValue = bind.targetValue;
-                session.name = bind.name;
-                session.cooldown = bind.cooldown;
-                session.cost = bind.cost;
-                session.emote = bind.emote;
-                bindSessions.set(guildId, session);
-                return await renderWizard(interaction, `📂 Loaded bind: **${bind.name}**`);
-            }
-
-            if (customId === 'bind_type_select') {
-                session.actionType = selectedValue;
-                session.targetValue = ''; // Reset target when switching types
-                bindSessions.set(guildId, session);
-                return await renderWizard(interaction, `✅ Action type changed to **${selectedValue.toUpperCase()}**.`);
-            }
-
-            if (customId === 'bind_kit_select') {
-                if (selectedValue === 'none') return await interaction.deferUpdate();
-                session.targetValue = selectedValue;
-                session.name = session.name || `Kit: ${selectedValue}`;
-                bindSessions.set(guildId, session);
-                return await renderWizard(interaction, `🎁 Target kit set to **${selectedValue}**!`);
-            }
-        }
-
-        // --- BUTTON HANDLERS ---
-        if (interaction.isButton()) {
-            if (customId === 'btn_bind_start_create') {
-                bindSessions.set(guildId, { step: 'wizard', bindId: null, actionType: 'kit', targetValue: '', rotation: '', posX: '', posY: '', posZ: '', name: 'New Bind', cooldown: 0, cost: 0, emote: '⭐' });
-                return await renderWizard(interaction);
-            }
-
-            if (customId === 'btn_bind_cancel') {
-                bindSessions.set(guildId, { step: 'menu' });
-                return await renderDashboard(interaction);
-            }
-
-            if (customId === 'btn_bind_settings') {
-                const modal = new ModalBuilder().setCustomId('modal_bind_settings').setTitle('Bind Configuration');
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_name').setLabel("Bind Name").setStyle(TextInputStyle.Short).setValue(session.name).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_cd').setLabel("Cooldown (Seconds)").setStyle(TextInputStyle.Short).setValue(session.cooldown.toString()).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_cost').setLabel("Cost in Scrap").setStyle(TextInputStyle.Short).setValue(session.cost.toString()).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_emote').setLabel("Emote Icon").setStyle(TextInputStyle.Short).setValue(session.emote).setRequired(true))
-                );
-                return await interaction.showModal(modal);
-            }
-
-            if (customId === 'btn_bind_getpos') {
-                if (typeof queueAdminPos === 'function') {
-                    await queueAdminPos(interaction);
-                    return;
-                } else return await interaction.reply({ content: '❌ `queueAdminPos` missing.', flags: 64 });
-            }
-
-            if (customId === 'btn_bind_manual_target') {
-                const modal = new ModalBuilder().setCustomId('modal_bind_manual').setTitle('Manual Command / Target');
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_target').setLabel("Target Value or Command").setStyle(TextInputStyle.Paragraph).setValue(session.targetValue).setRequired(true)));
-                return await interaction.showModal(modal);
-            }
-
-            if (customId === 'btn_bind_save') {
-                if (!session.name) return await interaction.reply({ content: '❌ Please give your bind a name.', flags: 64 });
-
-                let finalCommand = '';
-                if (session.actionType === 'kit') finalCommand = `kit.give ${session.targetValue}`;
-                else if (session.actionType === 'teleport') finalCommand = `teleport.pos ${session.posX} ${session.posY} ${session.posZ}`;
-                else if (session.actionType === 'recycler') finalCommand = `spawn recycler "${session.posX},${session.posY},${session.posZ}"`;
-                else finalCommand = session.targetValue;
-
-                const dbData = {
-                    guildId,
-                    name: session.name,
-                    actionType: session.actionType,
-                    targetValue: session.targetValue,
-                    rotation: session.rotation,
-                    command: finalCommand,
-                    cooldown: session.cooldown,
-                    cost: session.cost,
-                    emote: session.emote
-                };
-
-                if (session.bindId) {
-                    await CustomBind.update(dbData, { where: { id: session.bindId } });
-                } else {
-                    await CustomBind.create(dbData);
-                }
-
-                bindSessions.set(guildId, { step: 'menu' });
-                return await renderDashboard(interaction, `✅ Custom bind **${session.name}** successfully saved!`);
-            }
-        }
-
-        // --- MODAL SUBMISSIONS ---
-        if (interaction.isModalSubmit()) {
-            if (customId === 'modal_bind_settings') {
-                session.name = interaction.fields.getTextInputValue('b_name').trim();
-                session.cooldown = parseInt(interaction.fields.getTextInputValue('b_cd')) || 0;
-                session.cost = parseInt(interaction.fields.getTextInputValue('b_cost')) || 0;
-                session.emote = interaction.fields.getTextInputValue('b_emote').trim() || '⭐';
-                bindSessions.set(guildId, session);
-                return await renderWizard(interaction, `✅ Settings updated!`);
-            }
-            if (customId === 'modal_bind_manual') {
-                session.targetValue = interaction.fields.getTextInputValue('b_target').trim();
-                bindSessions.set(guildId, session);
-                return await renderWizard(interaction, `✅ Target value saved!`);
-            }
-        }
-
-    } catch (error) {
-        console.error('[BIND HANDLER ERROR]', error);
-        if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-            await interaction.reply({ content: '❌ An error occurred processing custom binds.', flags: 64 }).catch(() => {});
-        }
-    }
-};
-
-// Auto-save position helper for webhook integration
-bindHandler.autoSavePosition = async (guildId, x, y, z, rot = '') => {
-    const session = bindSessions.get(guildId);
-    if (!session) return;
-    session.posX = x;
-    session.posY = y;
-    session.posZ = z;
-    session.rotation = rot;
-    session.targetValue = `${x}, ${y}, ${z}`;
-};
-
-bindHandler.bindSessions = bindSessions;
-module.exports = bindHandler;
+module.exports = { sequelize, GuildConfig, GameServer, UserEconomy, Giveaway, CustomBind, BindCooldown, ServerKit, ShopItem, ShopCooldown, CasinoCooldown, OrpConfig, PlayerOrpBase, BuddyPassChallenge, BuddyPassReward, TicketCategory, PveZone, AutoEvent, AutoEventLocation, ActiveBounty, BountyCooldown, Clan, ClanMember, ClanInvite, ClanWar, ReactionRole };
