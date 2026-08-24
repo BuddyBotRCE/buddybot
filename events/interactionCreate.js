@@ -26,6 +26,7 @@ const pveHandler = require(handlerPath('pveHandler'));
 const bindHandler = require(handlerPath('bindHandler'));
 const adminHandler = require(handlerPath('adminHandler'));
 const reactionRoleHandler = require(handlerPath('reactionRoleHandler'));
+const autoModHandler = require('../handlers/autoModHandler');
 
 module.exports = async (interaction, client) => {
     console.log(`[INTERACTION DEBUG] Type: ${interaction.type} | CustomID: ${interaction.customId || 'N/A'} | Command: ${interaction.commandName || 'N/A'}`);
@@ -56,6 +57,8 @@ module.exports = async (interaction, client) => {
             if (selectedValue === 'setup_binds') return await bindHandler(interaction, client);
             if (selectedValue === 'setup_verification') return await verificationHandler(interaction, client);
             if (selectedValue === 'setup_reactionroles') return await reactionRoleHandler(interaction, client);
+            if (selectedValue === 'setup_reactionroles') return await reactionRoleHandler(interaction, client);
+            if (selectedValue === 'setup_automod') return await autoModHandler(interaction, client);
             return await adminHandler(interaction, client);
         }
 
@@ -64,6 +67,9 @@ module.exports = async (interaction, client) => {
         // ====================================================================
 
         // --- REACTION ROLES ROUTER (CATCHES ALL RR COMPONENTS & MODALS) ---
+        if (customId.startsWith('am_') || customId.startsWith('btn_am_') || customId.startsWith('modal_am_')) {
+            return await autoModHandler(interaction, client);
+        }
         if (customId.startsWith('rr_') || customId.startsWith('select_rr_') || customId.startsWith('btn_rr_') || customId.startsWith('modal_rr_') || customId.includes('reaction')) {
             return await reactionRoleHandler(interaction, client);
         }

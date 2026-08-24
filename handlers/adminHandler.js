@@ -34,13 +34,7 @@ module.exports = async (interaction, client) => {
             );
             return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
         }
-
-        if (selectedValue === 'setup_automod') {
-            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-            const embed = new EmbedBuilder().setTitle('🛡️ Auto-Moderation Suite').setDescription(`Configure automated chat filters.\n\n• **Status:** ${config?.autoModEnabled ? '🟢 Enabled' : '🔴 Disabled'}\n• **Action Type:** \`${config?.autoModAction || 'timeout'}\`\n• **Caps Limit:** ${config?.autoModCapsLimit || 70}%`).setColor('#e74c3c');
-            const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_automod_toggle').setLabel(config?.autoModEnabled ? 'Disable Auto-Mod' : 'Enable Auto-Mod').setStyle(config?.autoModEnabled ? ButtonStyle.Danger : ButtonStyle.Success).setEmoji('⚡'), new ButtonBuilder().setCustomId('btn_automod_settings').setLabel('Configure Limits & Actions').setStyle(ButtonStyle.Primary).setEmoji('⚙️'));
-            return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
-        }
+        
         if (selectedValue === 'setup_multiserver') {
             const servers = await GameServer.findAll({ where: { guildId: interaction.guild.id } });
             const serverList = servers.length ? servers.map(s => `• **${s.serverName}** (\`${s.rconIp}:${s.rconPort}\`)`).join('\n') : 'No game servers configured yet.';

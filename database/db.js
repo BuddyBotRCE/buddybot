@@ -75,7 +75,29 @@ const GuildConfig = sequelize.define('GuildConfig', {
     autoModEnabled: { type: DataTypes.BOOLEAN, defaultValue: false },
     autoModCapsLimit: { type: DataTypes.INTEGER, defaultValue: 70 },
     autoModAction: { type: DataTypes.STRING, defaultValue: 'timeout' },
-    autoModMutedWords: { type: DataTypes.TEXT, defaultValue: '[]' }
+    autoModMutedWords: { type: DataTypes.TEXT, defaultValue: '[]' },
+    // Add these inside your GuildConfig model definition in database/db.js
+    amCapsEnabled: { type: DataTypes.BOOLEAN, defaultValue: false },
+    amCapsLimit: { type: DataTypes.INTEGER, defaultValue: 70 },
+    amCapsAction: { type: DataTypes.STRING, defaultValue: 'delete' },
+
+    amSpamEnabled: { type: DataTypes.BOOLEAN, defaultValue: false },
+    amSpamLimit: { type: DataTypes.INTEGER, defaultValue: 5 },
+    amSpamAction: { type: DataTypes.STRING, defaultValue: 'delete' },
+
+    amMentionsEnabled: { type: DataTypes.BOOLEAN, defaultValue: false },
+    amMentionsLimit: { type: DataTypes.INTEGER, defaultValue: 4 },
+    amMentionsAction: { type: DataTypes.STRING, defaultValue: 'delete' },
+
+    amLinkEnabled: { type: DataTypes.BOOLEAN, defaultValue: false },
+    amLinkAction: { type: DataTypes.STRING, defaultValue: 'delete' },
+
+    amInviteEnabled: { type: DataTypes.BOOLEAN, defaultValue: false },
+    amInviteAction: { type: DataTypes.STRING, defaultValue: 'delete' },
+
+    amWordsEnabled: { type: DataTypes.BOOLEAN, defaultValue: false },
+    amWordsList: { type: DataTypes.TEXT, defaultValue: '' },
+    amWordsAction: { type: DataTypes.STRING, defaultValue: 'delete' },
 });
 
 // --- NEW MULTI-SERVER MODEL ---
