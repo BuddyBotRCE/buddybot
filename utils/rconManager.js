@@ -1,9 +1,9 @@
 const WebSocket = require('ws');
 const { GuildConfig, UserEconomy, CustomBind, BindCooldown, ActiveBounty, BountyCooldown } = require('../database/db');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const bindHandler = require('../handlers/bindHandler'); // <-- Added for custom bind pos capture
 
 const activeConnections = new Map();
-const homeSetQueue = new Map();
 const adminPosQueue = new Map(); 
 
 async function connectRcon(guildId, client) {
@@ -62,7 +62,7 @@ async function connectRcon(guildId, client) {
                     }
                 }
 
-                // 1. POSITION TRACKER
+                // 1. POSITION TRACKER (Supports Teleports, Recyclers, & Custom Binds)
                 if (msg.includes('X:') || msg.includes('pos') || msg.includes('Position') || msgLower.includes('vector') || /(-?\d+\.\d+)/.test(msg)) {
                     for (const [adminName, setupData] of adminPosQueue.entries()) {
                         if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
@@ -80,7 +80,11 @@ async function connectRcon(guildId, client) {
                                 posZ = parseFloat(matches[2]);
                             }
 
-                            if (setupData.type === 'cargodock') {
+                            // If this position request came from the Custom Bind Wizard!
+                            if (setupData.type === 'custom_bind') {
+                                await bindHandler.autoSavePosition(guildId, posX.toFixed(2), posY.toFixed(2), posZ.toFixed(2));
+                                channel.send({ content: `✅ <@${setupData.adminId}> **Position Captured!**\nCoordinates: \`X: ${posX.toFixed(2)}, Y: ${posY.toFixed(2)}, Z: ${posZ.toFixed(2)}\`\n*Return to your Discord panel to finish configuring your bind.*` }).catch(()=>{});
+                            } else if (setupData.type === 'cargodock') {
                                 await GuildConfig.upsert({ guildId: guildId, cargoDockX: posX, cargoDockY: posY, cargoDockZ: posZ });
                                 channel.send({ content: `✅ <@${setupData.adminId}> **Cargo Dock Position Saved!**\nCoordinates: \`X: ${posX.toFixed(2)}, Y: ${posY.toFixed(2)}, Z: ${posZ.toFixed(2)}\`` });
                             } else {
@@ -150,7 +154,7 @@ async function connectRcon(guildId, client) {
                     }
                 }
 
-                // 3. CHAT PARSER & CUSTOM BINDS
+                // 3. CHAT PARSER & CUSTOM BINDS EXECUTION
                 if (msgLower.includes('[chat]')) {
                     const chatMatch = msg.match(/\[CHAT\] (.*?): (.*)/i);
                     if (chatMatch) {
@@ -164,8 +168,10 @@ async function connectRcon(guildId, client) {
                             }
                         }
 
+                        // Check for Custom Binds triggered via chat emote/command
                         const serverBinds = await CustomBind.findAll({ where: { guildId: guildId } });
-                        const activeBind = serverBinds.find(b => b.emote.toLowerCase() === chatText);
+                        const activeBind = serverBinds.find(b => b.emote.toLowerCase() === chatText || b.name.toLowerCase() === chatText);
+                        
                         if (activeBind) {
                             const userProfile = await UserEconomy.findOne({ where: { guildId: guildId, inGameName: playerName } });
                             if (activeBind.cost > 0 && (!userProfile || userProfile.wallet < activeBind.cost)) return;
@@ -202,7 +208,7 @@ async function sendRconCommand(guildId, commandStr) {
     return true;
 }
 
-function queueAdminPos(adminName, guildId, adminId, channelId, type, client) {
+function queueAdminPos(adminName, guildId, adminId, channelId, type = 'custom_bind', client) {
     if (adminPosQueue.has(adminName)) {
         const old = adminPosQueue.get(adminName);
         if (old.timeoutTimer) clearTimeout(old.timeoutTimer);
@@ -213,18 +219,7 @@ function queueAdminPos(adminName, guildId, adminId, channelId, type, client) {
             adminPosQueue.delete(adminName);
             const channel = client.channels.cache.get(channelId);
             if (channel) {
-                const fallbackX = 0, fallbackY = 50, fallbackZ = 0;
-                if (type === 'cargodock') {
-                    await GuildConfig.upsert({ guildId: guildId, cargoDockX: fallbackX, cargoDockY: fallbackY, cargoDockZ: fallbackZ });
-                    channel.send({ content: `⚠️ <@${adminId}> RCON position timed out. Default position set (X: 0, Y: 50, Z: 0).` });
-                } else {
-                    const coords = `${fallbackX}_${fallbackY}_${fallbackZ}`;
-                    const row = new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId(`btn_finalize_tpl_${type}_${coords}`).setLabel('📍 Finalize Setup').setStyle(ButtonStyle.Success),
-                        new ButtonBuilder().setCustomId('btn_dismiss_coord').setLabel('❌ Dismiss').setStyle(ButtonStyle.Secondary)
-                    );
-                    channel.send({ content: `<@${adminId}> ⚠️ RCON coordinate response timed out. Click below to use default center coordinates (0, 50, 0):`, components: [row] });
-                }
+                channel.send({ content: `<@${adminId}> ⚠️ RCON coordinate response timed out. Make sure you are online in-game!` }).catch(()=>{});
             }
         }
     }, 5000);

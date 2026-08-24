@@ -92,11 +92,11 @@ const Giveaway = sequelize.define('Giveaway', { messageId: { type: DataTypes.STR
 
 // --- UPDATED CUSTOM BINDS MODEL ---
 const CustomBind = sequelize.define('CustomBind', { 
-    guildId: { type: DataTypes.STRING }, 
+    guildId: { type: DataTypes.STRING, allowNull: false }, 
     name: { type: DataTypes.STRING, defaultValue: 'Custom Bind' }, 
-    actionType: { type: DataTypes.STRING, defaultValue: 'custom' }, // 'kit', 'teleport', 'recycler', 'custom'
-    targetValue: { type: DataTypes.TEXT, allowNull: true }, // Stores kit name or coordinates
-    rotation: { type: DataTypes.STRING, allowNull: true }, // Stores player view angle for recyclers/teleports
+    actionType: { type: DataTypes.STRING, defaultValue: 'custom' }, 
+    targetValue: { type: DataTypes.TEXT, allowNull: true }, 
+    rotation: { type: DataTypes.STRING, allowNull: true }, 
     emote: { type: DataTypes.STRING, defaultValue: '⭐' }, 
     command: { type: DataTypes.TEXT, allowNull: true }, 
     cooldown: { type: DataTypes.INTEGER, defaultValue: 0 }, 
