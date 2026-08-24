@@ -31,12 +31,17 @@ module.exports = async (interaction, client) => {
             new ButtonBuilder().setCustomId('btn_transfer_license').setLabel('Transfer License Here').setStyle(ButtonStyle.Primary).setEmoji('🔄')
         );
 
-        // ROW 3: Bot Owner Override
-        const row3 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('toggle_tier_status').setLabel(isPremium ? 'Switch to Free (Admin)' : 'Force Activate Premium (Admin)').setStyle(isPremium ? ButtonStyle.Secondary : ButtonStyle.Success)
-        );
+        const componentsArray = [row1, row2];
 
-        return interaction.reply({ embeds: [embed], components: [row1, row2, row3], flags: 64 });
+        // ROW 3: Bot Owner Override (ONLY SHOWN IF YOU ARE THE OWNER)
+        if (interaction.user.id === process.env.GLOBAL_OWNER_ID) {
+            const row3 = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('toggle_tier_status').setLabel(isPremium ? 'Switch to Free (Owner Override)' : 'Force Activate Premium (Owner Override)').setStyle(isPremium ? ButtonStyle.Secondary : ButtonStyle.Success)
+            );
+            componentsArray.push(row3);
+        }
+
+        return interaction.reply({ embeds: [embed], components: componentsArray, flags: 64 });
     }
 
     // --- OPEN VERIFY EMAIL MODAL ---
@@ -56,10 +61,9 @@ module.exports = async (interaction, client) => {
         }
 
         try {
-            // Create a secure Stripe Billing Portal session so they can cancel or update payment methods safely
             const portalSession = await stripe.billingPortal.sessions.create({
                 customer: config.stripeCustomerId,
-                return_url: `https://discord.com` // Can be any redirect link, discord works fine
+                return_url: `https://discord.com`
             });
 
             const embed = new EmbedBuilder()
@@ -80,9 +84,11 @@ module.exports = async (interaction, client) => {
         return interaction.showModal(modal);
     }
 
-    // --- ADMIN OVERRIDE ---
+    // --- ADMIN OVERRIDE EXECUTION ---
     if (customId === 'toggle_tier_status') {
-        if (interaction.user.id !== process.env.GLOBAL_OWNER_ID) return interaction.reply({ content: '❌ **Access Denied:** Only the Bot Developer can manually overwrite tier licenses.', flags: 64 });
+        if (interaction.user.id !== process.env.GLOBAL_OWNER_ID) {
+            return interaction.reply({ content: '❌ **Access Denied:** Only the Bot Developer can manually overwrite tier licenses.', flags: 64 });
+        }
         const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
         const newStatus = !(config?.isPremiumServer || false);
         await GuildConfig.upsert({ guildId: interaction.guild.id, isPremiumServer: newStatus });
@@ -133,13 +139,11 @@ module.exports = async (interaction, client) => {
                 const subscriptions = await stripe.subscriptions.list({ customer: customerId, status: 'active', limit: 1 });
                 if (subscriptions.data.length === 0) return interaction.editReply({ content: `❌ No **active subscriptions** found for **${email}** to transfer.` });
 
-                // Optional: Strip premium from any other guild using this same customer ID
                 await GuildConfig.update(
                     { isPremiumServer: false, subscriptionStatus: 'transferred' },
                     { where: { stripeCustomerId: customerId } }
                 );
 
-                // Assign premium to THIS new guild
                 await GuildConfig.upsert({ 
                     guildId: interaction.guild.id, 
                     isPremiumServer: true, 
