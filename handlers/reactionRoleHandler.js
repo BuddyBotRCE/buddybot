@@ -19,17 +19,18 @@ module.exports = async (interaction, client) => {
         // Helper to render the setup panel
         const renderSetupPanel = async (inter, messageOverride = '') => {
             const guildId = inter.guild.id;
-            const activeRoles = await ReactionRole.count({ where: { guildId, messageId: 'PENDING_DEPLOY' } });
+            const activeRoles = await ReactionRole.findAll({ where: { guildId, messageId: 'PENDING_DEPLOY' } });
             const config = await GuildConfig.findOne({ where: { guildId } });
             
-            const targetChannelId = config?.rrTempChannelId || config?.getDataValue('rrTempChannelId');
+            // Check config or fall back to the first queued role's channel
+            const targetChannelId = config?.rrTempChannelId || config?.getDataValue('rrTempChannelId') || activeRoles[0]?.channelId;
             const targetChText = targetChannelId ? `<#${targetChannelId}>` : '❌ Not Selected Yet';
             const customText = config?.rrTempDescription || config?.getDataValue('rrTempDescription');
             const customTextStatus = customText ? `✅ Loaded (${customText.length} chars)` : '❌ Using Default Text';
 
             const embed = new EmbedBuilder()
                 .setTitle('🎭 Reaction & Verification Roles Setup')
-                .setDescription(`${messageOverride ? `**${messageOverride}**\n\n` : ''}Configure your interactive verification or role panel below.\n\n• **Target Channel:** ${targetChText}\n• **Queued Roles:** ${activeRoles}\n• **Custom Description:** ${customTextStatus}`)
+                .setDescription(`${messageOverride ? `**${messageOverride}**\n\n` : ''}Configure your interactive verification or role panel below.\n\n• **Target Channel:** ${targetChText}\n• **Queued Roles:** ${activeRoles.length}\n• **Custom Description:** ${customTextStatus}`)
                 .setColor('#3498db');
 
             const channelRow = new ActionRowBuilder().addComponents(
@@ -70,12 +71,15 @@ module.exports = async (interaction, client) => {
             if (!selectedValue) {
                 return await interaction.reply({ content: '❌ Could not determine selected channel. Please try again.', flags: 64 });
             }
-            // Use findOrCreate to guarantee the record exists and save the channel ID properly
+            
+            // Save to GuildConfig AND update any currently pending queued roles so the channel travels with them
             let [config] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
             config.rrTempChannelId = selectedValue;
             await config.save();
 
-            console.log(`[RR CHANNEL SAVED] Channel ID: ${selectedValue}`);
+            await ReactionRole.update({ channelId: selectedValue }, { where: { guildId: interaction.guild.id, messageId: 'PENDING_DEPLOY' } });
+
+            console.log(`[RR CHANNEL SAVED & SYNCED] Channel ID: ${selectedValue}`);
             return await renderSetupPanel(interaction, `✅ Target channel successfully set to <#${selectedValue}>!`);
         }
 
@@ -124,11 +128,12 @@ module.exports = async (interaction, client) => {
             const roleObj = interaction.guild.roles.cache.get(roleId);
 
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-            const targetChannelId = config?.rrTempChannelId || interaction.channelId;
+            // Inherit saved channel from config or fallback to current channel
+            const targetChannelId = config?.rrTempChannelId || config?.getDataValue('rrTempChannelId') || interaction.channelId;
 
             await ReactionRole.create({
                 guildId: interaction.guild.id,
-                channelId: targetChannelId || interaction.channelId,
+                channelId: targetChannelId,
                 roleId: roleId,
                 buttonLabel: roleObj?.name || 'Verify / Get Role',
                 buttonStyle: 'Primary',
@@ -187,9 +192,11 @@ module.exports = async (interaction, client) => {
             }
 
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-            const targetChannelId = config?.rrTempChannelId || config?.getDataValue('rrTempChannelId');
             
-            console.log(`[RR DEPLOY DEBUG] Configured Target Channel ID: ${targetChannelId}`);
+            // Check config, or fallback to the channel saved on the queued roles
+            const targetChannelId = config?.rrTempChannelId || config?.getDataValue('rrTempChannelId') || roles[0].channelId;
+            
+            console.log(`[RR DEPLOY DEBUG] Resolved Target Channel ID: ${targetChannelId}`);
 
             if (!targetChannelId) {
                 return await interaction.reply({ content: '❌ Please select a target channel using the channel dropdown menu (Step 1) before deploying!', flags: 64 });
@@ -209,7 +216,7 @@ module.exports = async (interaction, client) => {
             }
 
             const customDescription = config?.rrTempDescription || config?.getDataValue('rrTempDescription') || 'Click the button below to verify and get your role instantly!';
-            console.log(`[RR DEPLOY DEBUG] Final Text to Send Length: ${customDescription.length}`);
+            console.log(`[RR DEPLOY DEBUG] Final Text Length: ${customDescription.length}`);
 
             const embed = new EmbedBuilder()
                 .setTitle('🔐 Server Verification & Roles')
@@ -240,7 +247,7 @@ module.exports = async (interaction, client) => {
             await ReactionRole.update({ messageId: sentMessage.id }, { where: { guildId: interaction.guild.id, messageId: 'PENDING_DEPLOY' } });
             await config.update({ rrTempDescription: null, rrTempChannelId: null });
 
-            return await interaction.reply({ content: `✅ Verification & Reaction panel successfully deployed to <#${targetChannel.id}>!`, flags: 64 });
+            return await interaction.reply({ content: `✅ Verification & Reaction panel successfully deployed to <#${targetChannel.id}> with your custom text!`, flags: 64 });
         }
 
         // --- USER CLICKS A REACTION / VERIFICATION ROLE BUTTON ---
