@@ -79,22 +79,36 @@ const customZoneHandler = async (interaction, client) => {
                     ])
             );
 
-            // ROW 3: Setup Buttons (Triggers typing modals)
-            const row3Setup = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('btn_cz_name').setLabel('Set Zone Name').setStyle(ButtonStyle.Primary).setEmoji('🏷️'),
-                new ButtonBuilder().setCustomId('btn_cz_radius').setLabel('Set Custom Size').setStyle(ButtonStyle.Primary).setEmoji('📏'),
-                new ButtonBuilder().setCustomId('btn_cz_msgs').setLabel('Set Messages').setStyle(ButtonStyle.Primary).setEmoji('💬')
+            // ROW 3: Size/Radius Dropdown
+            const row3Radius = new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder().setCustomId('cz_radius_select').setPlaceholder(session.radius ? `📏 Radius: ${session.radius}m` : '📏 3. Select Zone Radius...')
+                    .addOptions([
+                        { label: '10 Meters (Small Base)', value: '10' }, { label: '25 Meters', value: '25' },
+                        { label: '50 Meters (Medium Zone)', value: '50' }, { label: '100 Meters', value: '100' },
+                        { label: '250 Meters (Large Arena)', value: '250' }, { label: '500 Meters', value: '500' },
+                        { label: '1000 Meters (Massive)', value: '1000' }, 
+                        { label: 'Custom Size...', description: 'Type in an exact custom radius manually', value: 'custom', emoji: '✏️' }
+                    ])
             );
 
-            // ROW 4: Final Action Buttons
-            const row4Buttons = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('btn_cz_pos').setLabel('Get Admin Pos').setStyle(ButtonStyle.Success).setEmoji('📍'),
+            // ROW 4: Setup Texts Dropdown (Combines Name and Messages into one dropdown to save space)
+            const row4Setup = new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder().setCustomId('cz_text_setup_select').setPlaceholder('⚙️ 4. Set Zone Name & Messages...')
+                    .addOptions([
+                        { label: 'Set Zone Name', description: 'Name your custom zone (No Spaces)', value: 'cz_set_name', emoji: '🏷️' },
+                        { label: 'Set Enter & Exit Messages', description: 'Text displayed when a player enters/leaves', value: 'cz_set_messages', emoji: '💬' }
+                    ])
+            );
+
+            // ROW 5: Final Action Buttons (Includes Get Admin Pos)
+            const row5Buttons = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('btn_cz_pos').setLabel('Get Admin Pos').setStyle(ButtonStyle.Primary).setEmoji('📍'),
                 new ButtonBuilder().setCustomId('btn_cz_deploy').setLabel(session.isEditing ? 'Update Zone' : 'Deploy Zone').setStyle(ButtonStyle.Success).setEmoji('📦'),
                 new ButtonBuilder().setCustomId('btn_cz_delete').setLabel('Delete').setStyle(ButtonStyle.Danger).setEmoji('🗑️').setDisabled(!session.isEditing),
                 new ButtonBuilder().setCustomId('btn_cz_clear').setLabel('Clear').setStyle(ButtonStyle.Secondary).setEmoji('🧹')
             );
 
-            const payload = { embeds: [embed], components: [row1Load, row2Color, row3Setup, row4Buttons], flags: 64 };
+            const payload = { embeds: [embed], components: [row1Load, row2Color, row3Radius, row4Setup, row5Buttons], flags: 64 };
 
             if (inter.isRepliable() && !inter.replied && !inter.deferred) {
                 return await inter.reply(payload);
@@ -118,6 +132,34 @@ const customZoneHandler = async (interaction, client) => {
                 session.zoneColor = selectedValue;
                 czSessions.set(guildId, session);
                 return await renderZonePanel(interaction, `✅ Map color set to **${selectedValue.toUpperCase()}**!`);
+            }
+
+            if (customId === 'cz_radius_select') {
+                if (selectedValue === 'custom') {
+                    const modal = new ModalBuilder().setCustomId('modal_cz_radius_custom').setTitle('Custom Radius');
+                    modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_radius_val').setLabel("Enter custom radius in meters:").setStyle(TextInputStyle.Short).setRequired(true)));
+                    return await interaction.showModal(modal);
+                } else {
+                    session.radius = selectedValue;
+                    czSessions.set(guildId, session);
+                    return await renderZonePanel(interaction, `✅ Radius securely set to **${selectedValue}m**!`);
+                }
+            }
+
+            if (customId === 'cz_text_setup_select') {
+                if (selectedValue === 'cz_set_name') {
+                    const modal = new ModalBuilder().setCustomId('modal_cz_name').setTitle('Set Zone Name');
+                    modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_name_val').setLabel("Zone Name (No spaces, e.g. vip_arena)").setStyle(TextInputStyle.Short).setValue(session.zoneName || '').setRequired(true)));
+                    return await interaction.showModal(modal);
+                }
+                if (selectedValue === 'cz_set_messages') {
+                    const modal = new ModalBuilder().setCustomId('modal_cz_msgs').setTitle('Zone Messages');
+                    modal.addComponents(
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_enter').setLabel("Enter Message").setStyle(TextInputStyle.Paragraph).setValue(session.enterMessage || '').setRequired(false)),
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_exit').setLabel("Exit Message").setStyle(TextInputStyle.Paragraph).setValue(session.exitMessage || '').setRequired(false))
+                    );
+                    return await interaction.showModal(modal);
+                }
             }
 
             if (customId === 'select_custom_zone') {
@@ -145,36 +187,9 @@ const customZoneHandler = async (interaction, client) => {
         // =========================================================
 
         if (interaction.isButton()) {
-            if (customId === 'btn_cz_clear') {
-                czSessions.set(guildId, { zoneName: null, radius: null, zoneColor: null, posX: null, posY: null, posZ: null, enterMessage: null, exitMessage: null, isEditing: false });
-                return await renderZonePanel(interaction, '🧹 Draft cleared. Ready to make a new zone!');
-            }
-
-            if (customId === 'btn_cz_name') {
-                const modal = new ModalBuilder().setCustomId('modal_cz_name').setTitle('Set Zone Name');
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_name_val').setLabel("Zone Name (No spaces, e.g. vip_arena)").setStyle(TextInputStyle.Short).setValue(session.zoneName || '').setRequired(true)));
-                return await interaction.showModal(modal);
-            }
-
-            if (customId === 'btn_cz_radius') {
-                const modal = new ModalBuilder().setCustomId('modal_cz_radius').setTitle('Set Custom Radius');
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_radius_val').setLabel("Enter custom radius in meters (e.g. 75)").setStyle(TextInputStyle.Short).setValue(session.radius ? session.radius.toString() : '').setRequired(true)));
-                return await interaction.showModal(modal);
-            }
-
-            if (customId === 'btn_cz_msgs') {
-                const modal = new ModalBuilder().setCustomId('modal_cz_msgs').setTitle('Zone Messages');
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_enter').setLabel("Enter Message").setStyle(TextInputStyle.Paragraph).setValue(session.enterMessage || '').setRequired(false)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_exit').setLabel("Exit Message").setStyle(TextInputStyle.Paragraph).setValue(session.exitMessage || '').setRequired(false))
-                );
-                return await interaction.showModal(modal);
-            }
-
-            // --- THE NEW "GET ADMIN POS" BUTTON ---
+            // --- THE NEW "GET ADMIN POS" BUTTON ON ROW 5 ---
             if (customId === 'btn_cz_pos') {
                 if (typeof queueAdminPos === 'function') {
-                    // Triggers your pre-built function from rconManager.js
                     await queueAdminPos(interaction);
                     return;
                 } else {
@@ -182,11 +197,17 @@ const customZoneHandler = async (interaction, client) => {
                 }
             }
 
+            if (customId === 'btn_cz_clear') {
+                czSessions.set(guildId, { zoneName: null, radius: null, zoneColor: null, posX: null, posY: null, posZ: null, enterMessage: null, exitMessage: null, isEditing: false });
+                return await renderZonePanel(interaction, '🧹 Draft cleared. Ready to make a new zone!');
+            }
+
             if (customId === 'btn_cz_deploy') {
                 if (!session.zoneName || !session.radius || !session.posX || !session.posY || !session.posZ) {
                     return await interaction.reply({ content: '❌ You must set a Zone Name, Radius, and grab your Admin Position before deploying!', flags: 64 });
                 }
 
+                // Database Save / Update
                 if (session.isEditing) {
                     await PveZone.update({
                         zoneName: session.zoneName, radius: session.radius, zoneColor: session.zoneColor || 'green',
@@ -241,7 +262,7 @@ const customZoneHandler = async (interaction, client) => {
                 czSessions.set(guildId, session);
                 return await renderZonePanel(interaction, `✅ Saved Name to draft!`);
             }
-            if (customId === 'modal_cz_radius') {
+            if (customId === 'modal_cz_radius_custom') {
                 session.radius = interaction.fields.getTextInputValue('cz_radius_val').trim();
                 czSessions.set(guildId, session);
                 return await renderZonePanel(interaction, `✅ Custom radius set to **${session.radius}m**!`);
