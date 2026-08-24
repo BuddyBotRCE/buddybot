@@ -30,13 +30,37 @@ async function connectRcon(guildId, client) {
                 const msg = parsed.Message;
                 const msgLower = msg.toLowerCase();
 
-                console.log('[RCON RAW MESSAGE]', msg);
+                console.log('[RCON CONSOLE OUTPUT]', msg);
 
                 const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
                 const guild = client.guilds.cache.get(guildId);
 
                 // ==========================================
-                // LIVE GAME FEEDS & ADMIN AUDIT LOGS
+                // 1. RUST CONSOLE POSITION INTERCEPTOR (entity.find_self / players)
+                // ==========================================
+                if (adminPosQueue.size > 0) {
+                    const matches = msg.match(/-?\d+\.\d+/g);
+                    if (matches && matches.length >= 3) {
+                        for (const [adminName, setupData] of adminPosQueue.entries()) {
+                            if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
+                            const channel = client.channels.cache.get(setupData.channelId);
+
+                            let posX = parseFloat(matches[0]);
+                            let posY = parseFloat(matches[1]);
+                            let posZ = parseFloat(matches[2]);
+
+                            if (channel) {
+                                await bindHandler.autoSavePosition(guildId, posX.toFixed(2), posY.toFixed(2), posZ.toFixed(2));
+                                channel.send({ content: `✅ <@${setupData.adminId}> **Position Captured Successfully!**\nCoordinates: \`X: ${posX.toFixed(2)}, Y: ${posY.toFixed(2)}, Z: ${posZ.toFixed(2)}\`\n*Return to your Discord panel to finish.*` }).catch(()=>{});
+                            }
+                            adminPosQueue.delete(adminName);
+                            break;
+                        }
+                    }
+                }
+
+                // ==========================================
+                // 2. LIVE GAME FEEDS & AUDIT LOGS
                 // ==========================================
                 if (currentConfig && guild) {
                     if (/(giving |spawned |teleport|kick |ban |inventory\.giveto)/i.test(msg)) {
@@ -53,29 +77,9 @@ async function connectRcon(guildId, client) {
                     }
                 }
 
-                // 1. POSITION TRACKER INTERCEPTOR
-                if (adminPosQueue.size > 0) {
-                    const matches = msg.match(/-?\d+\.\d+/g);
-                    if (matches && matches.length >= 3) {
-                        for (const [adminName, setupData] of adminPosQueue.entries()) {
-                            if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
-                            const channel = client.channels.cache.get(setupData.channelId);
-
-                            let posX = parseFloat(matches[0]);
-                            let posY = parseFloat(matches[1]);
-                            let posZ = parseFloat(matches[2]);
-
-                            if (channel) {
-                                await bindHandler.autoSavePosition(guildId, posX.toFixed(2), posY.toFixed(2), posZ.toFixed(2));
-                                channel.send({ content: `✅ <@${setupData.adminId}> **Position Captured!**\nCoordinates: \`X: ${posX.toFixed(2)}, Y: ${posY.toFixed(2)}, Z: ${posZ.toFixed(2)}\`\n*Return to your Discord panel to finish.*` }).catch(()=>{});
-                            }
-                            adminPosQueue.delete(adminName);
-                            break;
-                        }
-                    }
-                }
-
-                // 2. KILLFEED & BOUNTIES
+                // ==========================================
+                // 3. KILLFEED & BOUNTIES
+                // ==========================================
                 if ((msgLower.includes('killed') || msgLower.includes('murdered') || msgLower.includes('suicide') || msgLower.includes('died') || msgLower.includes('slain')) && !msg.includes('[Killfeed]')) {
                     await sendRconCommand(guildId, `say "[Killfeed] ${msg}"`);
                     let embedColor = '#e74c3c';
@@ -121,7 +125,9 @@ async function connectRcon(guildId, client) {
                     }
                 }
 
-                // 3. CHAT PARSER & CUSTOM BINDS EXECUTION
+                // ==========================================
+                // 4. CHAT PARSER & CUSTOM BINDS
+                // ==========================================
                 if (msgLower.includes('[chat]')) {
                     const chatMatch = msg.match(/\[CHAT\] (.*?): (.*)/i);
                     if (chatMatch) {
@@ -182,13 +188,16 @@ function queueAdminPos(adminName, guildId, adminId, channelId, type = 'custom_bi
             adminPosQueue.delete(adminName);
             const channel = client.channels.cache.get(channelId);
             if (channel) {
-                channel.send({ content: `<@${adminId}> ⚠️ RCON coordinate lookup timed out.` }).catch(()=>{});
+                channel.send({ content: `<@${adminId}> ⚠️ RCON coordinate request timed out. Make sure you are online on the server.` }).catch(()=>{});
             }
         }
     }, 5000);
 
     adminPosQueue.set(adminName, { guildId, adminId, channelId, type, timeoutTimer });
-    sendRconCommand(guildId, `server.printpos "${adminName}"`).catch(() => {});
+
+    // RUST CONSOLE EDITION NATIVE POSITION COMMANDS
+    sendRconCommand(guildId, `entity.find_self`).catch(() => {});
+    sendRconCommand(guildId, `players`).catch(() => {});
 }
 
 async function triggerCustomEvent(guildId, eventType, data = {}) {
