@@ -25,7 +25,7 @@ module.exports = {
                     { label: 'Bounties System', value: 'setup_bounties', emoji: '🎯' },
                     { label: 'Reaction Roles & Verify', value: 'setup_reaction_roles', emoji: '🔘' },
                     { label: 'Auto-Moderation Suite', value: 'setup_automod', emoji: '🛡️' },
-                    { label: 'PVE Custom Zones', value: 'setup_pvezones', emoji: '🏕️' },
+                    { label: 'Custom Zones Builder', value: 'setup_custom_zones', description: 'Create and manage map zones', emoji: '🗺️' },
                     { label: 'Auto-Events (Premium)', value: 'setup_autoevents', emoji: '🚁' },
                     { label: 'License & Tier Manager', value: 'setup_tier', emoji: '🏷️' },
                     { label: 'Ticket System', value: 'setup_tickets', emoji: '🎫' },

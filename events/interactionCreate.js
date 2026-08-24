@@ -62,7 +62,7 @@ module.exports = async (interaction, client) => {
             if (selectedValue === 'setup_binds') return await bindHandler(interaction, client);
             
             // --> NEW ROUTING LINKS <--
-            if (selectedValue === 'setup_pve_zones') return await customZoneHandler(interaction, client);
+            if (selectedValue.includes('pve') || selectedValue.includes('zone')) return await customZoneHandler(interaction, client);
             if (selectedValue === 'setup_reactionroles' || selectedValue === 'setup_verification') return await reactionRoleHandler(interaction, client); 
             if (selectedValue === 'setup_automod') return await autoModHandler(interaction, client);
             

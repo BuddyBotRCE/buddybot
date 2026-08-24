@@ -118,10 +118,10 @@ module.exports = async (interaction, client) => {
         };
 
         // --- ENTRY FROM ADMIN PANEL ---
-        if (customId === 'admin_menu_select' && selectedValue === 'setup_pve_zones') {
-            czSessions.set(guildId, { zoneName: null, radius: null, enterMessage: null, exitMessage: null, zoneColor: null, isEditing: false });
-            return await renderZonePanel(interaction);
-        }
+        if (customId === 'admin_menu_select' && (selectedValue.includes('pve') || selectedValue.includes('zone'))) {
+    czSessions.set(guildId, { zoneName: null, radius: null, enterMessage: null, exitMessage: null, zoneColor: null, isEditing: false });
+    return await renderZonePanel(interaction);
+        }   
 
         // --- HANDLE ZONE COLOR SELECTION ---
         if (interaction.isStringSelectMenu() && customId === 'cz_color_select') {
