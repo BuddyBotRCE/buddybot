@@ -62,8 +62,8 @@ async function connectRcon(guildId, client) {
                     }
                 }
 
-                // 1. POSITION TRACKER
-                if (msgLower.includes('x:') || msgLower.includes('y:') || msgLower.includes('z:') || msgLower.includes('pos') || msgLower.includes('position') || msgLower.includes('vector') || /(-?\d+\.\d+)/.test(msg)) {
+                // 1. POSITION TRACKER FOR `server.printpos`
+                if (/(-?\d+\.\d+)/.test(msg)) {
                     for (const [adminName, setupData] of adminPosQueue.entries()) {
                         if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
                         const channel = client.channels.cache.get(setupData.channelId);
@@ -79,17 +79,14 @@ async function connectRcon(guildId, client) {
 
                             if (setupData.type === 'custom_bind') {
                                 await bindHandler.autoSavePosition(guildId, posX.toFixed(2), posY.toFixed(2), posZ.toFixed(2));
-                                channel.send({ content: `✅ <@${setupData.adminId}> **Position Captured Successfully!**\nCoordinates: \`X: ${posX.toFixed(2)}, Y: ${posY.toFixed(2)}, Z: ${posZ.toFixed(2)}\`\n*Return to your Discord panel to continue configuring your bind.*` }).catch(()=>{});
-                            } else if (setupData.type === 'cargodock') {
-                                await GuildConfig.upsert({ guildId: guildId, cargoDockX: posX, cargoDockY: posY, cargoDockZ: posZ });
-                                channel.send({ content: `✅ <@${setupData.adminId}> **Cargo Dock Position Saved!**\nCoordinates: \`X: ${posX.toFixed(2)}, Y: ${posY.toFixed(2)}, Z: ${posZ.toFixed(2)}\`` });
+                                channel.send({ content: `✅ <@${setupData.adminId}> **Position Captured!**\nCoordinates: \`X: ${posX.toFixed(2)}, Y: ${posY.toFixed(2)}, Z: ${posZ.toFixed(2)}\`\n*Return to Discord panel to continue.*` }).catch(()=>{});
                             } else {
                                 const coords = `${posX.toFixed(2)}_${posY.toFixed(2)}_${posZ.toFixed(2)}`;
                                 const row = new ActionRowBuilder().addComponents(
                                     new ButtonBuilder().setCustomId(`btn_finalize_tpl_${setupData.type}_${coords}`).setLabel('📍 Finalize Setup').setStyle(ButtonStyle.Success),
                                     new ButtonBuilder().setCustomId('btn_dismiss_coord').setLabel('❌ Dismiss').setStyle(ButtonStyle.Secondary)
                                 );
-                                channel.send({ content: `<@${setupData.adminId}> 📍 Coordinates grabbed: **${posX.toFixed(2)}, ${posY.toFixed(2)}, ${posZ.toFixed(2)}**\nClick below to finish!`, components: [row] });
+                                channel.send({ content: `<@${setupData.adminId}> 📍 Coordinates grabbed: **${posX.toFixed(2)}, ${posY.toFixed(2)}, ${posZ.toFixed(2)}**`, components: [row] });
                             }
                         }
                         adminPosQueue.delete(adminName);
@@ -100,7 +97,6 @@ async function connectRcon(guildId, client) {
                 // 2. KILLFEED & BOUNTIES
                 if ((msgLower.includes('killed') || msgLower.includes('murdered') || msgLower.includes('suicide') || msgLower.includes('died') || msgLower.includes('slain')) && !msg.includes('[Killfeed]')) {
                     await sendRconCommand(guildId, `say "[Killfeed] ${msg}"`);
-
                     let embedColor = '#e74c3c';
                     let killType = '⚔️ PvP Combat';
 
@@ -135,13 +131,7 @@ async function connectRcon(guildId, client) {
                     if (currentConfig && currentConfig.killfeedChannelId) {
                         const killfeedChannel = client.channels.cache.get(currentConfig.killfeedChannelId);
                         if (killfeedChannel) {
-                            const killEmbed = new EmbedBuilder()
-                                .setTitle(killType)
-                                .setDescription(`\`\`\`fix\n${msg}\`\`\``)
-                                .setColor(embedColor)
-                                .setTimestamp();
-
-                            killfeedChannel.send({ embeds: [killEmbed] }).catch(() => {});
+                            killfeedChannel.send({ embeds: [new EmbedBuilder().setTitle(killType).setDescription(`\`\`\`fix\n${msg}\`\`\``).setColor(embedColor).setTimestamp()] }).catch(() => {});
                         }
                     }
 
@@ -187,18 +177,15 @@ async function connectRcon(guildId, client) {
 
 async function sendRconCommand(guildId, commandStr) {
     let ws = activeConnections.get(guildId);
-    
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         try {
             await connectRcon(guildId, global.discordClient); 
             ws = activeConnections.get(guildId);
         } catch (e) {}
     }
-
     if (!ws || ws.readyState !== WebSocket.OPEN) {
-        throw new Error("Not connected to RCON. Please go to the RCON Server admin panel and click 'Connect RCON' first.");
+        throw new Error("Not connected to RCON.");
     }
-
     ws.send(JSON.stringify({ Identifier: 1, Message: commandStr, Name: "BuddyBot" }));
     return true;
 }
@@ -214,13 +201,14 @@ function queueAdminPos(adminName, guildId, adminId, channelId, type = 'custom_bi
             adminPosQueue.delete(adminName);
             const channel = client.channels.cache.get(channelId);
             if (channel) {
-                channel.send({ content: `<@${adminId}> ⚠️ RCON coordinate response timed out. Make sure you are online in-game!` }).catch(()=>{});
+                channel.send({ content: `<@${adminId}> ⚠️ RCON coordinate response timed out. Make sure your in-game name matches your profile name!` }).catch(()=>{});
             }
         }
     }, 5000);
 
     adminPosQueue.set(adminName, { guildId, adminId, channelId, type, timeoutTimer });
 
+    // Explicitly using server.printpos with exact player name target
     sendRconCommand(guildId, `server.printpos "${adminName}"`).catch(() => {});
 }
 
@@ -254,23 +242,12 @@ async function processBountyLogic(guildId, killerDb, victimDb, client, config) {
             const existingBounty = await ActiveBounty.findOne({ where: { guildId, userId: killerDb.userId } });
             
             if (!existingBounty) {
-                await ActiveBounty.create({
-                    guildId,
-                    userId: killerDb.userId,
-                    inGameName: killerDb.inGameName,
-                    reward: config.bountyRewardAmount || 500
-                });
-
+                await ActiveBounty.create({ guildId, userId: killerDb.userId, inGameName: killerDb.inGameName, reward: config.bountyRewardAmount || 500 });
                 const cdTime = new Date(now.getTime() + (config.bountyCooldownMinutes || 60) * 60000);
                 await BountyCooldown.upsert({ guildId, userId: killerDb.userId, expiresAt: cdTime });
 
                 if (gameChannel) {
-                    gameChannel.send({ embeds: [
-                        new EmbedBuilder()
-                            .setTitle('🎯 BOUNTY PLACED!')
-                            .setDescription(`**${killerDb.inGameName}** is unstoppable on a **${killerDb.currentKillstreak} killstreak**!\n\nA bounty of **${config.bountyRewardAmount || 500} ${currency}** has been placed on their head!`)
-                            .setColor('#e74c3c')
-                    ]}).catch(()=>{});
+                    gameChannel.send({ embeds: [new EmbedBuilder().setTitle('🎯 BOUNTY PLACED!').setDescription(`**${killerDb.inGameName}** is unstoppable on a **${killerDb.currentKillstreak} killstreak**!\n\nA bounty of **${config.bountyRewardAmount || 500} ${currency}** has been placed on their head!`).setColor('#e74c3c')] }).catch(()=>{});
                 }
             }
         }
@@ -279,16 +256,9 @@ async function processBountyLogic(guildId, killerDb, victimDb, client, config) {
     const activeBounty = await ActiveBounty.findOne({ where: { guildId, userId: victimDb.userId } });
     if (activeBounty) {
         await killerDb.update({ wallet: killerDb.wallet + activeBounty.reward });
-        
         if (gameChannel) {
-            gameChannel.send({ embeds: [
-                new EmbedBuilder()
-                    .setTitle('🎯 BOUNTY CLAIMED!')
-                    .setDescription(`**${killerDb.inGameName}** has killed **${victimDb.inGameName}** and claimed the bounty of **${activeBounty.reward} ${currency}**!`)
-                    .setColor('#2ecc71')
-            ]}).catch(()=>{});
+            gameChannel.send({ embeds: [new EmbedBuilder().setTitle('🎯 BOUNTY CLAIMED!').setDescription(`**${killerDb.inGameName}** has killed **${victimDb.inGameName}** and claimed the bounty of **${activeBounty.reward} ${currency}**!`).setColor('#2ecc71')] }).catch(()=>{});
         }
-
         await activeBounty.destroy();
     }
 }
