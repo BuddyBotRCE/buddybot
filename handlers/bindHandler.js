@@ -8,8 +8,31 @@ const ACTION_TYPES = {
     kit: { name: '🎁 Kit Bind', desc: 'Gives a player a server kit', emoji: '🎁' },
     teleport: { name: '📍 Teleport Bind', desc: 'Teleports player to saved coordinates', emoji: '📍' },
     recycler: { name: '♻️ Portable Recycler', desc: 'Spawns a recycler facing player view', emoji: '♻️' },
+    emote: { name: '🎭 Rust Emote / Voice Wheel', desc: 'Triggers an in-game emote or wheel option', emoji: '🎭' },
     custom: { name: '⚡ Custom RCON', desc: 'Fires a raw custom server command', emoji: '⚡' }
 };
+
+// Official Rust Emote Wheel Options & Voice/Gesture commands
+const RUST_EMOTES = [
+    { label: 'Wave', value: 'gesture wave', emoji: '👋', desc: 'Wave hello' },
+    { label: 'Thumbs Up', value: 'gesture thumbsup', emoji: '👍', desc: 'Approve or agree' },
+    { label: 'Thumbs Down', value: 'gesture thumbsdown', emoji: '👎', desc: 'Disapprove' },
+    { label: 'Point', value: 'gesture point', emoji: '👉', desc: 'Point forward' },
+    { label: 'Shrug', value: 'gesture shrug', emoji: '🤷', desc: 'Shrug shoulders' },
+    { label: 'Victory / Cheer', value: 'gesture victory', emoji: '🎉', desc: 'Celebrate' },
+    { label: 'Crying / Sad', value: 'gesture cry', emoji: '😢', desc: 'Cry' },
+    { label: 'Hurt', value: 'gesture hurt', emoji: '🤕', desc: 'Act injured' },
+    { label: 'Suicide (Respawn)', value: 'kill', emoji: '💀', desc: 'Instantly respawn' },
+    { label: 'Voice: I Need Wood', value: 'chat.say "I need wood!"', emoji: '🪵', desc: 'Quick voice callout' },
+    { label: 'Voice: I Need Stone', value: 'chat.say "I need stone!"', emoji: '🪨', desc: 'Quick voice callout' },
+    { label: 'Voice: I Need Metal', value: 'chat.say "I need metal!"', emoji: '⚙️', desc: 'Quick voice callout' },
+    { label: 'Voice: Help!', value: 'chat.say "Help!"', emoji: '🆘', desc: 'Call for backup' },
+    { label: 'Voice: Friendly!', value: 'chat.say "Friendly!"', emoji: '🤝', desc: 'Declare friendly' },
+    { label: 'Voice: Danger / North!', value: 'chat.say "Danger to the North!"', emoji: '⬆️', desc: 'Directional callout' },
+    { label: 'Voice: Danger / South!', value: 'chat.say "Danger to the South!"', emoji: '⬇️', desc: 'Directional callout' },
+    { label: 'Voice: Danger / East!', value: 'chat.say "Danger to the East!"', emoji: '➡️', desc: 'Directional callout' },
+    { label: 'Voice: Danger / West!', value: 'chat.say "Danger to the West!"', emoji: '⬅️', desc: 'Directional callout' }
+];
 
 const bindHandler = async (interaction, client) => {
     try {
@@ -35,10 +58,9 @@ const bindHandler = async (interaction, client) => {
 
             const embed = new EmbedBuilder()
                 .setTitle('🔗 Custom Binds Manager')
-                .setDescription(`${messageOverride ? `**${messageOverride}**\n\n` : ''}Create and manage interactive binds for Kits, Teleports, Portable Recyclers, and Custom RCON commands.\n\n**Active Binds:**\n${listText}`)
+                .setDescription(`${messageOverride ? `**${messageOverride}**\n\n` : ''}Create and manage interactive binds for Kits, Teleports, Recyclers, Emote/Voice Wheels, and Custom RCON commands.\n\n**Active Binds:**\n${listText}`)
                 .setColor('#e67e22');
 
-            // ROW 1: Existing Binds Dropdown
             let bindOptions = allBinds.map(b => ({ label: b.name, description: `Type: ${b.actionType} | CD: ${b.cooldown}s`, value: `edit_bind_${b.id}`, emoji: '📂' }));
             if (bindOptions.length === 0) bindOptions.push({ label: 'No binds available', value: 'none' });
 
@@ -46,7 +68,6 @@ const bindHandler = async (interaction, client) => {
                 new StringSelectMenuBuilder().setCustomId('bind_select_existing').setPlaceholder('📂 Select an existing bind to edit...').addOptions(bindOptions.slice(0, 25))
             );
 
-            // ROW 2: Create New Bind Button
             const row2Create = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('btn_bind_start_create').setLabel('Create New Custom Bind').setStyle(ButtonStyle.Success).setEmoji('✨')
             );
@@ -64,7 +85,7 @@ const bindHandler = async (interaction, client) => {
                 .addFields(
                     { name: '1️⃣ Action Type', value: `${ACTION_TYPES[session.actionType]?.emoji || '⭐'} **${session.actionType.toUpperCase()}**`, inline: true },
                     { name: '2️⃣ Target / Data', value: `\`${session.targetValue || 'Not Set'}\``, inline: true },
-                    { name: '3️⃣ Emote & Settings', value: `• Name: **${session.name || 'Unnamed'}**\n• Emote: ${session.emote}\n• Cooldown: ${session.cooldown}s | Cost: ${session.cost} Scrap`, inline: false }
+                    { name: '3️⃣ Emote & Settings', value: `• Name: **${session.name || 'Unnamed'}**\n• Emote Icon: ${session.emote}\n• Cooldown: ${session.cooldown}s | Cost: ${session.cost} Scrap`, inline: false }
                 )
                 .setColor('#3498db');
 
@@ -74,7 +95,7 @@ const bindHandler = async (interaction, client) => {
                     .addOptions(Object.keys(ACTION_TYPES).map(k => ({ label: ACTION_TYPES[k].name, description: ACTION_TYPES[k].desc, value: k, emoji: ACTION_TYPES[k].emoji })))
             );
 
-            // ROW 2: Dynamic Target Config (Kit Dropdown OR Get Pos Button)
+            // ROW 2: Dynamic Target Config (Kit Dropdown, Emote Wheel Dropdown, or Position Buttons)
             let row2Target;
             if (session.actionType === 'kit') {
                 const kits = await ServerKit.findAll({ where: { guildId } });
@@ -83,6 +104,10 @@ const bindHandler = async (interaction, client) => {
 
                 row2Target = new ActionRowBuilder().addComponents(
                     new StringSelectMenuBuilder().setCustomId('bind_kit_select').setPlaceholder(session.targetValue ? `Selected Kit: ${session.targetValue}` : '🎁 Select Server Kit...').addOptions(kitOpts.slice(0, 25))
+                );
+            } else if (session.actionType === 'emote') {
+                row2Target = new ActionRowBuilder().addComponents(
+                    new StringSelectMenuBuilder().setCustomId('bind_emote_select').setPlaceholder(session.targetValue ? `Selected Emote/Voice: ${session.targetValue}` : '🎭 Select Rust Emote or Voice option...').addOptions(RUST_EMOTES.slice(0, 25))
                 );
             } else if (session.actionType === 'teleport' || session.actionType === 'recycler') {
                 row2Target = new ActionRowBuilder().addComponents(
@@ -95,7 +120,7 @@ const bindHandler = async (interaction, client) => {
                 );
             }
 
-            // ROW 3: General Settings (Name, Cooldown, Cost, Emote)
+            // ROW 3: General Settings (Name, Cooldown, Cost, Emote Icon)
             const row3Settings = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('btn_bind_settings').setLabel('Set Name, CD & Cost').setStyle(ButtonStyle.Secondary).setEmoji('⚙️')
             );
@@ -149,6 +174,15 @@ const bindHandler = async (interaction, client) => {
                 bindSessions.set(guildId, session);
                 return await renderWizard(interaction, `🎁 Target kit set to **${selectedValue}**!`);
             }
+
+            if (customId === 'bind_emote_select') {
+                const found = RUST_EMOTES.find(e => e.value === selectedValue);
+                session.targetValue = selectedValue;
+                session.name = session.name || (found ? found.label : 'Emote Bind');
+                session.emote = found ? found.emoji : '🎭';
+                bindSessions.set(guildId, session);
+                return await renderWizard(interaction, `🎭 Emote / Voice bind set to **${found?.label || selectedValue}**!`);
+            }
         }
 
         // --- BUTTON HANDLERS ---
@@ -169,7 +203,7 @@ const bindHandler = async (interaction, client) => {
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_name').setLabel("Bind Name").setStyle(TextInputStyle.Short).setValue(session.name).setRequired(true)),
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_cd').setLabel("Cooldown (Seconds)").setStyle(TextInputStyle.Short).setValue(session.cooldown.toString()).setRequired(true)),
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_cost').setLabel("Cost in Scrap").setStyle(TextInputStyle.Short).setValue(session.cost.toString()).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_emote').setLabel("Emote Icon").setStyle(TextInputStyle.Short).setValue(session.emote).setRequired(true))
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_emote').setLabel("Emote Icon / Emoji").setStyle(TextInputStyle.Short).setValue(session.emote).setRequired(true))
                 );
                 return await interaction.showModal(modal);
             }
@@ -194,6 +228,7 @@ const bindHandler = async (interaction, client) => {
                 if (session.actionType === 'kit') finalCommand = `kit.give ${session.targetValue}`;
                 else if (session.actionType === 'teleport') finalCommand = `teleport.pos ${session.posX} ${session.posY} ${session.posZ}`;
                 else if (session.actionType === 'recycler') finalCommand = `spawn recycler "${session.posX},${session.posY},${session.posZ}"`;
+                else if (session.actionType === 'emote') finalCommand = session.targetValue; // Executes gesture or chat callout natively
                 else finalCommand = session.targetValue;
 
                 const dbData = {
