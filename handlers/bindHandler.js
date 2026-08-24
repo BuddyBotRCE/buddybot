@@ -256,18 +256,23 @@ const bindHandler = async (interaction, client) => {
                 modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_cost').setLabel("Cost in Scrap").setStyle(TextInputStyle.Short).setValue(session.cost.toString()).setRequired(true)));
                 return await interaction.showModal(modal);
             }
-
             if (customId === 'btn_bind_getpos') {
-    const userEco = await UserEconomy.findOne({ where: { guildId, userId: interaction.user.id } });
-    const inGameName = userEco?.inGameName || interaction.user.username;
+               // Check if user is Server Owner OR has Administrator permissions
+                const member = interaction.member;
+                const isOwner = interaction.guild.ownerId === interaction.user.id;
+                const isAdmin = member.permissions.has('Administrator') || member.permissions.has('ManageGuild');
 
-    await interaction.reply({ content: `📍 Requesting your in-game position via RCON...`, flags: 64 });
-    
-    // Pass 'zone' or your working panel type so rconManager's working listener catches it!
-    queueAdminPos(inGameName, guildId, interaction.user.id, interaction.channel.id, 'zone', client);
-    return;
-}
+            if (!isOwner && !isAdmin) {
+                return await interaction.reply({ content: '❌ You must be a Server Owner or Administrator to capture positions.', flags: 64 });
+        }
 
+                const userEco = await UserEconomy.findOne({ where: { guildId, userId: interaction.user.id } });
+                const inGameName = userEco?.inGameName || interaction.user.username;
+
+             await interaction.reply({ content: `📍 Requesting your in-game position via RCON...`, flags: 64 });
+             queueAdminPos(inGameName, guildId, interaction.user.id, interaction.channel.id, 'custom_bind', client);
+            return;
+            }
             if (customId === 'btn_bind_manual_target') {
                 const modal = new ModalBuilder().setCustomId('modal_bind_manual').setTitle('Manual Coordinates');
                 modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_target').setLabel("Enter X,Y,Z (e.g. 100, 50, -200)").setStyle(TextInputStyle.Short).setValue(session.targetValue).setRequired(true)));
