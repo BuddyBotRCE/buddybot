@@ -59,44 +59,45 @@ module.exports = async (interaction, client) => {
                 new StringSelectMenuBuilder().setCustomId('select_custom_zone').setPlaceholder('📂 1. Load an existing Zone...').addOptions(zoneOptions).setDisabled(allZones.length === 0)
             );
 
-            // ROW 2: Colors
+            // ROW 2: Map Colors
             const row2Color = new ActionRowBuilder().addComponents(
                 new StringSelectMenuBuilder().setCustomId('cz_color_select').setPlaceholder(session.zoneColor ? `🎨 Color: ${session.zoneColor}` : '🎨 2. Select Map Color...')
                     .addOptions([
                         { label: 'Red', value: 'red', emoji: '🔴' }, { label: 'Green', value: 'green', emoji: '🟢' },
                         { label: 'Blue', value: 'blue', emoji: '🔵' }, { label: 'Yellow', value: 'yellow', emoji: '🟡' },
-                        { label: 'Purple', value: 'purple', emoji: '🟣' }, { label: 'Orange', value: 'orange', emoji: '🟠' },
-                        { label: 'Black', value: 'black', emoji: '⚫' }, { label: 'White', value: 'white', emoji: '⚪' },
+                        { label: 'Orange', value: 'orange', emoji: '🟠' }, { label: 'Purple', value: 'purple', emoji: '🟣' },
+                        { label: 'Pink', value: 'pink', emoji: '🩷' }, { label: 'Light Blue', value: 'lightblue', emoji: '🩵' },
+                        { label: 'Cyan', value: 'cyan', emoji: '🌐' }, { label: 'Teal', value: 'teal', emoji: '🦚' },
+                        { label: 'Lime', value: 'lime', emoji: '🍋' }, { label: 'Magenta', value: 'magenta', emoji: '🌺' },
+                        { label: 'Violet', value: 'violet', emoji: '🔮' }, { label: 'Indigo', value: 'indigo', emoji: '🌌' },
+                        { label: 'Navy', value: 'navy', emoji: '⚓' }, { label: 'Maroon', value: 'maroon', emoji: '🍷' },
+                        { label: 'Brown', value: 'brown', emoji: '🟤' }, { label: 'Olive', value: 'olive', emoji: '🫒' },
+                        { label: 'Coral', value: 'coral', emoji: '🪸' }, { label: 'Gold', value: 'gold', emoji: '🪙' },
+                        { label: 'Silver', value: 'silver', emoji: '🥈' }, { label: 'Black', value: 'black', emoji: '⚫' },
+                        { label: 'Grey', value: 'grey', emoji: '🩶' }, { label: 'White', value: 'white', emoji: '⚪' },
                         { label: 'Clear / Invisible', value: 'clear', emoji: '🫥' }
                     ])
             );
 
-            // ROW 3: Radius Dropdown
-            const row3Radius = new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder().setCustomId('cz_radius_select').setPlaceholder(session.radius ? `📏 Radius: ${session.radius}m` : '📏 3. Select Zone Radius...')
+            // ROW 3: Setup Options Dropdown (Triggers Modals)
+            const row3Setup = new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder().setCustomId('cz_setup_select').setPlaceholder('⚙️ 3. Configure Zone Details...')
                     .addOptions([
-                        { label: '10 Meters (Small Base)', value: '10' }, { label: '25 Meters', value: '25' },
-                        { label: '50 Meters (Medium Zone)', value: '50' }, { label: '100 Meters', value: '100' },
-                        { label: '250 Meters (Large Arena)', value: '250' }, { label: '500 Meters', value: '500' },
-                        { label: '1000 Meters (Massive)', value: '1000' }, { label: 'Custom Size...', value: 'custom', emoji: '✏️' }
+                        { label: 'Set Zone Name', description: 'Name your custom zone (No Spaces)', value: 'cz_set_name', emoji: '🏷️' },
+                        { label: 'Set Custom Size (Radius)', description: 'Enter an exact radius in meters', value: 'cz_set_radius', emoji: '📏' },
+                        { label: 'Set Enter & Exit Messages', description: 'Text displayed when a player enters/leaves', value: 'cz_set_messages', emoji: '💬' }
                     ])
             );
 
-            // ROW 4: Setup Buttons
-            const row4Setup = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('btn_cz_name').setLabel('Set Name').setStyle(ButtonStyle.Primary).setEmoji('🏷️'),
+            // ROW 4: Final Action Buttons
+            const row4Buttons = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('btn_cz_pos').setLabel('Set Position').setStyle(ButtonStyle.Primary).setEmoji('📍'),
-                new ButtonBuilder().setCustomId('btn_cz_msgs').setLabel('Set Msgs').setStyle(ButtonStyle.Primary).setEmoji('💬')
-            );
-
-            // ROW 5: Final Actions
-            const row5Action = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('btn_cz_deploy').setLabel(session.isEditing ? 'Update Zone' : 'Deploy Zone').setStyle(ButtonStyle.Success).setEmoji('📦'),
                 new ButtonBuilder().setCustomId('btn_cz_delete').setLabel('Delete').setStyle(ButtonStyle.Danger).setEmoji('🗑️').setDisabled(!session.isEditing),
                 new ButtonBuilder().setCustomId('btn_cz_clear').setLabel('Clear').setStyle(ButtonStyle.Secondary).setEmoji('🧹')
             );
 
-            const payload = { embeds: [embed], components: [row1Load, row2Color, row3Radius, row4Setup, row5Action], flags: 64 };
+            const payload = { embeds: [embed], components: [row1Load, row2Color, row3Setup, row4Buttons], flags: 64 };
 
             if (inter.isRepliable() && !inter.replied && !inter.deferred) {
                 return await inter.reply(payload);
@@ -115,41 +116,53 @@ module.exports = async (interaction, client) => {
         // DROPDOWN HANDLERS
         // =========================================================
 
-        if (interaction.isStringSelectMenu() && customId === 'cz_color_select') {
-            session.zoneColor = selectedValue;
-            czSessions.set(guildId, session);
-            return await renderZonePanel(interaction, `✅ Map color set to **${selectedValue.toUpperCase()}**!`);
-        }
-
-        if (interaction.isStringSelectMenu() && customId === 'cz_radius_select') {
-            if (selectedValue === 'custom') {
-                const modal = new ModalBuilder().setCustomId('modal_cz_radius_custom').setTitle('Custom Radius');
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_radius_val').setLabel("Enter custom radius in meters:").setStyle(TextInputStyle.Short).setRequired(true)));
-                return await interaction.showModal(modal);
-            } else {
-                session.radius = selectedValue;
+        if (interaction.isStringSelectMenu()) {
+            if (customId === 'cz_color_select') {
+                session.zoneColor = selectedValue;
                 czSessions.set(guildId, session);
-                return await renderZonePanel(interaction, `✅ Radius securely set to **${selectedValue}m**!`);
+                return await renderZonePanel(interaction, `✅ Map color set to **${selectedValue.toUpperCase()}**!`);
             }
-        }
 
-        if (interaction.isStringSelectMenu() && customId === 'select_custom_zone') {
-            if (selectedValue === 'none') return await interaction.deferUpdate(); 
-            const existingZone = await PveZone.findByPk(selectedValue.replace('load_zone_', ''));
-            if (!existingZone) return await interaction.reply({ content: '❌ Zone no longer exists in DB.', flags: 64 });
+            if (customId === 'select_custom_zone') {
+                if (selectedValue === 'none') return await interaction.deferUpdate(); 
+                const existingZone = await PveZone.findByPk(selectedValue.replace('load_zone_', ''));
+                if (!existingZone) return await interaction.reply({ content: '❌ Zone no longer exists in DB.', flags: 64 });
 
-            session.zoneName = existingZone.zoneName;
-            session.radius = existingZone.radius || 50; 
-            session.zoneColor = existingZone.zoneColor || 'green';
-            session.posX = existingZone.posX || null;
-            session.posY = existingZone.posY || null;
-            session.posZ = existingZone.posZ || null;
-            session.enterMessage = existingZone.enterMessage || '';
-            session.exitMessage = existingZone.exitMessage || '';
-            session.isEditing = existingZone.id; 
-            czSessions.set(guildId, session);
+                session.zoneName = existingZone.zoneName;
+                session.radius = existingZone.radius || 50; 
+                session.zoneColor = existingZone.zoneColor || 'green';
+                session.posX = existingZone.posX || null;
+                session.posY = existingZone.posY || null;
+                session.posZ = existingZone.posZ || null;
+                session.enterMessage = existingZone.enterMessage || '';
+                session.exitMessage = existingZone.exitMessage || '';
+                session.isEditing = existingZone.id; 
+                czSessions.set(guildId, session);
 
-            return await renderZonePanel(interaction, `✅ Successfully loaded zone: **${existingZone.zoneName}**`);
+                return await renderZonePanel(interaction, `✅ Successfully loaded zone: **${existingZone.zoneName}**`);
+            }
+
+            // NEW: Setup Dropdown -> Triggers Modals
+            if (customId === 'cz_setup_select') {
+                if (selectedValue === 'cz_set_name') {
+                    const modal = new ModalBuilder().setCustomId('modal_cz_name').setTitle('Set Zone Name');
+                    modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_name_val').setLabel("Zone Name (No spaces, e.g. vip_arena)").setStyle(TextInputStyle.Short).setValue(session.zoneName || '').setRequired(true)));
+                    return await interaction.showModal(modal);
+                }
+                if (selectedValue === 'cz_set_radius') {
+                    const modal = new ModalBuilder().setCustomId('modal_cz_radius').setTitle('Set Custom Radius');
+                    modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_radius_val').setLabel("Enter custom radius in meters (e.g. 75)").setStyle(TextInputStyle.Short).setValue(session.radius ? session.radius.toString() : '').setRequired(true)));
+                    return await interaction.showModal(modal);
+                }
+                if (selectedValue === 'cz_set_messages') {
+                    const modal = new ModalBuilder().setCustomId('modal_cz_msgs').setTitle('Zone Messages');
+                    modal.addComponents(
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_enter').setLabel("Enter Message").setStyle(TextInputStyle.Paragraph).setValue(session.enterMessage || '').setRequired(false)),
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_exit').setLabel("Exit Message").setStyle(TextInputStyle.Paragraph).setValue(session.exitMessage || '').setRequired(false))
+                    );
+                    return await interaction.showModal(modal);
+                }
+            }
         }
 
         // =========================================================
@@ -162,27 +175,12 @@ module.exports = async (interaction, client) => {
                 return await renderZonePanel(interaction, '🧹 Draft cleared. Ready to make a new zone!');
             }
 
-            if (customId === 'btn_cz_name') {
-                const modal = new ModalBuilder().setCustomId('modal_cz_name').setTitle('Set Zone Name');
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_name').setLabel("Zone Name (No spaces, e.g. vip_arena)").setStyle(TextInputStyle.Short).setValue(session.zoneName || '').setRequired(true)));
-                return await interaction.showModal(modal);
-            }
-
             if (customId === 'btn_cz_pos') {
                 const modal = new ModalBuilder().setCustomId('modal_cz_pos').setTitle('Set Zone Coordinates');
                 modal.addComponents(
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_x').setLabel("X Coordinate").setStyle(TextInputStyle.Short).setValue(session.posX || '').setRequired(true)),
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_y').setLabel("Y Coordinate (Height)").setStyle(TextInputStyle.Short).setValue(session.posY || '').setRequired(true)),
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_z').setLabel("Z Coordinate").setStyle(TextInputStyle.Short).setValue(session.posZ || '').setRequired(true))
-                );
-                return await interaction.showModal(modal);
-            }
-
-            if (customId === 'btn_cz_msgs') {
-                const modal = new ModalBuilder().setCustomId('modal_cz_msgs').setTitle('Zone Messages');
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_enter').setLabel("Enter Message").setStyle(TextInputStyle.Paragraph).setValue(session.enterMessage || '').setRequired(false)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_exit').setLabel("Exit Message").setStyle(TextInputStyle.Paragraph).setValue(session.exitMessage || '').setRequired(false))
                 );
                 return await interaction.showModal(modal);
             }
@@ -243,11 +241,11 @@ module.exports = async (interaction, client) => {
 
         if (interaction.isModalSubmit()) {
             if (customId === 'modal_cz_name') {
-                session.zoneName = interaction.fields.getTextInputValue('cz_name').trim().replace(/\s+/g, '_'); 
+                session.zoneName = interaction.fields.getTextInputValue('cz_name_val').trim().replace(/\s+/g, '_'); 
                 czSessions.set(guildId, session);
                 return await renderZonePanel(interaction, `✅ Saved Name to draft!`);
             }
-            if (customId === 'modal_cz_radius_custom') {
+            if (customId === 'modal_cz_radius') {
                 session.radius = interaction.fields.getTextInputValue('cz_radius_val').trim();
                 czSessions.set(guildId, session);
                 return await renderZonePanel(interaction, `✅ Custom radius set to **${session.radius}m**!`);
