@@ -69,10 +69,12 @@ async function connectRcon(guildId, client) {
                                 let posZ = parseFloat(matches[2]);
 
                                 if (channel) {
-                                    if (setupData.type === 'custom_bind') {
-                                        await bindHandler.autoSavePosition(guildId, posX.toFixed(2), posY.toFixed(2), posZ.toFixed(2));
-                                        channel.send({ content: `✅ <@${setupData.adminId}> **Position Captured Successfully!**\nCoordinates: \`X: ${posX.toFixed(2)}, Y: ${posY.toFixed(2)}, Z: ${posZ.toFixed(2)}\`\n*Return to your Discord panel to continue.*` }).catch(()=>{});
-                                    } else {
+                                    // Inside rconManager.js position listener:
+if (setupData.type === 'zone' || setupData.type === 'custom_bind') {
+    await bindHandler.autoSavePosition(guildId, posX.toFixed(2), posY.toFixed(2), posZ.toFixed(2));
+    channel.send({ content: `✅ <@${setupData.adminId}> **Position Captured Successfully!**\nCoordinates: \`X: ${posX.toFixed(2)}, Y: ${posY.toFixed(2)}, Z: ${posZ.toFixed(2)}\`\n*Return to your Discord panel to continue.*` }).catch(()=>{});
+}
+ else {
                                         const coords = `${posX.toFixed(2)}_${posY.toFixed(2)}_${posZ.toFixed(2)}`;
                                         const row = new ActionRowBuilder().addComponents(
                                             new ButtonBuilder().setCustomId(`btn_finalize_tpl_${setupData.type}_${coords}`).setLabel('📍 Finalize Setup').setStyle(ButtonStyle.Success),

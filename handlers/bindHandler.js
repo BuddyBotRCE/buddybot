@@ -258,13 +258,15 @@ const bindHandler = async (interaction, client) => {
             }
 
             if (customId === 'btn_bind_getpos') {
-                const userEco = await UserEconomy.findOne({ where: { guildId, userId: interaction.user.id } });
-                const inGameName = userEco?.inGameName || interaction.user.username;
+    const userEco = await UserEconomy.findOne({ where: { guildId, userId: interaction.user.id } });
+    const inGameName = userEco?.inGameName || interaction.user.username;
 
-                await interaction.reply({ content: `📍 Requesting your in-game position via RCON...`, flags: 64 });
-                queueAdminPos(inGameName, guildId, interaction.user.id, interaction.channel.id, 'custom_bind', client);
-                return;
-            }
+    await interaction.reply({ content: `📍 Requesting your in-game position via RCON...`, flags: 64 });
+    
+    // Pass 'zone' or your working panel type so rconManager's working listener catches it!
+    queueAdminPos(inGameName, guildId, interaction.user.id, interaction.channel.id, 'zone', client);
+    return;
+}
 
             if (customId === 'btn_bind_manual_target') {
                 const modal = new ModalBuilder().setCustomId('modal_bind_manual').setTitle('Manual Coordinates');
