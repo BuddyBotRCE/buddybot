@@ -1,7 +1,7 @@
 const WebSocket = require('ws');
 const { GuildConfig, UserEconomy, CustomBind, BindCooldown, ActiveBounty, BountyCooldown } = require('../database/db');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
-const bindHandler = require('../handlers/bindHandler'); // <-- Added for custom bind pos capture
+const bindHandler = require('../handlers/bindHandler');
 
 const activeConnections = new Map();
 const adminPosQueue = new Map(); 
@@ -62,32 +62,24 @@ async function connectRcon(guildId, client) {
                     }
                 }
 
-                // 1. POSITION TRACKER (Supports Teleports, Recyclers, & Custom Binds)
-                            // 1. POSITION TRACKER
-if (msg.includes('X:') || msg.includes('pos') || msg.includes('Position') || msgLower.includes('vector') || msgLower.includes('player is at') || /(-?\d+\.\d+)/.test(msg)) {
-    for (const [adminName, setupData] of adminPosQueue.entries()) {
-        if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
-        const channel = client.channels.cache.get(setupData.channelId);
+                // 1. POSITION TRACKER
+                if (msgLower.includes('x:') || msgLower.includes('y:') || msgLower.includes('z:') || msgLower.includes('pos') || msgLower.includes('position') || msgLower.includes('vector') || /(-?\d+\.\d+)/.test(msg)) {
+                    for (const [adminName, setupData] of adminPosQueue.entries()) {
+                        if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
+                        const channel = client.channels.cache.get(setupData.channelId);
 
-        if (channel) {
-            let posX = 0.00, posY = 50.00, posZ = 0.00;
-            const matches = msg.match(/-?\d+\.\d+/g);
-            if (matches && matches.length >= 3) {
-                posX = parseFloat(matches[0]);
-                posY = parseFloat(matches[1]);
-                posZ = parseFloat(matches[2]);
-            }
+                        if (channel) {
+                            let posX = 0.00, posY = 50.00, posZ = 0.00;
+                            const matches = msg.match(/-?\d+\.\d+/g);
+                            if (matches && matches.length >= 3) {
+                                posX = parseFloat(matches[0]);
+                                posY = parseFloat(matches[1]);
+                                posZ = parseFloat(matches[2]);
+                            }
 
-            if (setupData.type === 'custom_bind') {
-                await bindHandler.autoSavePosition(guildId, posX.toFixed(2), posY.toFixed(2), posZ.toFixed(2));
-                channel.send({ content: `✅ <@${setupData.adminId}> **Position Captured Successfully!**\nCoordinates: \`X: ${posX.toFixed(2)}, Y: ${posY.toFixed(2)}, Z: ${posZ.toFixed(2)}\`\n*Return to your Discord panel to continue.*` }).catch(()=>{});
-            }
-            // ... rest of your code ...
-
-                            // If this position request came from the Custom Bind Wizard!
                             if (setupData.type === 'custom_bind') {
                                 await bindHandler.autoSavePosition(guildId, posX.toFixed(2), posY.toFixed(2), posZ.toFixed(2));
-                                channel.send({ content: `✅ <@${setupData.adminId}> **Position Captured!**\nCoordinates: \`X: ${posX.toFixed(2)}, Y: ${posY.toFixed(2)}, Z: ${posZ.toFixed(2)}\`\n*Return to your Discord panel to finish configuring your bind.*` }).catch(()=>{});
+                                channel.send({ content: `✅ <@${setupData.adminId}> **Position Captured Successfully!**\nCoordinates: \`X: ${posX.toFixed(2)}, Y: ${posY.toFixed(2)}, Z: ${posZ.toFixed(2)}\`\n*Return to your Discord panel to continue configuring your bind.*` }).catch(()=>{});
                             } else if (setupData.type === 'cargodock') {
                                 await GuildConfig.upsert({ guildId: guildId, cargoDockX: posX, cargoDockY: posY, cargoDockZ: posZ });
                                 channel.send({ content: `✅ <@${setupData.adminId}> **Cargo Dock Position Saved!**\nCoordinates: \`X: ${posX.toFixed(2)}, Y: ${posY.toFixed(2)}, Z: ${posZ.toFixed(2)}\`` });
@@ -172,9 +164,8 @@ if (msg.includes('X:') || msg.includes('pos') || msg.includes('Position') || msg
                             }
                         }
 
-                        // Check for Custom Binds triggered via chat emote/command
                         const serverBinds = await CustomBind.findAll({ where: { guildId: guildId } });
-                        const activeBind = serverBinds.find(b => b.emote.toLowerCase() === chatText || b.name.toLowerCase() === chatText);
+                        const activeBind = serverBinds.find(b => b.emote.toLowerCase() === chatText || b.name.toLowerCase() === chatText || b.targetValue?.toLowerCase() === chatText);
                         
                         if (activeBind) {
                             const userProfile = await UserEconomy.findOne({ where: { guildId: guildId, inGameName: playerName } });
