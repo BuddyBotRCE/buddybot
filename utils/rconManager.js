@@ -185,10 +185,27 @@ async function sendRconCommand(guildId, commandStr) {
     ws.send(JSON.stringify({ Identifier: 1, Message: commandStr, Name: "BuddyBot" }));
     return true;
 }
-function queueAdminPos(adminName, guildId, adminId, channelId, type = 'custom_bind', client) {
- // Query both player list and server status info to catch coordinate outputs
-    sendRconCommand(guildId, `players`).catch(() => {});
-    sendRconCommand(guildId, `status`).catch(() => {});
+     // Inside ws.on('message', ...) position listener:
+if (adminPosQueue.size > 0) {
+    // Matches any floating point numbers or vector patterns (e.g., (100.5, 50.0, -200.1) or 100.5 50.0 -200.1)
+    const matches = msg.match(/-?\d+\.\d+/g);
+    if (matches && matches.length >= 3) {
+        for (const [adminName, setupData] of adminPosQueue.entries()) {
+            if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
+            const channel = client.channels.cache.get(setupData.channelId);
+
+            let posX = parseFloat(matches[0]);
+            let posY = parseFloat(matches[1]);
+            let posZ = parseFloat(matches[2]);
+
+            if (channel) {
+                await bindHandler.autoSavePosition(guildId, posX.toFixed(2), posY.toFixed(2), posZ.toFixed(2));
+                channel.send({ content: `✅ <@${setupData.adminId}> **Position Captured!**\nCoordinates: \`X: ${posX.toFixed(2)}, Y: ${posY.toFixed(2)}, Z: ${posZ.toFixed(2)}\`\n*Return to your Discord panel to finish.*` }).catch(()=>{});
+            }
+            adminPosQueue.delete(adminName);
+            break;
+        }
+    }
 }
 
 async function triggerCustomEvent(guildId, eventType, data = {}) {
