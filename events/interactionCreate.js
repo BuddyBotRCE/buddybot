@@ -22,7 +22,7 @@ const buddyPassHandler = require(handlerPath('buddyPassHandler'));
 const casinoHandler = require(handlerPath('casinoHandler'));
 const bountyHandler = require(handlerPath('bountyHandler'));
 const kitHandler = require(handlerPath('kitHandler'));
-const bindHandler = require(handlerPath('bindHandler'));
+const bindHandler = require('../handlers/bindHandler');
 const adminHandler = require(handlerPath('adminHandler'));
 
 // --- NEW MODULES ---
@@ -130,6 +130,9 @@ module.exports = async (interaction, client) => {
         }
         if (customId.includes('kit') && !customId.includes('ticket')) {
             return await kitHandler(interaction, client);
+        }
+        if (customId.startsWith('bind_') || customId.startsWith('btn_bind_') || customId.includes('bind')) {
+            return await bindHandler(interaction, client);
         }
 
         // Fallback for uncaught buttons
