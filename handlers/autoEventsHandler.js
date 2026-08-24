@@ -5,7 +5,14 @@ const { queueAdminPos } = require('../utils/rconManager');
 // In-memory session manager
 const aeSessions = new Map();
 
-const TYPE_EMOJIS = { hackable: '💻', supply: '✈️', elite: '📦', node: '🪨' };
+// Simplified Event Type Cycler
+const TYPE_ARRAY = ['hackable', 'supply', 'elite', 'node'];
+const TYPE_INFO = { 
+    hackable: { name: 'Hackable Crates', emoji: '💻' }, 
+    supply: { name: 'Supply Drops', emoji: '✈️' }, 
+    elite: { name: 'Elite Crates', emoji: '📦' }, 
+    node: { name: 'Resource Nodes', emoji: '🪨' } 
+};
 
 const autoEventsHandler = async (interaction, client) => {
     try {
@@ -24,14 +31,14 @@ const autoEventsHandler = async (interaction, client) => {
         const renderAEPanel = async (inter, messageOverride = '') => {
             const allEvents = await AutoEvent.findAll({ where: { guildId } });
             
-            // Build the Live Status Board of ALL created events
-            let statusBoard = allEvents.length === 0 ? 'No events created yet.' : '';
+            // Build the Live Status Board
+            let statusBoard = allEvents.length === 0 ? '*No auto-events created yet.*' : '';
             for (const ev of allEvents) {
                 const slotCount = await AutoEventLocation.count({ where: { eventId: ev.id } });
-                statusBoard += `${ev.isEnabled ? '🟢' : '🔴'} **${ev.name}** [${TYPE_EMOJIS[ev.eventType]}] (${ev.interval}m | x${ev.amount} | ${slotCount} Slots)\n`;
+                const tInfo = TYPE_INFO[ev.eventType];
+                statusBoard += `${ev.isEnabled ? '🟢' : '🔴'} **${ev.name}** [${tInfo.emoji}] (${ev.interval}m | x${ev.amount} | ${slotCount} Slots)\n`;
             }
 
-            // Get currently active event profile
             const activeEvent = session.selectedEventId ? await AutoEvent.findByPk(session.selectedEventId) : null;
             const eventLocs = activeEvent ? await AutoEventLocation.findAll({ where: { eventId: activeEvent.id } }) : [];
             const activeSlotData = eventLocs.find(l => l.slot === session.selectedSlot);
@@ -41,61 +48,56 @@ const autoEventsHandler = async (interaction, client) => {
             const savedCoords = activeSlotData ? `${activeSlotData.posX}, ${activeSlotData.posY}, ${activeSlotData.posZ}` : 'Empty';
 
             const embed = new EmbedBuilder()
-                .setTitle('⚙️ Unlimited Auto Events Engine')
-                .setDescription(`${messageOverride ? `**${messageOverride}**\n\n` : ''}Create limitless custom event profiles. Each profile runs on its own timer and can trigger across 10 custom locations!\n\n**Live Status Board:**\n${statusBoard}`)
+                .setTitle('⚙️ Auto Events Engine')
+                .setDescription(`${messageOverride ? `**${messageOverride}**\n\n` : ''}Manage your automated server events below.\n\n**Live Status Board:**\n${statusBoard}`)
                 .setColor('#3498db');
 
             if (activeEvent) {
-                embed.addFields({ name: `📝 Currently Editing: ${activeEvent.name}`, value: `• Type: ${TYPE_EMOJIS[activeEvent.eventType]} ${activeEvent.eventType.toUpperCase()}\n• Timers: Every ${activeEvent.interval}m (Spawns ${activeEvent.amount})\n• Slot ${session.selectedSlot}: [Saved: \`${savedCoords}\`] | [Draft: \`${memCoords}\`]` });
+                embed.addFields({ 
+                    name: `📝 Currently Editing: ${activeEvent.name}`, 
+                    value: `• **Type:** ${TYPE_INFO[activeEvent.eventType].emoji} ${TYPE_INFO[activeEvent.eventType].name}\n• **Timers:** Every ${activeEvent.interval}m (Spawns ${activeEvent.amount})\n• **Slot ${session.selectedSlot}:** [Saved: \`${savedCoords}\`] | [Draft: \`${memCoords}\`]` 
+                });
             }
 
-            // ROW 1: Event Profile Selection / Creation
-            let eventOptions = allEvents.map(e => ({ label: e.name, description: `Edit this ${e.eventType} event`, value: `load_ev_${e.id}`, emoji: TYPE_EMOJIS[e.eventType] }));
+            // ROW 1: Event Profile Selection
+            let eventOptions = allEvents.map(e => ({ label: e.name, description: `Edit this ${TYPE_INFO[e.eventType].name} event`, value: `load_ev_${e.id}`, emoji: TYPE_INFO[e.eventType].emoji }));
             eventOptions.push({ label: '➕ Create New Event Profile', description: 'Make a brand new independent event', value: 'ae_create_new', emoji: '✨' });
 
             const row1Event = new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder().setCustomId('ae_event_select').setPlaceholder(activeEvent ? `📂 Loaded: ${activeEvent.name}` : '📂 1. Select or Create an Event Profile...').addOptions(eventOptions.slice(0, 25))
+                new StringSelectMenuBuilder().setCustomId('ae_event_select').setPlaceholder(activeEvent ? `📂 Loaded: ${activeEvent.name}` : '📂 1. Select or Create an Event...').addOptions(eventOptions.slice(0, 25))
             );
 
-            // If no event is loaded, only render Row 1
             if (!activeEvent) {
                 return await inter[inter.replied || inter.deferred ? 'update' : 'reply']({ embeds: [embed], components: [row1Event], flags: 64 });
             }
 
-            // ROW 2: Event Configuration Dropdown (Name, Type, Timers)
+            // ROW 2: Direct Setup Buttons (Replaced the confusing dropdown!)
             const row2Config = new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder().setCustomId('ae_config_select').setPlaceholder('⚙️ 2. Configure Event Profile Settings...')
-                    .addOptions([
-                        { label: 'Rename Event', description: 'Change the display name of this profile', value: 'ae_rename', emoji: '✏️' },
-                        { label: 'Set Timers & Amount', description: 'How often it runs and how many spawn', value: 'ae_set_timers', emoji: '⏱️' },
-                        { label: 'Change Type: Hackable Crate', value: 'ae_type_hackable', emoji: '💻' },
-                        { label: 'Change Type: Supply Drop', value: 'ae_type_supply', emoji: '✈️' },
-                        { label: 'Change Type: Elite Crate', value: 'ae_type_elite', emoji: '📦' },
-                        { label: 'Change Type: Resource Node', value: 'ae_type_node', emoji: '🪨' }
-                    ])
+                new ButtonBuilder().setCustomId('btn_ae_edit_settings').setLabel('Edit Name & Timers').setStyle(ButtonStyle.Primary).setEmoji('✏️'),
+                new ButtonBuilder().setCustomId('btn_ae_cycle_type').setLabel(`Type: ${TYPE_INFO[activeEvent.eventType].name}`).setStyle(ButtonStyle.Secondary).setEmoji('🔄')
             );
 
-            // ROW 3: Slot Selection (1-10)
+            // ROW 3: Slot Selection
             const slotOptions = [];
             for (let i = 1; i <= 10; i++) {
                 const isSet = eventLocs.some(l => l.slot === i);
                 slotOptions.push({ label: `Slot ${i} ${isSet ? '(Saved)' : '(Empty)'}`, value: i.toString(), emoji: isSet ? '✅' : '⬛' });
             }
             const row3Slot = new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder().setCustomId('ae_slot_select').setPlaceholder(`🎯 3. Currently Editing Slot ${session.selectedSlot}`).addOptions(slotOptions)
+                new StringSelectMenuBuilder().setCustomId('ae_slot_select').setPlaceholder(`🎯 Currently Editing Slot ${session.selectedSlot}`).addOptions(slotOptions)
             );
 
-            // ROW 4: Location Setup Buttons
+            // ROW 4: Position Controls
             const row4Pos = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('btn_ae_getpos').setLabel('Get Admin Pos').setStyle(ButtonStyle.Primary).setEmoji('📍'),
                 new ButtonBuilder().setCustomId('btn_ae_saveslot').setLabel('Save Location to Slot').setStyle(ButtonStyle.Success).setEmoji('💾'),
                 new ButtonBuilder().setCustomId('btn_ae_delslot').setLabel('Clear Slot').setStyle(ButtonStyle.Danger).setEmoji('🗑️').setDisabled(!activeSlotData)
             );
 
-            // ROW 5: Master Toggles
+            // ROW 5: Master Controls
             const row5Toggle = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('btn_ae_toggle').setLabel(activeEvent.isEnabled ? 'Disable Event' : 'Enable Event').setStyle(activeEvent.isEnabled ? ButtonStyle.Danger : ButtonStyle.Success).setEmoji('⚡'),
-                new ButtonBuilder().setCustomId('btn_ae_delete_event').setLabel('Delete Entire Event Profile').setStyle(ButtonStyle.Danger).setEmoji('💀')
+                new ButtonBuilder().setCustomId('btn_ae_delete_event').setLabel('Delete Event').setStyle(ButtonStyle.Danger).setEmoji('💀')
             );
 
             const payload = { embeds: [embed], components: [row1Event, row2Config, row3Slot, row4Pos, row5Toggle], flags: 64 };
@@ -103,24 +105,21 @@ const autoEventsHandler = async (interaction, client) => {
             return await inter.update(payload).catch(() => inter.followUp(payload));
         };
 
-        // --- ENTRY FROM ADMIN PANEL ---
+        // --- ENTRY ROUTER ---
         if (customId === 'admin_menu_select' && selectedValue === 'setup_autoevents') {
             return await renderAEPanel(interaction);
         }
 
         // --- DROPDOWN HANDLERS ---
         if (interaction.isStringSelectMenu()) {
-            
-            // 1. EVENT PROFILE SELECTION / CREATION
             if (customId === 'ae_event_select') {
                 if (selectedValue === 'ae_create_new') {
-                    // Instantly create a new DB profile and load it
-                    const newEvent = await AutoEvent.create({ guildId, name: 'New Custom Event' });
+                    const newEvent = await AutoEvent.create({ guildId, name: 'New Auto Event' });
                     session.selectedEventId = newEvent.id;
                     session.selectedSlot = 1;
                     session.posX = null; session.posY = null; session.posZ = null;
                     aeSessions.set(guildId, session);
-                    return await renderAEPanel(interaction, `✨ New Event created! Configure it below.`);
+                    return await renderAEPanel(interaction, `✨ Created a new event! Setup the details below.`);
                 } else {
                     session.selectedEventId = parseInt(selectedValue.replace('load_ev_', ''));
                     session.selectedSlot = 1;
@@ -130,32 +129,6 @@ const autoEventsHandler = async (interaction, client) => {
                 }
             }
 
-            // 2. CONFIGURATION MENU
-            if (customId === 'ae_config_select') {
-                if (selectedValue === 'ae_rename') {
-                    const modal = new ModalBuilder().setCustomId('modal_ae_rename').setTitle(`Rename Event Profile`);
-                    modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('new_name').setLabel("Event Display Name").setStyle(TextInputStyle.Short).setRequired(true)));
-                    return await interaction.showModal(modal);
-                }
-                if (selectedValue === 'ae_set_timers') {
-                    const ev = await AutoEvent.findByPk(session.selectedEventId);
-                    const modal = new ModalBuilder().setCustomId('modal_ae_timers').setTitle(`Set Timers`);
-                    modal.addComponents(
-                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('interval').setLabel("Interval (Minutes)").setStyle(TextInputStyle.Short).setValue(ev.interval.toString()).setRequired(true)),
-                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel("Spawn Amount per Interval").setStyle(TextInputStyle.Short).setValue(ev.amount.toString()).setRequired(true))
-                    );
-                    return await interaction.showModal(modal);
-                }
-
-                // Type Switches
-                if (selectedValue.startsWith('ae_type_')) {
-                    const newType = selectedValue.replace('ae_type_', '');
-                    await AutoEvent.update({ eventType: newType }, { where: { id: session.selectedEventId } });
-                    return await renderAEPanel(interaction, `✅ Event type updated to **${newType.toUpperCase()}**!`);
-                }
-            }
-
-            // 3. SLOT SELECTION
             if (customId === 'ae_slot_select') {
                 session.selectedSlot = parseInt(selectedValue);
                 session.posX = null; session.posY = null; session.posZ = null;
@@ -166,6 +139,29 @@ const autoEventsHandler = async (interaction, client) => {
 
         // --- BUTTON HANDLERS ---
         if (interaction.isButton()) {
+            
+            // 🔄 CYCLE EVENT TYPE BUTTON (One-click toggle through types!)
+            if (customId === 'btn_ae_cycle_type') {
+                const ev = await AutoEvent.findByPk(session.selectedEventId);
+                let currentIndex = TYPE_ARRAY.indexOf(ev.eventType);
+                let nextIndex = (currentIndex + 1) % TYPE_ARRAY.length;
+                await ev.update({ eventType: TYPE_ARRAY[nextIndex] });
+                return await renderAEPanel(interaction, `✅ Event type changed to **${TYPE_INFO[TYPE_ARRAY[nextIndex]].name}**!`);
+            }
+
+            // ✏️ EDIT NAME & TIMERS BUTTON
+            if (customId === 'btn_ae_edit_settings') {
+                const ev = await AutoEvent.findByPk(session.selectedEventId);
+                const modal = new ModalBuilder().setCustomId('modal_ae_settings').setTitle(`Event Settings`);
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ev_name').setLabel("Event Display Name").setStyle(TextInputStyle.Short).setValue(ev.name).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('interval').setLabel("Interval (Minutes)").setStyle(TextInputStyle.Short).setValue(ev.interval.toString()).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel("Spawn Amount per Interval").setStyle(TextInputStyle.Short).setValue(ev.amount.toString()).setRequired(true))
+                );
+                return await interaction.showModal(modal);
+            }
+
+            // 📍 GET POS BUTTON
             if (customId === 'btn_ae_getpos') {
                 if (typeof queueAdminPos === 'function') {
                     await queueAdminPos(interaction);
@@ -173,38 +169,36 @@ const autoEventsHandler = async (interaction, client) => {
                 } else return await interaction.reply({ content: '❌ `queueAdminPos` missing.', flags: 64 });
             }
 
+            // 💾 SAVE SLOT
             if (customId === 'btn_ae_saveslot') {
-                if (!session.posX || !session.posY || !session.posZ) {
-                    return await interaction.reply({ content: '❌ You must click **Get Admin Pos** before saving to this slot!', flags: 64 });
-                }
+                if (!session.posX || !session.posY || !session.posZ) return await interaction.reply({ content: '❌ You must click **Get Admin Pos** before saving!', flags: 64 });
                 
                 const existing = await AutoEventLocation.findOne({ where: { eventId: session.selectedEventId, slot: session.selectedSlot } });
-                if (existing) {
-                    await existing.update({ posX: session.posX, posY: session.posY, posZ: session.posZ });
-                } else {
-                    await AutoEventLocation.create({ guildId, eventId: session.selectedEventId, slot: session.selectedSlot, posX: session.posX, posY: session.posY, posZ: session.posZ });
-                }
+                if (existing) await existing.update({ posX: session.posX, posY: session.posY, posZ: session.posZ });
+                else await AutoEventLocation.create({ guildId, eventId: session.selectedEventId, slot: session.selectedSlot, posX: session.posX, posY: session.posY, posZ: session.posZ });
 
                 session.posX = null; session.posY = null; session.posZ = null; 
                 aeSessions.set(guildId, session);
                 return await renderAEPanel(interaction, `✅ Saved coordinates to **Slot ${session.selectedSlot}**!`);
             }
 
+            // 🗑️ CLEAR SLOT
             if (customId === 'btn_ae_delslot') {
                 await AutoEventLocation.destroy({ where: { eventId: session.selectedEventId, slot: session.selectedSlot } });
                 return await renderAEPanel(interaction, `🗑️ Cleared data for **Slot ${session.selectedSlot}**.`);
             }
 
+            // ⚡ TOGGLE ENABLE
             if (customId === 'btn_ae_toggle') {
                 const ev = await AutoEvent.findByPk(session.selectedEventId);
-                const newState = !ev.isEnabled;
-                await ev.update({ isEnabled: newState });
-                return await renderAEPanel(interaction, `⚡ Event profile is now ${newState ? '🟢 ENABLED' : '🔴 DISABLED'}!`);
+                await ev.update({ isEnabled: !ev.isEnabled });
+                return await renderAEPanel(interaction, `⚡ Event profile is now ${!ev.isEnabled ? '🟢 ENABLED' : '🔴 DISABLED'}!`);
             }
 
+            // 💀 DELETE EVENT
             if (customId === 'btn_ae_delete_event') {
-                await AutoEventLocation.destroy({ where: { eventId: session.selectedEventId } }); // Wipe slots first
-                await AutoEvent.destroy({ where: { id: session.selectedEventId } }); // Wipe profile
+                await AutoEventLocation.destroy({ where: { eventId: session.selectedEventId } }); 
+                await AutoEvent.destroy({ where: { id: session.selectedEventId } }); 
                 session.selectedEventId = null;
                 aeSessions.set(guildId, session);
                 return await renderAEPanel(interaction, `💀 Event Profile permanently deleted.`);
@@ -212,19 +206,13 @@ const autoEventsHandler = async (interaction, client) => {
         }
 
         // --- MODAL HANDLERS ---
-        if (interaction.isModalSubmit()) {
-            if (customId === 'modal_ae_rename') {
-                const newName = interaction.fields.getTextInputValue('new_name').trim();
-                await AutoEvent.update({ name: newName }, { where: { id: session.selectedEventId } });
-                return await renderAEPanel(interaction, `✅ Event renamed to **${newName}**!`);
-            }
-
-            if (customId === 'modal_ae_timers') {
-                const interval = parseInt(interaction.fields.getTextInputValue('interval')) || 60;
-                const amount = parseInt(interaction.fields.getTextInputValue('amount')) || 1;
-                await AutoEvent.update({ interval, amount }, { where: { id: session.selectedEventId } });
-                return await renderAEPanel(interaction, `✅ Timers updated!`);
-            }
+        if (interaction.isModalSubmit() && customId === 'modal_ae_settings') {
+            const newName = interaction.fields.getTextInputValue('ev_name').trim();
+            const interval = parseInt(interaction.fields.getTextInputValue('interval')) || 60;
+            const amount = parseInt(interaction.fields.getTextInputValue('amount')) || 1;
+            
+            await AutoEvent.update({ name: newName, interval, amount }, { where: { id: session.selectedEventId } });
+            return await renderAEPanel(interaction, `✅ Event Settings updated!`);
         }
 
     } catch (error) {
@@ -235,7 +223,5 @@ const autoEventsHandler = async (interaction, client) => {
     }
 };
 
-// EXPORT MEMORY SO WEBHOOK CAN INJECT COORDINATES LATER!
 autoEventsHandler.aeSessions = aeSessions;
-
 module.exports = autoEventsHandler;
