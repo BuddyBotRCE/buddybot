@@ -13,7 +13,6 @@ const FEATURE_TYPES = {
 };
 
 const RUST_EMOTES = [
-    // --- BASIC GESTURES ---
     { label: '👋 Wave', value: 'gesture wave', emoji: '👋' },
     { label: '👍 Thumbs Up', value: 'gesture thumbsup', emoji: '👍' },
     { label: '👎 Thumbs Down', value: 'gesture thumbsdown', emoji: '👎' },
@@ -22,15 +21,11 @@ const RUST_EMOTES = [
     { label: '👌 OK', value: 'gesture ok', emoji: '👌' },
     { label: '👏 Clap', value: 'gesture clap', emoji: '👏' },
     { label: '🏃 Hurry', value: 'gesture hurry', emoji: '🏃' },
-
-    // --- DANCE & CELEBRATION ---
     { label: '🎉 Victory / Cheer', value: 'gesture victory', emoji: '🎉' },
     { label: '🕺 Dance', value: 'gesture dance', emoji: '🕺' },
     { label: '🙌 Raise the Roof', value: 'gesture raiseroof', emoji: '🙌' },
     { label: '💃 Cabbage Patch', value: 'gesture cabbagepatch', emoji: '💃' },
     { label: '🎶 The Twist', value: 'gesture twist', emoji: '🎶' },
-
-    // --- TAUNTS & REACTIONS ---
     { label: '😢 Crying / Sad', value: 'gesture cry', emoji: '😢' },
     { label: '🤕 Hurt', value: 'gesture hurt', emoji: '🤕' },
     { label: '😡 Pissed / Angry', value: 'gesture pissed', emoji: '😡' },
@@ -40,8 +35,6 @@ const RUST_EMOTES = [
     { label: '❌ No-No!', value: 'gesture nono', emoji: '❌' },
     { label: '🔪 Cut Throat', value: 'gesture throatcut', emoji: '🔪' },
     { label: '🖐️ Finger Gun', value: 'gesture fingergun', emoji: '🖐️' },
-
-    // --- TACTICAL / VOICE CALLOUTS ---
     { label: '🪵 Callout: I Need Wood', value: 'chat.say "I need wood!"', emoji: '🪵' },
     { label: '🪨 Callout: I Need Stone', value: 'chat.say "I need stone!"', emoji: '🪨' },
     { label: '⚙️ Callout: I Need Metal', value: 'chat.say "I need metal!"', emoji: '⚙️' },
@@ -51,8 +44,6 @@ const RUST_EMOTES = [
     { label: '⬇️ Callout: Danger South', value: 'chat.say "Danger to the South!"', emoji: '⬇️' },
     { label: '➡️ Callout: Danger East', value: 'chat.say "Danger to the East!"', emoji: '➡️' },
     { label: '⬅️ Callout: Danger West', value: 'chat.say "Danger to the West!"', emoji: '⬅️' },
-    
-    // --- UTILITY ---
     { label: '💀 Suicide (Instant Respawn)', value: 'kill', emoji: '💀' },
     { label: '✂️ Rock Paper Scissors', value: 'gesture rps', emoji: '✂️' }
 ];
@@ -80,7 +71,6 @@ const bindHandler = async (interaction, client) => {
         }
         const session = bindSessions.get(guildId);
 
-        // --- MAIN DASHBOARD VIEW ---
         const renderDashboard = async (inter, messageOverride = '') => {
             const allBinds = await CustomBind.findAll({ where: { guildId } });
             
@@ -111,7 +101,6 @@ const bindHandler = async (interaction, client) => {
             return await inter.update(payload).catch(() => inter.followUp(payload));
         };
 
-        // --- STEP-BY-STEP BUILDER WIZARD ---
         const renderWizard = async (inter, messageOverride = '') => {
             const feat = FEATURE_TYPES[session.actionType] || FEATURE_TYPES.custom;
             
@@ -130,13 +119,11 @@ const bindHandler = async (interaction, client) => {
                 )
                 .setColor('#3498db');
 
-            // ROW 1: Feature Selector Dropdown
             const row1Feature = new ActionRowBuilder().addComponents(
                 new StringSelectMenuBuilder().setCustomId('bind_feature_select').setPlaceholder(`Feature: ${feat.name}`)
                     .addOptions(Object.keys(FEATURE_TYPES).map(k => ({ label: FEATURE_TYPES[k].name, description: FEATURE_TYPES[k].desc, value: k, emoji: FEATURE_TYPES[k].emoji })))
             );
 
-            // ROW 2: Contextual Target/Data Selector (Kit list, Emote Wheel list, Get Pos button, or Custom input)
             let row2Target;
             if (session.actionType === 'kit') {
                 const kits = await ServerKit.findAll({ where: { guildId } });
@@ -161,7 +148,6 @@ const bindHandler = async (interaction, client) => {
                 );
             }
 
-            // ROW 3: Settings Buttons (Bind Name, Role, Cooldown)
             const row3Settings = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('btn_bind_name').setLabel('1. Name Bind').setStyle(ButtonStyle.Secondary).setEmoji('✏️'),
                 new ButtonBuilder().setCustomId('btn_bind_role').setLabel('2. Select Role').setStyle(ButtonStyle.Secondary).setEmoji('🛡️'),
@@ -169,7 +155,6 @@ const bindHandler = async (interaction, client) => {
                 new ButtonBuilder().setCustomId('btn_bind_cost').setLabel('Scrap Cost').setStyle(ButtonStyle.Secondary).setEmoji('🪙')
             );
 
-            // ROW 4: Save & Cancel
             const row4Action = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('btn_bind_save').setLabel(session.bindId ? 'Update Bind' : 'Save Bind').setStyle(ButtonStyle.Success).setEmoji('💾'),
                 new ButtonBuilder().setCustomId('btn_bind_cancel').setLabel('Cancel').setStyle(ButtonStyle.Danger).setEmoji('✖️')
@@ -185,7 +170,6 @@ const bindHandler = async (interaction, client) => {
             return await renderDashboard(interaction);
         }
 
-        // --- SELECT MENUS ---
         if (interaction.isStringSelectMenu()) {
             if (customId === 'bind_select_existing') {
                 if (selectedValue === 'none') return await interaction.deferUpdate();
@@ -215,7 +199,7 @@ const bindHandler = async (interaction, client) => {
                 session.targetValue = selectedValue;
                 session.name = session.name || `Kit: ${selectedValue}`;
                 bindSessions.set(guildId, session);
-                return await renderWizard(interaction, `🎁 Kit selected: **${selectedValue}**! Now set your Role & Cooldown.`);
+                return await renderWizard(interaction, `🎁 Kit selected: **${selectedValue}**!`);
             }
 
             if (customId === 'bind_emote_select') {
@@ -233,7 +217,6 @@ const bindHandler = async (interaction, client) => {
             return await renderWizard(interaction, `🛡️ Role restriction saved!`);
         }
 
-        // --- BUTTONS ---
         if (interaction.isButton()) {
             if (customId === 'btn_bind_start_create') {
                 bindSessions.set(guildId, { bindId: null, actionType: 'kit', targetValue: '', rotation: '', posX: '', posY: '', posZ: '', name: 'New Bind', cooldown: 0, cost: 0, roleId: null });
@@ -319,7 +302,6 @@ const bindHandler = async (interaction, client) => {
             }
         }
 
-        // --- MODAL SUBMISSIONS ---
         if (interaction.isModalSubmit()) {
             if (customId === 'modal_bind_name') {
                 session.name = interaction.fields.getTextInputValue('b_name').trim();
