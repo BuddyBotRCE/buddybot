@@ -1,5 +1,5 @@
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { CustomBind, ServerKit } = require('../database/db');
+const { CustomBind, ServerKit, UserEconomy } = require('../database/db');
 const { queueAdminPos } = require('../utils/rconManager'); 
 
 const bindSessions = new Map();
@@ -12,7 +12,6 @@ const ACTION_TYPES = {
     custom: { name: '⚡ Custom RCON', desc: 'Fires a raw custom server command', emoji: '⚡' }
 };
 
-// Official Rust Emote Wheel Options & Voice/Gesture commands
 const RUST_EMOTES = [
     { label: 'Wave', value: 'gesture wave', emoji: '👋', desc: 'Wave hello' },
     { label: 'Thumbs Up', value: 'gesture thumbsup', emoji: '👍', desc: 'Approve or agree' },
@@ -40,13 +39,11 @@ const bindHandler = async (interaction, client) => {
         const guildId = interaction.guild.id;
         let selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
 
-        // --- INITIALIZE SESSION ---
         if (!bindSessions.has(guildId)) {
             bindSessions.set(guildId, { step: 'menu', bindId: null, actionType: 'kit', targetValue: '', rotation: '', posX: '', posY: '', posZ: '', name: '', cooldown: 0, cost: 0, emote: '⭐' });
         }
         const session = bindSessions.get(guildId);
 
-        // --- RENDER MAIN DASHBOARD ---
         const renderDashboard = async (inter, messageOverride = '') => {
             const allBinds = await CustomBind.findAll({ where: { guildId } });
             
@@ -77,7 +74,6 @@ const bindHandler = async (interaction, client) => {
             return await inter.update(payload).catch(() => inter.followUp(payload));
         };
 
-        // --- RENDER CREATION / EDIT WIZARD ---
         const renderWizard = async (inter, messageOverride = '') => {
             const embed = new EmbedBuilder()
                 .setTitle('🛠️ Custom Bind Builder Wizard')
@@ -89,13 +85,11 @@ const bindHandler = async (interaction, client) => {
                 )
                 .setColor('#3498db');
 
-            // ROW 1: Choose Action Type Dropdown
             const row1Type = new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder().setCustomId('bind_type_select').setPlaceholder(`Action: ${ACTION_TYPES[session.actionType].name}`)
+                new StringSelectMenuBuilder().setCustomId('bind_type_select').setPlaceholder(`Action: ${ACTION_TYPES[session.actionType]?.name || 'Select Action'}`)
                     .addOptions(Object.keys(ACTION_TYPES).map(k => ({ label: ACTION_TYPES[k].name, description: ACTION_TYPES[k].desc, value: k, emoji: ACTION_TYPES[k].emoji })))
             );
 
-            // ROW 2: Dynamic Target Config (Kit Dropdown, Emote Wheel Dropdown, or Position Buttons)
             let row2Target;
             if (session.actionType === 'kit') {
                 const kits = await ServerKit.findAll({ where: { guildId } });
@@ -107,7 +101,7 @@ const bindHandler = async (interaction, client) => {
                 );
             } else if (session.actionType === 'emote') {
                 row2Target = new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder().setCustomId('bind_emote_select').setPlaceholder(session.targetValue ? `Selected Emote/Voice: ${session.targetValue}` : '🎭 Select Rust Emote or Voice option...').addOptions(RUST_EMOTES.slice(0, 25))
+                    new StringSelectMenuBuilder().setCustomId('bind_emote_select').setPlaceholder(session.targetValue ? `Selected Emote: ${session.targetValue}` : '🎭 Select Rust Emote or Voice option...').addOptions(RUST_EMOTES.slice(0, 25))
                 );
             } else if (session.actionType === 'teleport' || session.actionType === 'recycler') {
                 row2Target = new ActionRowBuilder().addComponents(
@@ -120,12 +114,10 @@ const bindHandler = async (interaction, client) => {
                 );
             }
 
-            // ROW 3: General Settings (Name, Cooldown, Cost, Emote Icon)
             const row3Settings = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('btn_bind_settings').setLabel('Set Name, CD & Cost').setStyle(ButtonStyle.Secondary).setEmoji('⚙️')
             );
 
-            // ROW 4: Save / Cancel
             const row4Action = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('btn_bind_save').setLabel(session.bindId ? 'Update Bind' : 'Save & Create Bind').setStyle(ButtonStyle.Success).setEmoji('💾'),
                 new ButtonBuilder().setCustomId('btn_bind_cancel').setLabel('Cancel / Back').setStyle(ButtonStyle.Danger).setEmoji('✖️')
@@ -137,12 +129,10 @@ const bindHandler = async (interaction, client) => {
             return await inter.update(payload).catch(() => inter.followUp(payload));
         };
 
-        // --- ENTRY FROM ADMIN PANEL ---
         if (customId === 'admin_menu_select' && (selectedValue === 'setup_binds' || selectedValue.includes('bind'))) {
             return await renderDashboard(interaction);
         }
 
-        // --- DROPDOWN HANDLERS ---
         if (interaction.isStringSelectMenu()) {
             if (customId === 'bind_select_existing') {
                 if (selectedValue === 'none') return await interaction.deferUpdate();
@@ -185,7 +175,6 @@ const bindHandler = async (interaction, client) => {
             }
         }
 
-        // --- BUTTON HANDLERS ---
         if (interaction.isButton()) {
             if (customId === 'btn_bind_start_create') {
                 bindSessions.set(guildId, { step: 'wizard', bindId: null, actionType: 'kit', targetValue: '', rotation: '', posX: '', posY: '', posZ: '', name: 'New Bind', cooldown: 0, cost: 0, emote: '⭐' });
@@ -209,10 +198,13 @@ const bindHandler = async (interaction, client) => {
             }
 
             if (customId === 'btn_bind_getpos') {
-                if (typeof queueAdminPos === 'function') {
-                    await queueAdminPos(interaction);
-                    return;
-                } else return await interaction.reply({ content: '❌ `queueAdminPos` missing.', flags: 64 });
+                // Find the user's in-game name from the database to query RCON printpos properly
+                const userEco = await UserEconomy.findOne({ where: { guildId, userId: interaction.user.id } });
+                const inGameName = userEco?.inGameName || interaction.user.username;
+
+                await interaction.reply({ content: `📍 Requesting position for **${inGameName}** from server RCON...`, flags: 64 });
+                queueAdminPos(inGameName, guildId, interaction.user.id, interaction.channel.id, 'custom_bind', client);
+                return;
             }
 
             if (customId === 'btn_bind_manual_target') {
@@ -225,10 +217,10 @@ const bindHandler = async (interaction, client) => {
                 if (!session.name) return await interaction.reply({ content: '❌ Please give your bind a name.', flags: 64 });
 
                 let finalCommand = '';
-                if (session.actionType === 'kit') finalCommand = `kit.give ${session.targetValue}`;
-                else if (session.actionType === 'teleport') finalCommand = `teleport.pos ${session.posX} ${session.posY} ${session.posZ}`;
+                if (session.actionType === 'kit') finalCommand = `kit.give {player} ${session.targetValue}`;
+                else if (session.actionType === 'teleport') finalCommand = `teleport.pos {player} ${session.posX} ${session.posY} ${session.posZ}`;
                 else if (session.actionType === 'recycler') finalCommand = `spawn recycler "${session.posX},${session.posY},${session.posZ}"`;
-                else if (session.actionType === 'emote') finalCommand = session.targetValue; // Executes gesture or chat callout natively
+                else if (session.actionType === 'emote') finalCommand = session.targetValue;
                 else finalCommand = session.targetValue;
 
                 const dbData = {
@@ -254,7 +246,6 @@ const bindHandler = async (interaction, client) => {
             }
         }
 
-        // --- MODAL SUBMISSIONS ---
         if (interaction.isModalSubmit()) {
             if (customId === 'modal_bind_settings') {
                 session.name = interaction.fields.getTextInputValue('b_name').trim();
@@ -267,7 +258,7 @@ const bindHandler = async (interaction, client) => {
             if (customId === 'modal_bind_manual') {
                 session.targetValue = interaction.fields.getTextInputValue('b_target').trim();
                 bindSessions.set(guildId, session);
-                return await renderWizard(interaction, `✅ Target value saved!`);
+                return await renderWizard(session, `✅ Target value saved!`);
             }
         }
 
