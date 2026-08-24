@@ -1,5 +1,6 @@
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, RoleSelectMenuBuilder } = require('discord.js');
 const { CustomBind, ServerKit, UserEconomy } = require('../database/db');
+const { queueAdminPos } = require('../utils/rconManager'); 
 
 const bindSessions = new Map();
 
@@ -7,7 +8,7 @@ const FEATURE_TYPES = {
     kit: { name: '🎁 Kit Bind', desc: 'Give an in-game kit', emoji: '🎁' },
     teleport: { name: '📍 Teleport Bind', desc: 'Teleport to saved coordinates', emoji: '📍' },
     recycler: { name: '♻️ Recycler Bind', desc: 'Spawn portable recycler', emoji: '♻️' },
-    emote: { name: '🎭 Rust Emotes & Wheel', desc: 'Trigger in-game gestures or voice wheel callouts', emoji: '🎭' },
+    emote: { name: '🎭 Rust Emotes & Wheel', desc: 'Trigger in-game gestures or voice callouts', emoji: '🎭' },
     custom: { name: '⚡ Custom Bind', desc: 'Run custom RCON command', emoji: '⚡' }
 };
 
@@ -104,7 +105,7 @@ const bindHandler = async (interaction, client) => {
             
             let targetStatus = session.targetValue || 'Not Selected';
             if (session.actionType === 'teleport' || session.actionType === 'recycler') {
-                targetStatus = session.posX ? `X: ${session.posX}, Y: ${session.posY}, Z: ${session.posZ}` : '❌ Coordinates Not Set';
+                targetStatus = session.posX ? `X: ${session.posX}, Y: ${session.posY}, Z: ${session.posZ}` : '❌ Position Not Set';
             }
 
             const embed = new EmbedBuilder()
@@ -137,7 +138,8 @@ const bindHandler = async (interaction, client) => {
                 );
             } else if (session.actionType === 'teleport' || session.actionType === 'recycler') {
                 row2Target = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('btn_bind_manual_target').setLabel(session.posX ? '📍 Coordinates Set (Update)' : '📍 Set Coordinates (X, Y, Z)').setStyle(ButtonStyle.Primary).setEmoji('📍')
+                    new ButtonBuilder().setCustomId('btn_bind_getpos').setLabel(session.posX ? '📍 Position Captured (Update)' : '📍 Get Admin Pos (In-Game)').setStyle(ButtonStyle.Primary).setEmoji('📍'),
+                    new ButtonBuilder().setCustomId('btn_bind_manual_target').setLabel('Manual Coordinates').setStyle(ButtonStyle.Secondary).setEmoji('⌨️')
                 );
             } else {
                 row2Target = new ActionRowBuilder().addComponents(
@@ -255,9 +257,18 @@ const bindHandler = async (interaction, client) => {
                 return await interaction.showModal(modal);
             }
 
+            if (customId === 'btn_bind_getpos') {
+                const userEco = await UserEconomy.findOne({ where: { guildId, userId: interaction.user.id } });
+                const inGameName = userEco?.inGameName || interaction.user.username;
+
+                await interaction.reply({ content: `📍 Requesting your in-game position via RCON...`, flags: 64 });
+                queueAdminPos(inGameName, guildId, interaction.user.id, interaction.channel.id, 'custom_bind', client);
+                return;
+            }
+
             if (customId === 'btn_bind_manual_target') {
-                const modal = new ModalBuilder().setCustomId('modal_bind_manual').setTitle('Enter Coordinates (X, Y, Z)');
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_target').setLabel("Coordinates (e.g. 100, 50, -200)").setStyle(TextInputStyle.Short).setValue(session.targetValue).setRequired(true)));
+                const modal = new ModalBuilder().setCustomId('modal_bind_manual').setTitle('Manual Coordinates');
+                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_target').setLabel("Enter X,Y,Z (e.g. 100, 50, -200)").setStyle(TextInputStyle.Short).setValue(session.targetValue).setRequired(true)));
                 return await interaction.showModal(modal);
             }
 
@@ -328,6 +339,16 @@ const bindHandler = async (interaction, client) => {
             await interaction.reply({ content: '❌ An error occurred processing custom binds.', flags: 64 }).catch(() => {});
         }
     }
+};
+
+bindHandler.autoSavePosition = async (guildId, x, y, z, rot = '') => {
+    const session = bindSessions.get(guildId);
+    if (!session) return;
+    session.posX = x;
+    session.posY = y;
+    session.posZ = z;
+    session.rotation = rot;
+    session.targetValue = `${x}, ${y}, ${z}`;
 };
 
 bindHandler.bindSessions = bindSessions;

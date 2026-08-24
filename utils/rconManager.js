@@ -183,29 +183,8 @@ async function sendRconCommand(guildId, commandStr) {
     ws.send(JSON.stringify({ Identifier: 1, Message: commandStr, Name: "BuddyBot" }));
     return true;
 }
-
 function queueAdminPos(adminName, guildId, adminId, channelId, type = 'custom_bind', client) {
-    if (adminPosQueue.has(adminName)) {
-        const old = adminPosQueue.get(adminName);
-        if (old.timeoutTimer) clearTimeout(old.timeoutTimer);
-    }
-
-    const timeoutTimer = setTimeout(async () => {
-        if (adminPosQueue.has(adminName)) {
-            adminPosQueue.delete(adminName);
-            const channel = client.channels.cache.get(channelId);
-            if (channel) {
-                const fallbackRow = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('btn_bind_manual_target').setLabel('Enter Coordinates Manually').setStyle(ButtonStyle.Primary).setEmoji('⌨️')
-                );
-                channel.send({ content: `<@${adminId}> ⚠️ RCON automatic coordinate lookup timed out (Console Edition limitation). Click below to enter your X,Y,Z coordinates manually:`, components: [fallbackRow] }).catch(()=>{});
-            }
-        }
-    }, 6000);
-
-    adminPosQueue.set(adminName, { guildId, adminId, channelId, type, timeoutTimer });
-
-    // Query both player list and server status info to catch coordinate outputs
+ // Query both player list and server status info to catch coordinate outputs
     sendRconCommand(guildId, `players`).catch(() => {});
     sendRconCommand(guildId, `status`).catch(() => {});
 }
