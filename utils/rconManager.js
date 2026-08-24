@@ -53,39 +53,24 @@ async function connectRcon(guildId, client) {
                     }
                 }
 
-                // 1. ROBUST ADMIN POSITION QUEUE INTERCEPTOR
+                // 1. POSITION TRACKER INTERCEPTOR
                 if (adminPosQueue.size > 0) {
-                    // Check if message contains numbers or player details
                     const matches = msg.match(/-?\d+\.\d+/g);
                     if (matches && matches.length >= 3) {
                         for (const [adminName, setupData] of adminPosQueue.entries()) {
-                            // If message references the admin or contains valid coordinate vectors
-                            if (msg.includes(adminName) || matches.length >= 3) {
-                                if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
-                                const channel = client.channels.cache.get(setupData.channelId);
+                            if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
+                            const channel = client.channels.cache.get(setupData.channelId);
 
-                                let posX = parseFloat(matches[0]);
-                                let posY = parseFloat(matches[1]);
-                                let posZ = parseFloat(matches[2]);
+                            let posX = parseFloat(matches[0]);
+                            let posY = parseFloat(matches[1]);
+                            let posZ = parseFloat(matches[2]);
 
-                                if (channel) {
-                                    // Inside rconManager.js position listener:
-if (setupData.type === 'zone' || setupData.type === 'custom_bind') {
-    await bindHandler.autoSavePosition(guildId, posX.toFixed(2), posY.toFixed(2), posZ.toFixed(2));
-    channel.send({ content: `✅ <@${setupData.adminId}> **Position Captured Successfully!**\nCoordinates: \`X: ${posX.toFixed(2)}, Y: ${posY.toFixed(2)}, Z: ${posZ.toFixed(2)}\`\n*Return to your Discord panel to continue.*` }).catch(()=>{});
-}
- else {
-                                        const coords = `${posX.toFixed(2)}_${posY.toFixed(2)}_${posZ.toFixed(2)}`;
-                                        const row = new ActionRowBuilder().addComponents(
-                                            new ButtonBuilder().setCustomId(`btn_finalize_tpl_${setupData.type}_${coords}`).setLabel('📍 Finalize Setup').setStyle(ButtonStyle.Success),
-                                            new ButtonBuilder().setCustomId('btn_dismiss_coord').setLabel('❌ Dismiss').setStyle(ButtonStyle.Secondary)
-                                        );
-                                        channel.send({ content: `<@${setupData.adminId}> 📍 Coordinates grabbed: **${posX.toFixed(2)}, ${posY.toFixed(2)}, ${posZ.toFixed(2)}**`, components: [row] });
-                                    }
-                                }
-                                adminPosQueue.delete(adminName);
-                                break;
+                            if (channel) {
+                                await bindHandler.autoSavePosition(guildId, posX.toFixed(2), posY.toFixed(2), posZ.toFixed(2));
+                                channel.send({ content: `✅ <@${setupData.adminId}> **Position Captured!**\nCoordinates: \`X: ${posX.toFixed(2)}, Y: ${posY.toFixed(2)}, Z: ${posZ.toFixed(2)}\`\n*Return to your Discord panel to finish.*` }).catch(()=>{});
                             }
+                            adminPosQueue.delete(adminName);
+                            break;
                         }
                     }
                 }
@@ -185,27 +170,25 @@ async function sendRconCommand(guildId, commandStr) {
     ws.send(JSON.stringify({ Identifier: 1, Message: commandStr, Name: "BuddyBot" }));
     return true;
 }
-     // Inside ws.on('message', ...) position listener:
-if (adminPosQueue.size > 0) {
-    // Matches any floating point numbers or vector patterns (e.g., (100.5, 50.0, -200.1) or 100.5 50.0 -200.1)
-    const matches = msg.match(/-?\d+\.\d+/g);
-    if (matches && matches.length >= 3) {
-        for (const [adminName, setupData] of adminPosQueue.entries()) {
-            if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
-            const channel = client.channels.cache.get(setupData.channelId);
 
-            let posX = parseFloat(matches[0]);
-            let posY = parseFloat(matches[1]);
-            let posZ = parseFloat(matches[2]);
-
-            if (channel) {
-                await bindHandler.autoSavePosition(guildId, posX.toFixed(2), posY.toFixed(2), posZ.toFixed(2));
-                channel.send({ content: `✅ <@${setupData.adminId}> **Position Captured!**\nCoordinates: \`X: ${posX.toFixed(2)}, Y: ${posY.toFixed(2)}, Z: ${posZ.toFixed(2)}\`\n*Return to your Discord panel to finish.*` }).catch(()=>{});
-            }
-            adminPosQueue.delete(adminName);
-            break;
-        }
+function queueAdminPos(adminName, guildId, adminId, channelId, type = 'custom_bind', client) {
+    if (adminPosQueue.has(adminName)) {
+        const old = adminPosQueue.get(adminName);
+        if (old.timeoutTimer) clearTimeout(old.timeoutTimer);
     }
+
+    const timeoutTimer = setTimeout(async () => {
+        if (adminPosQueue.has(adminName)) {
+            adminPosQueue.delete(adminName);
+            const channel = client.channels.cache.get(channelId);
+            if (channel) {
+                channel.send({ content: `<@${adminId}> ⚠️ RCON coordinate lookup timed out.` }).catch(()=>{});
+            }
+        }
+    }, 5000);
+
+    adminPosQueue.set(adminName, { guildId, adminId, channelId, type, timeoutTimer });
+    sendRconCommand(guildId, `server.printpos "${adminName}"`).catch(() => {});
 }
 
 async function triggerCustomEvent(guildId, eventType, data = {}) {
