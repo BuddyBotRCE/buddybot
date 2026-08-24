@@ -1,7 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ChannelSelectMenuBuilder, RoleSelectMenuBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType } = require('discord.js');
 const { ReactionRole } = require('../database/db');
 
-// In-memory session manager for setup panels
+// In-memory session manager for setup panels (Bypasses all DB limitations)
 const rrSetupSessions = new Map();
 
 module.exports = async (interaction, client) => {
@@ -20,45 +20,15 @@ module.exports = async (interaction, client) => {
 
         console.log(`[RR DEBUG] CustomID: ${customId} | SelectedValue: ${selectedValue}`);
 
-        // --- STEP 1: INTERMEDIATE ENTRY MENU (CHOOSE MODE) ---
-        if ((customId === 'admin_menu_select' && selectedValue === 'setup_reactionroles') || customId === 'rr_action_select') {
-            // Clear any old setup sessions when opening fresh
-            rrSetupSessions.delete(guildId);
-
-            const embed = new EmbedBuilder()
-                .setTitle('🛠️ Select Panel Type')
-                .setDescription('What kind of interactive panel would you like to build?\n\n🔄 **Reaction Roles**\nUsers can click buttons to add roles, and click them again to remove the roles.\n\n✅ **Verification Gateway**\nUsers can only claim the role once. Clicking the button again will not remove the role.')
-                .setColor('#9b59b6');
-
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('btn_rr_setmode_toggle').setLabel('Reaction Roles').setStyle(ButtonStyle.Primary).setEmoji('🔄'),
-                new ButtonBuilder().setCustomId('btn_rr_setmode_verify').setLabel('Verification Panel').setStyle(ButtonStyle.Success).setEmoji('✅')
-            );
-
-            const payload = { embeds: [embed], components: [row], flags: 64 };
-            if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-                return await interaction.reply(payload);
-            } else {
-                return await interaction.update(payload).catch(() => interaction.followUp(payload));
-            }
-        }
-
-        // --- STEP 2: SAVE CHOSEN MODE AND OPEN SETUP PANEL ---
-        if (interaction.isButton() && customId.startsWith('btn_rr_setmode_')) {
-            const chosenMode = customId.replace('btn_rr_setmode_', ''); // 'toggle' or 'verify'
-            rrSetupSessions.set(guildId, { channelId: null, description: null, panelMode: chosenMode });
-            return await renderSetupPanel(interaction, `✅ Selected Mode: **${chosenMode === 'verify' ? 'Verification (Add Only)' : 'Reaction Roles (Toggle)'}**`);
-        }
-
-        // Ensure session exists for subsequent steps
+        // Ensure session exists
         if (!rrSetupSessions.has(guildId)) {
             rrSetupSessions.set(guildId, { channelId: null, description: null, panelMode: 'toggle' });
         }
         const session = rrSetupSessions.get(guildId);
 
-        // Helper to render the main setup panel dynamically
-        async function renderSetupPanel(inter, messageOverride = '') {
-            const activeRoles = await ReactionRole.count({ where: { guildId: inter.guild.id, messageId: 'PENDING_DEPLOY' } });
+        // Helper to render the setup panel
+        const renderSetupPanel = async (inter, messageOverride = '') => {
+            const activeRoles = await ReactionRole.count({ where: { guildId, messageId: 'PENDING_DEPLOY' } });
             
             const targetChannelId = session.channelId;
             const targetChText = targetChannelId ? `<#${targetChannelId}>` : '❌ Not Selected Yet';
@@ -66,11 +36,10 @@ module.exports = async (interaction, client) => {
             const customTextStatus = customText ? `✅ Loaded (${customText.length} chars)` : '❌ Using Default Text';
             
             const isVerify = session.panelMode === 'verify';
-            const titleText = isVerify ? '✅ Verification Setup' : '🔄 Reaction Roles Setup';
-            const modeText = isVerify ? 'Verification (Add Only)' : 'Reaction Roles (Toggle)';
+            const modeText = isVerify ? '✅ **Verification (Add Only)**' : '🔄 **Reaction Roles (Toggle)**';
 
             const embed = new EmbedBuilder()
-                .setTitle(titleText)
+                .setTitle(isVerify ? '🔐 Verification Panel Setup' : '🎭 Reaction Roles Setup')
                 .setDescription(`${messageOverride ? `**${messageOverride}**\n\n` : ''}Configure your interactive panel below.\n\n• **Target Channel:** ${targetChText}\n• **Panel Mode:** ${modeText}\n• **Queued Roles:** ${activeRoles}\n• **Custom Description:** ${customTextStatus}`)
                 .setColor(isVerify ? '#2ecc71' : '#3498db');
 
@@ -81,10 +50,20 @@ module.exports = async (interaction, client) => {
                     .addChannelTypes(ChannelType.GuildText)
             );
 
+            const modeRow = new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('select_rr_mode')
+                    .setPlaceholder(isVerify ? '⚙️ Mode: Verification (Add-Only)' : '⚙️ Mode: Reaction Roles (Toggle)')
+                    .addOptions([
+                        { label: 'Reaction Role (Toggleable)', value: 'toggle', description: 'Users can click to add, and click again to remove.', emoji: '🔄' },
+                        { label: 'Verification (Add-Only)', value: 'verify', description: 'Users get the role permanently.', emoji: '✅' }
+                    ])
+            );
+
             const roleRow = new ActionRowBuilder().addComponents(
                 new RoleSelectMenuBuilder()
                     .setCustomId('select_rr_role')
-                    .setPlaceholder('🏷️ 2. Select Role to Add to Panel...')
+                    .setPlaceholder('🏷️ 3. Select Role to Add to Panel...')
             );
 
             const actionRow = new ActionRowBuilder().addComponents(
@@ -93,13 +72,18 @@ module.exports = async (interaction, client) => {
                 new ButtonBuilder().setCustomId('btn_rr_clear').setLabel('Clear Queue').setStyle(ButtonStyle.Danger).setEmoji('🗑️')
             );
 
-            const payload = { embeds: [embed], components: [channelRow, roleRow, actionRow], flags: 64 };
+            const payload = { embeds: [embed], components: [channelRow, modeRow, roleRow, actionRow], flags: 64 };
 
             if (inter.isRepliable() && !inter.replied && !inter.deferred) {
                 return await inter.reply(payload);
             } else {
                 return await inter.update(payload).catch(() => inter.followUp(payload));
             }
+        };
+
+        // --- ENTRY OR REFRESH (Catches the 'Create Role' action from Admin Handler) ---
+        if (customId === 'rr_action_select' || (customId === 'admin_menu_select' && selectedValue === 'setup_reactionroles')) {
+            return await renderSetupPanel(interaction);
         }
 
         // --- HANDLE CHANNEL SELECTION ---
@@ -109,6 +93,13 @@ module.exports = async (interaction, client) => {
             session.channelId = selectedValue;
             rrSetupSessions.set(guildId, session);
             return await renderSetupPanel(interaction, `✅ Target channel successfully set to <#${selectedValue}>!`);
+        }
+
+        // --- HANDLE MODE SELECTION (VERIFY VS TOGGLE) ---
+        if (interaction.isStringSelectMenu() && customId === 'select_rr_mode') {
+            session.panelMode = selectedValue;
+            rrSetupSessions.set(guildId, session);
+            return await renderSetupPanel(interaction, `✅ Panel behavior switched to: **${selectedValue === 'verify' ? 'Verification (Add Only)' : 'Reaction Roles (Toggle)'}**`);
         }
 
         // --- HANDLE ROLE SELECTION & PROMPT FOR EMOJI ---
@@ -141,7 +132,7 @@ module.exports = async (interaction, client) => {
 
             const embed = new EmbedBuilder()
                 .setTitle(`🎨 Choose Emoji for: ${roleObj?.name || 'Role'}`)
-                .setDescription('Select an emoji from the dropdown menu below to finalize adding this role.')
+                .setDescription('Select an emoji from the dropdown menu below to assign it to this button.')
                 .setColor('#2ecc71');
 
             return await interaction.reply({ embeds: [embed], components: [emojiMenu], flags: 64 });
@@ -224,11 +215,15 @@ module.exports = async (interaction, client) => {
                 }
             }
 
-            const customDescription = session.description || 'Click the button below to verify and get your role instantly!';
+            const isVerify = session.panelMode === 'verify';
+            const customDescription = session.description || (isVerify 
+                ? 'Click the button below to verify and unlock access to the server!' 
+                : 'Click the buttons below to assign or remove roles instantly!');
+
             const embed = new EmbedBuilder()
-                .setTitle(session.panelMode === 'verify' ? '🔐 Server Verification' : '🎭 Server Roles')
+                .setTitle(isVerify ? '🔐 Server Verification' : '🎭 Server Roles')
                 .setDescription(customDescription)
-                .setColor(session.panelMode === 'verify' ? '#2ecc71' : '#3498db')
+                .setColor(isVerify ? '#2ecc71' : '#3498db')
                 .setTimestamp();
 
             const buttons = roles.map((rr) => {
@@ -236,7 +231,7 @@ module.exports = async (interaction, client) => {
                 const btn = new ButtonBuilder()
                     .setCustomId(`rr_toggle_${rr.id}`)
                     .setLabel(labelText.substring(0, 80))
-                    .setStyle(rr.buttonStyle === 'Success' ? ButtonStyle.Success : ButtonStyle.Primary); 
+                    .setStyle(rr.buttonStyle === 'Success' ? ButtonStyle.Success : ButtonStyle.Primary);
                 
                 if (rr.emoji) btn.setEmoji(rr.emoji);
                 return btn;
@@ -250,7 +245,7 @@ module.exports = async (interaction, client) => {
             const sentMessage = await targetChannel.send({ embeds: [embed], components: rows });
 
             await ReactionRole.update({ messageId: sentMessage.id }, { where: { guildId, messageId: 'PENDING_DEPLOY' } });
-            rrSetupSessions.delete(guildId); // Wipe session completely after deploy
+            rrSetupSessions.delete(guildId); // Clear session after successful deployment
 
             return await interaction.reply({ content: `✅ Panel successfully deployed to <#${targetChannel.id}>!`, flags: 64 });
         }
@@ -267,7 +262,7 @@ module.exports = async (interaction, client) => {
 
             const member = interaction.member;
             
-            // Verification Mode Logic (Green Button / Success Style)
+            // Verification Mode: Green button / Add only
             if (rrData.buttonStyle === 'Success') {
                 if (member.roles.cache.has(role.id)) {
                     return await interaction.reply({ content: `✅ You are already verified!`, flags: 64 });
@@ -276,7 +271,7 @@ module.exports = async (interaction, client) => {
                     return await interaction.reply({ content: `✅ Verified! You have been assigned the **${role.name}** role.`, flags: 64 });
                 }
             } 
-            // Standard Reaction Role Mode Logic (Toggle)
+            // Reaction Role Mode: Blue button / Toggleable
             else {
                 if (member.roles.cache.has(role.id)) {
                     await member.roles.remove(role);
