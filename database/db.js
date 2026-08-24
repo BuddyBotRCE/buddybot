@@ -89,7 +89,21 @@ const GuildConfig = sequelize.define('GuildConfig', {
 const GameServer = sequelize.define('GameServer', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, serverName: { type: DataTypes.STRING, allowNull: false }, rconIp: { type: DataTypes.STRING, allowNull: false }, rconPort: { type: DataTypes.STRING, allowNull: false }, rconPassword: { type: DataTypes.STRING, allowNull: false }});
 const UserEconomy = sequelize.define('UserEconomy', { guildId: { type: DataTypes.STRING, primaryKey: true }, userId: { type: DataTypes.STRING, primaryKey: true }, wallet: { type: DataTypes.INTEGER, defaultValue: 0 }, bank: { type: DataTypes.INTEGER, defaultValue: 0 }, inGameName: { type: DataTypes.STRING, allowNull: true }, lastDaily: { type: DataTypes.DATE, allowNull: true }, lastVoteTime: { type: DataTypes.DATE, allowNull: true }, xp: { type: DataTypes.INTEGER, defaultValue: 0 }, level: { type: DataTypes.INTEGER, defaultValue: 1 }, pvpKills: { type: DataTypes.INTEGER, defaultValue: 0 }, pveKills: { type: DataTypes.INTEGER, defaultValue: 0 }, deaths: { type: DataTypes.INTEGER, defaultValue: 0 }, currentKillstreak: { type: DataTypes.INTEGER, defaultValue: 0 } });
 const Giveaway = sequelize.define('Giveaway', { messageId: { type: DataTypes.STRING, primaryKey: true }, guildId: { type: DataTypes.STRING }, channelId: { type: DataTypes.STRING }, prize: { type: DataTypes.STRING }, endTime: { type: DataTypes.DATE }, winnersCount: { type: DataTypes.INTEGER, defaultValue: 1 }, entries: { type: DataTypes.TEXT, defaultValue: '[]' }, isActive: { type: DataTypes.BOOLEAN, defaultValue: true } });
-const CustomBind = sequelize.define('CustomBind', { guildId: { type: DataTypes.STRING }, emote: { type: DataTypes.STRING }, command: { type: DataTypes.TEXT }, cooldown: { type: DataTypes.INTEGER, defaultValue: 0 }, cost: { type: DataTypes.INTEGER, defaultValue: 0 }, roleId: { type: DataTypes.STRING, allowNull: true } });
+
+// --- UPDATED CUSTOM BINDS MODEL ---
+const CustomBind = sequelize.define('CustomBind', { 
+    guildId: { type: DataTypes.STRING }, 
+    name: { type: DataTypes.STRING, defaultValue: 'Custom Bind' }, 
+    actionType: { type: DataTypes.STRING, defaultValue: 'custom' }, // 'kit', 'teleport', 'recycler', 'custom'
+    targetValue: { type: DataTypes.TEXT, allowNull: true }, // Stores kit name or coordinates
+    rotation: { type: DataTypes.STRING, allowNull: true }, // Stores player view angle for recyclers/teleports
+    emote: { type: DataTypes.STRING, defaultValue: '⭐' }, 
+    command: { type: DataTypes.TEXT, allowNull: true }, 
+    cooldown: { type: DataTypes.INTEGER, defaultValue: 0 }, 
+    cost: { type: DataTypes.INTEGER, defaultValue: 0 }, 
+    roleId: { type: DataTypes.STRING, allowNull: true } 
+});
+
 const BindCooldown = sequelize.define('BindCooldown', { guildId: { type: DataTypes.STRING, primaryKey: true }, userId: { type: DataTypes.STRING, primaryKey: true }, bindId: { type: DataTypes.INTEGER, primaryKey: true }, expiresAt: { type: DataTypes.DATE } });
 const ServerKit = sequelize.define('ServerKit', { guildId: { type: DataTypes.STRING }, kitName: { type: DataTypes.STRING }, items: { type: DataTypes.TEXT } });
 const ShopItem = sequelize.define('ShopItem', { guildId: { type: DataTypes.STRING }, name: { type: DataTypes.STRING }, command: { type: DataTypes.STRING }, price: { type: DataTypes.INTEGER }, category: { type: DataTypes.STRING, defaultValue: 'custom' }, cooldownSeconds: { type: DataTypes.INTEGER, defaultValue: 0 }, requiredRoleId: { type: DataTypes.STRING, allowNull: true } });
@@ -109,14 +123,12 @@ const ClanInvite = sequelize.define('ClanInvite', { id: { type: DataTypes.INTEGE
 const ClanWar = sequelize.define('ClanWar', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, challengerClanId: { type: DataTypes.INTEGER, allowNull: false }, targetClanId: { type: DataTypes.INTEGER, allowNull: false }, status: { type: DataTypes.STRING, defaultValue: 'active' } });
 const ReactionRole = sequelize.define('ReactionRole', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, messageId: { type: DataTypes.STRING, allowNull: false }, emoji: { type: DataTypes.STRING, allowNull: false }, roleId: { type: DataTypes.STRING, allowNull: false }, isVerifyOnly: { type: DataTypes.BOOLEAN, defaultValue: false } });
 
-// ==========================================
-// 💥 NEW: UNLIMITED AUTO EVENTS SYSTEM 💥
-// ==========================================
+// Auto Events Models
 const AutoEvent = sequelize.define('AutoEvent', {
     id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
     guildId: { type: DataTypes.STRING, allowNull: false },
-    name: { type: DataTypes.STRING, allowNull: false }, // User sets this (e.g. "Main Monument Hackables")
-    eventType: { type: DataTypes.STRING, defaultValue: 'hackable' }, // hackable, supply, elite, node
+    name: { type: DataTypes.STRING, allowNull: false },
+    eventType: { type: DataTypes.STRING, defaultValue: 'hackable' },
     interval: { type: DataTypes.INTEGER, defaultValue: 60 },
     amount: { type: DataTypes.INTEGER, defaultValue: 1 },
     isEnabled: { type: DataTypes.BOOLEAN, defaultValue: false }
@@ -125,7 +137,7 @@ const AutoEvent = sequelize.define('AutoEvent', {
 const AutoEventLocation = sequelize.define('AutoEventLocation', {
     id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
     guildId: { type: DataTypes.STRING, allowNull: false },
-    eventId: { type: DataTypes.INTEGER, allowNull: false }, // Links directly to a specific AutoEvent profile
+    eventId: { type: DataTypes.INTEGER, allowNull: false },
     slot: { type: DataTypes.INTEGER, allowNull: false },
     posX: { type: DataTypes.STRING, allowNull: false },
     posY: { type: DataTypes.STRING, allowNull: false },
