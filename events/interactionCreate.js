@@ -22,7 +22,7 @@ const buddyPassHandler = require(handlerPath('buddyPassHandler'));
 const casinoHandler = require(handlerPath('casinoHandler'));
 const bountyHandler = require(handlerPath('bountyHandler'));
 const kitHandler = require(handlerPath('kitHandler'));
-const pveHandler = require(handlerPath('pveHandler'));
+const customZoneHandler = require('../handlers/customZoneHandler');
 const bindHandler = require(handlerPath('bindHandler'));
 const adminHandler = require(handlerPath('adminHandler'));
 const reactionRoleHandler = require(handlerPath('reactionRoleHandler'));
@@ -53,7 +53,7 @@ module.exports = async (interaction, client) => {
             if (selectedValue === 'setup_minigames') return await casinoHandler(interaction, client);
             if (selectedValue === 'setup_bounties') return await bountyHandler(interaction, client);
             if (selectedValue === 'setup_kits') return await kitHandler(interaction, client);
-            if (selectedValue === 'setup_pvezones') return await pveHandler(interaction, client);
+            if (selectedValue === 'setup_pve_zones') return await customZoneHandler(interaction, client);
             if (selectedValue === 'setup_binds') return await bindHandler(interaction, client);
             if (selectedValue === 'setup_verification') return await verificationHandler(interaction, client);
             if (selectedValue === 'setup_reactionroles') return await reactionRoleHandler(interaction, client);
@@ -115,8 +115,8 @@ module.exports = async (interaction, client) => {
         if (customId.includes('pve') || customId.includes('zone')) {
             return await pveHandler(interaction, client);
         }
-        if (customId.includes('bind') || customId.startsWith('tpl_') || customId === 'btn_dismiss_coord' || customId.startsWith('btn_finalize_tpl_') || customId.startsWith('modal_final_')) {
-            return await bindHandler(interaction, client);
+        if (customId.startsWith('cz_') || customId.startsWith('btn_cz_') || customId.startsWith('modal_cz_') || customId === 'select_custom_zone') {
+            return await customZoneHandler(interaction, client);
         }
         if (customId.includes('verify') || customId.includes('verification')) {
             return await verificationHandler(interaction, client);
