@@ -59,7 +59,8 @@ module.exports = async (interaction, client) => {
             if (selectedValue === 'setup_minigames') return await casinoHandler(interaction, client);
             if (selectedValue === 'setup_bounties') return await bountyHandler(interaction, client);
             if (selectedValue === 'setup_kits') return await kitHandler(interaction, client);
-            if (selectedValue === 'setup_binds') return await bindHandler(interaction, client);
+            if (selectedValue === 'setup_tier') return require('../handlers/premiumHandler')(interaction, client);
+            if (selectedValue === 'setup_binds') return require('../handlers/bindHandler')(interaction, client); // <-- Is this line here?
             
             // --> NEW ROUTING LINKS <--
             if (selectedValue.includes('pve') || selectedValue.includes('zone')) return await customZoneHandler(interaction, client);
