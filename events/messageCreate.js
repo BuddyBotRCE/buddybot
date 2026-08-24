@@ -1,15 +1,16 @@
 const { EmbedBuilder, PermissionsBitField } = require('discord.js');
 const { GuildConfig } = require('../database/db');
 
-// Memory cache to track spam (messages per user)
+// Memory cache to track spam (messages per user within a time frame)
 const spamTracker = new Map();
 
 module.exports = async (message, client) => {
-    // Ignore bots and empty messages
+    // Ignore bots and empty messages (like embeds/images with no text)
     if (message.author.bot || !message.guild) return;
 
     // Ignore server admins and moderators so they don't get auto-modded
-    if (message.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) return;
+    // Added safety check for message.member in case of caching issues
+    if (message.member && message.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) return;
 
     try {
         // Fetch the guild's auto-mod config
@@ -17,15 +18,15 @@ module.exports = async (message, client) => {
         if (!config) return;
 
         let triggered = false;
-        let actionToTake = 'delete';
-        let reason = '';
 
         // --- HELPER FUNCTION TO EXECUTE PUNISHMENTS ---
         const executePunishment = async (action, logReason) => {
             triggered = true;
             try {
+                // Always delete the offending message
                 if (message.deletable) await message.delete().catch(() => {});
 
+                // Apply the specific punishment based on the dashboard settings
                 if (action === 'warn') {
                     const warnMsg = await message.channel.send(`⚠️ <@${message.author.id}>, your message was removed! Reason: **${logReason}**`);
                     setTimeout(() => warnMsg.delete().catch(() => {}), 5000);
@@ -65,7 +66,7 @@ module.exports = async (message, client) => {
         // --- 2. ANTI-LINK SCANNER ---
         if (!triggered && config.amLinkEnabled) {
             const linkRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
-            // Only trigger if they aren't sending tenor/giphy gifs
+            // Only trigger if they aren't sending harmless tenor/giphy gifs
             if (linkRegex.test(message.content) && !message.content.includes('tenor.com') && !message.content.includes('giphy.com')) {
                 await executePunishment(config.amLinkAction, 'Sending Unauthorized Links');
             }
@@ -91,7 +92,7 @@ module.exports = async (message, client) => {
         }
 
         // --- 5. ANTI-CAPS SCANNER ---
-        if (!triggered && config.amCapsEnabled && message.content.length > 10) { // Ignore short messages like "LOL"
+        if (!triggered && config.amCapsEnabled && message.content.length > 10) { // Ignore short messages like "LOL" or "BRB"
             const capsCount = message.content.replace(/[^A-Z]/g, '').length;
             const lettersCount = message.content.replace(/[^a-zA-Z]/g, '').length;
             
@@ -121,7 +122,7 @@ module.exports = async (message, client) => {
             spamTracker.set(authorId, recentMessages);
 
             if (recentMessages.length > limit) {
-                // Clear their cache so it doesn't trigger multiple times instantly
+                // Clear their cache so it doesn't trigger multiple times instantly for the same spam burst
                 spamTracker.set(authorId, []); 
                 await executePunishment(config.amSpamAction, 'Message Spamming');
             }
