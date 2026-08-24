@@ -18,11 +18,23 @@ module.exports = async (interaction, client) => {
             const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('log_action_select').setPlaceholder('Select a log channel to configure...').addOptions([{ label: 'Set Admin Logs Channel', value: 'log_admin', emoji: '🛡️' }, { label: 'Set Game Feeds Channel', value: 'log_game', emoji: '🎮' }, { label: 'Set Discord Logs Channel', value: 'log_discord', emoji: '💬' }]));
             return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
         }
+        
+        // --- UPDATED REACTION ROLE MENU GENERATION ---
         if (selectedValue === 'setup_reaction_roles') {
-            const embed = new EmbedBuilder().setTitle('🔘 Reaction Roles & Verification Manager').setDescription('Create interactive reaction role panels or a strict non-toggle "Verify" button.').setColor('#3498db');
-            const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('rr_action_select').setPlaceholder('Select reaction role action...').addOptions([{ label: 'Create Reaction Role Panel', value: 'rr_create', emoji: '➕' }, { label: 'Remove Reaction Role', value: 'rr_remove', emoji: '🗑️' }]));
+            const embed = new EmbedBuilder().setTitle('🔘 Reaction Roles & Verification Manager').setDescription('Select an option below to create a panel or manage existing ones.').setColor('#3498db');
+            const row = new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('rr_action_select')
+                    .setPlaceholder('⚙️ Choose Role Panel Type to Create...')
+                    .addOptions([
+                        { label: 'Create Reaction Roles', value: 'create_reaction_roles', description: 'Toggleable roles (Add/Remove)', emoji: '🔄' }, 
+                        { label: 'Create Verification Panel', value: 'create_verification_panel', description: 'One-time click (Add-Only)', emoji: '✅' },
+                        { label: 'Remove Reaction Role', value: 'rr_remove', description: 'Delete a panel configuration by ID', emoji: '🗑️' }
+                    ])
+            );
             return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
         }
+
         if (selectedValue === 'setup_automod') {
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
             const embed = new EmbedBuilder().setTitle('🛡️ Auto-Moderation Suite').setDescription(`Configure automated chat filters.\n\n• **Status:** ${config?.autoModEnabled ? '🟢 Enabled' : '🔴 Disabled'}\n• **Action Type:** \`${config?.autoModAction || 'timeout'}\`\n• **Caps Limit:** ${config?.autoModCapsLimit || 70}%`).setColor('#e74c3c');
@@ -136,24 +148,6 @@ module.exports = async (interaction, client) => {
             const modal = new ModalBuilder().setCustomId(`modal_admin_give_item_exec_${targetUserId}_${shortname}`).setTitle(`Give ${shortname} to ${targetUser ? targetUser.inGameName : 'Player'}`);
             modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel("Enter Amount to Send").setStyle(TextInputStyle.Short).setValue('1').setRequired(true)));
             return interaction.showModal(modal);
-        }
-        if (customId === 'rr_action_select') {
-            if (selectedValue === 'rr_create') {
-                const modal = new ModalBuilder().setCustomId('modal_rr_create').setTitle('Create Reaction Role Panel');
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('channel_id').setLabel("Target Channel ID").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('emoji').setLabel("Emoji (e.g. 🎮 or custom id)").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('role_id').setLabel("Role ID to Assign").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('is_verify').setLabel("Verify Only? (1 for Yes, 0 for No)").setStyle(TextInputStyle.Short).setValue('0').setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('panel_text').setLabel("Embed Description Text").setStyle(TextInputStyle.Paragraph).setRequired(true))
-                );
-                return interaction.showModal(modal);
-            }
-            if (selectedValue === 'rr_remove') {
-                const modal = new ModalBuilder().setCustomId('modal_rr_remove').setTitle('Remove Reaction Role');
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('message_id').setLabel("Discord Message ID of Panel").setStyle(TextInputStyle.Short).setRequired(true)));
-                return interaction.showModal(modal);
-            }
         }
         if (customId === 'select_ai_provider') {
             let defaultUrl = 'https://api.openai.com/v1'; let defaultModel = 'gpt-4o-mini';
@@ -291,28 +285,7 @@ module.exports = async (interaction, client) => {
         }
     }
 
-    // --- MODALS ---
     if (interaction.isModalSubmit()) {
-        if (customId === 'modal_rr_create') {
-            const channelId = interaction.fields.getTextInputValue('channel_id');
-            const emoji = interaction.fields.getTextInputValue('emoji');
-            const roleId = interaction.fields.getTextInputValue('role_id');
-            const isVerify = interaction.fields.getTextInputValue('is_verify') === '1';
-            const panelText = interaction.fields.getTextInputValue('panel_text');
-            const targetChannel = interaction.guild.channels.cache.get(channelId);
-            if (!targetChannel) return interaction.reply({ content: '❌ Invalid Channel ID provided.', flags: 64 });
-            const embed = new EmbedBuilder().setTitle(isVerify ? '✅ Server Verification' : '🔘 Reaction Roles').setDescription(panelText).setColor(isVerify ? '#2ecc71' : '#3498db').setTimestamp();
-            const msg = await targetChannel.send({ embeds: [embed] });
-            await msg.react(emoji).catch(() => {});
-            await ReactionRole.create({ guildId: interaction.guild.id, messageId: msg.id, emoji: emoji, roleId: roleId, isVerifyOnly: isVerify });
-            return interaction.reply({ content: `✅ Reaction role panel successfully posted in <#${targetChannel.id}>!`, flags: 64 });
-        }
-        if (customId === 'modal_rr_remove') {
-            const msgId = interaction.fields.getTextInputValue('message_id');
-            const deleted = await ReactionRole.destroy({ where: { guildId: interaction.guild.id, messageId: msgId } });
-            if (deleted) return interaction.reply({ content: `✅ Successfully removed reaction role configurations for message ID \`${msgId}\`.`, flags: 64 });
-            else return interaction.reply({ content: `❌ No reaction role found with that message ID.`, flags: 64 });
-        }
         if (customId === 'modal_automod_config') {
             const action = interaction.fields.getTextInputValue('action').trim().toLowerCase();
             const caps = parseInt(interaction.fields.getTextInputValue('caps')) || 70;
