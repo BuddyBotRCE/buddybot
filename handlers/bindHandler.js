@@ -1,351 +1,256 @@
-const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, RoleSelectMenuBuilder } = require('discord.js');
-const { CustomBind, ServerKit, UserEconomy } = require('../database/db');
-const { queueAdminPos } = require('../utils/rconManager'); 
+const WebSocket = require('ws');
+const { GuildConfig, UserEconomy, CustomBind, BindCooldown, ActiveBounty, BountyCooldown } = require('../database/db');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const bindHandler = require('../handlers/bindHandler');
 
-const bindSessions = new Map();
+const activeConnections = new Map();
+const adminPosQueue = new Map(); 
 
-const RUST_EMOTES = [
-    { label: '👋 Wave (gesture wave)', value: 'gesture wave', emoji: '👋' },
-    { label: '👍 Thumbs Up (gesture thumbsup)', value: 'gesture thumbsup', emoji: '👍' },
-    { label: '👎 Thumbs Down (gesture thumbsdown)', value: 'gesture thumbsdown', emoji: '👎' },
-    { label: '👉 Point (gesture point)', value: 'gesture point', emoji: '👉' },
-    { label: '🤷 Shrug (gesture shrug)', value: 'gesture shrug', emoji: '🤷' },
-    { label: '👌 OK (gesture ok)', value: 'gesture ok', emoji: '👌' },
-    { label: '👏 Clap (gesture clap)', value: 'gesture clap', emoji: '👏' },
-    { label: '🎉 Victory / Cheer (gesture victory)', value: 'gesture victory', emoji: '🎉' },
-    { label: '🪵 Callout: I Need Wood', value: 'chat.say "I need wood!"', emoji: '🪵' },
-    { label: '🪨 Callout: I Need Stone', value: 'chat.say "I need stone!"', emoji: '🪨' },
-    { label: '⚙️ Callout: I Need Metal', value: 'chat.say "I need metal!"', emoji: '⚙️' },
-    { label: '🆘 Callout: Help!', value: 'chat.say "Help!"', emoji: '🆘' },
-    { label: '🤝 Callout: Friendly!', value: 'chat.say "Friendly!"', emoji: '🤝' },
-    { label: '⬆️ Callout: Danger North', value: 'chat.say "Danger to the North!"', emoji: '⬆️' },
-    { label: '💀 Suicide (Instant Respawn)', value: 'kill', emoji: '💀' }
-];
+async function connectRcon(guildId, client) {
+    const config = await GuildConfig.findOne({ where: { guildId: guildId } });
+    if (!config || !config.rconIp || !config.rconPort || !config.rconPassword) throw new Error("Missing RCON credentials!");
+    if (activeConnections.has(guildId)) return "Already connected!";
 
-const FEATURE_TYPES = {
-    kit: { name: '🎁 Kit Bind', desc: 'Give an in-game kit', emoji: '🎁' },
-    teleport: { name: '📍 Teleport Bind', desc: 'Teleport to saved coordinates', emoji: '📍' },
-    recycler: { name: '♻️ Recycler Bind', desc: 'Spawn portable recycler in front of player', emoji: '♻️' },
-    custom: { name: '⚡ Custom Command', desc: 'Run custom RCON command', emoji: '⚡' }
-};
+    return new Promise((resolve, reject) => {
+        const ws = new WebSocket(`ws://${config.rconIp}:${config.rconPort}/${encodeURIComponent(config.rconPassword)}`);
+        const timeout = setTimeout(() => { ws.close(); reject(new Error("Connection timed out.")); }, 10000);
 
-const bindHandler = async (interaction, client) => {
-    try {
-        const customId = interaction.customId || '';
-        const guildId = interaction.guild.id;
-        let selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
+        ws.on('open', () => {
+            clearTimeout(timeout);
+            activeConnections.set(guildId, ws);
+            resolve("Connection established!");
+        });
+        ws.on('close', () => activeConnections.delete(guildId));
+        ws.on('error', () => { clearTimeout(timeout); activeConnections.delete(guildId); });
 
-        if (!bindSessions.has(guildId)) {
-            bindSessions.set(guildId, { 
-                bindId: null, 
-                emote: 'gesture wave', 
-                actionType: 'kit', 
-                targetValue: '', 
-                posX: '', posY: '', posZ: '', 
-                name: '', 
-                cooldown: 0, 
-                cost: 0, 
-                roleId: null 
-            });
+        ws.on('message', async (data) => {
+            try {
+                const parsed = JSON.parse(data);
+                if (!parsed || !parsed.Message) return;
+                const msg = parsed.Message;
+                const msgLower = msg.toLowerCase();
+
+                console.log('[RCON CONSOLE OUTPUT]', msg);
+
+                const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
+                const guild = client.guilds.cache.get(guildId);
+
+                // ==========================================
+                // 1. CONSOLE POSITION QUEUE INTERCEPTOR
+                // ==========================================
+                if (adminPosQueue.size > 0) {
+                    const matches = msg.match(/-?\d+\.\d+/g);
+                    if (matches && matches.length >= 3) {
+                        for (const [adminName, setupData] of adminPosQueue.entries()) {
+                            // If message matches the admin name or contains valid coordinate floats from the player list
+                            if (msg.includes(adminName) || matches.length >= 3) {
+                                if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
+                                const channel = client.channels.cache.get(setupData.channelId);
+
+                                let posX = parseFloat(matches[0]);
+                                let posY = parseFloat(matches[1]);
+                                let posZ = parseFloat(matches[2]);
+
+                                if (channel) {
+                                    await bindHandler.autoSavePosition(guildId, posX.toFixed(2), posY.toFixed(2), posZ.toFixed(2));
+                                    channel.send({ content: `✅ <@${setupData.adminId}> **Position Captured Successfully!**\nCoordinates: \`X: ${posX.toFixed(2)}, Y: ${posY.toFixed(2)}, Z: ${posZ.toFixed(2)}\`\n*Return to your Discord panel to finish.*` }).catch(()=>{});
+                                }
+                                adminPosQueue.delete(adminName);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // ==========================================
+                // 2. LIVE GAME FEEDS & AUDIT LOGS
+                // ==========================================
+                if (currentConfig && guild) {
+                    if (/(giving |spawned |teleport|kick |ban |inventory\.giveto)/i.test(msg)) {
+                        if (currentConfig.logAdminChannelId) {
+                            const chan = guild.channels.cache.get(currentConfig.logAdminChannelId);
+                            if (chan) chan.send({ embeds: [new EmbedBuilder().setColor('#e67e22').setDescription(`🛠️ **Admin / System Action:**\n\`\`\`${msg}\`\`\``).setTimestamp()] }).catch(()=>{});
+                        }
+                    }
+                    if (/(Cargo Ship|Patrol Helicopter|Airdrop|Bradley APC|Locked Crate)/i.test(msg)) {
+                        if (currentConfig.logGameChannelId) {
+                            const chan = guild.channels.cache.get(currentConfig.logGameChannelId);
+                            if (chan) chan.send({ embeds: [new EmbedBuilder().setColor('#9b59b6').setDescription(`🌍 **World Event:**\n\`\`\`${msg}\`\`\``).setTimestamp()] }).catch(()=>{});
+                        }
+                    }
+                }
+
+                // ==========================================
+                // 3. KILLFEED & BOUNTIES
+                // ==========================================
+                if ((msgLower.includes('killed') || msgLower.includes('murdered') || msgLower.includes('suicide') || msgLower.includes('died') || msgLower.includes('slain')) && !msg.includes('[Killfeed]')) {
+                    await sendRconCommand(guildId, `say "[Killfeed] ${msg}"`);
+                    let embedColor = '#e74c3c';
+                    let killType = '⚔️ PvP Combat';
+
+                    if (msgLower.includes('scientist') || msgLower.includes('boar') || msgLower.includes('bear') || msgLower.includes('wolf') || msgLower.includes('fall') || msgLower.includes('drown') || msgLower.includes('fire') || msgLower.includes('radiation')) {
+                        embedColor = '#3498db';
+                        killType = '🐻 PvE / Environmental';
+                    } else if (msgLower.includes('suicide')) {
+                        embedColor = '#95a5a6';
+                        killType = '💀 Suicide';
+                    }
+
+                    let killerDb = null;
+                    let victimDb = null;
+                    const playersList = await UserEconomy.findAll({ where: { guildId: guildId } });
+
+                    for (const p of playersList) {
+                        if (p.inGameName && msg.includes(p.inGameName)) {
+                            if (msgLower.includes('killed') && msg.indexOf(p.inGameName) < msg.indexOf('killed')) {
+                                if (killType.includes('PvP')) {
+                                    await p.update({ pvpKills: (p.pvpKills || 0) + 1 });
+                                    killerDb = p; 
+                                } else {
+                                    await p.update({ pveKills: (p.pveKills || 0) + 1 });
+                                }
+                            } else if (msgLower.includes('killed') || msgLower.includes('murdered')) {
+                                await p.update({ deaths: (p.deaths || 0) + 1, currentKillstreak: 0 });
+                                victimDb = p; 
+                            }
+                        }
+                    }
+
+                    if (currentConfig && currentConfig.killfeedChannelId) {
+                        const killfeedChannel = client.channels.cache.get(currentConfig.killfeedChannelId);
+                        if (killfeedChannel) {
+                            killfeedChannel.send({ embeds: [new EmbedBuilder().setTitle(killType).setDescription(`\`\`\`fix\n${msg}\`\`\``).setColor(embedColor).setTimestamp()] }).catch(() => {});
+                        }
+                    }
+
+                    if (killerDb && victimDb && killerDb.userId !== victimDb.userId) {
+                        await processBountyLogic(guildId, killerDb, victimDb, client, currentConfig);
+                    }
+                }
+
+                // ==========================================
+                // 4. CHAT PARSER & CUSTOM BINDS EXECUTION
+                // ==========================================
+                if (msgLower.includes('[chat]')) {
+                    const chatMatch = msg.match(/\[CHAT\] (.*?): (.*)/i);
+                    if (chatMatch) {
+                        const playerName = chatMatch[1].replace(/\[.*?\]/g, '').trim(); 
+                        const chatText = chatMatch[2].toLowerCase();
+
+                        if (currentConfig && currentConfig.crossChatChannelId) {
+                            const crossChatChannel = client.channels.cache.get(currentConfig.crossChatChannelId);
+                            if (crossChatChannel && !playerName.includes('[Discord]')) {
+                                crossChatChannel.send(`💬 **[In-Game] ${playerName}**: ${chatText}`);
+                            }
+                        }
+
+                        const serverBinds = await CustomBind.findAll({ where: { guildId: guildId } });
+                        const activeBind = serverBinds.find(b => b.emote.toLowerCase() === chatText || b.name.toLowerCase() === chatText || b.targetValue?.toLowerCase() === chatText);
+                        
+                        if (activeBind) {
+                            const userProfile = await UserEconomy.findOne({ where: { guildId: guildId, inGameName: playerName } });
+                            if (activeBind.cost > 0 && (!userProfile || userProfile.wallet < activeBind.cost)) return;
+                            if (activeBind.cost > 0) await userProfile.update({ wallet: userProfile.wallet - activeBind.cost });
+
+                            const finalCommandString = activeBind.command.replace(/{player}/gi, `"${playerName}"`);
+                            const commands = finalCommandString.split('\n');
+                            for (const cmd of commands) {
+                                if (cmd.trim() !== '') await sendRconCommand(guildId, cmd.trim());
+                            }
+                        }
+                    }
+                }
+            } catch (e) {}
+        });
+    });
+}
+
+async function sendRconCommand(guildId, commandStr) {
+    let ws = activeConnections.get(guildId);
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        try {
+            await connectRcon(guildId, global.discordClient); 
+            ws = activeConnections.get(guildId);
+        } catch (e) {}
+    }
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        throw new Error("Not connected to RCON.");
+    }
+    ws.send(JSON.stringify({ Identifier: 1, Message: commandStr, Name: "BuddyBot" }));
+    return true;
+}
+
+function queueAdminPos(adminName, guildId, adminId, channelId, type = 'custom_bind', client) {
+    if (adminPosQueue.has(adminName)) {
+        const old = adminPosQueue.get(adminName);
+        if (old.timeoutTimer) clearTimeout(old.timeoutTimer);
+    }
+
+    const timeoutTimer = setTimeout(async () => {
+        if (adminPosQueue.has(adminName)) {
+            adminPosQueue.delete(adminName);
+            const channel = client.channels.cache.get(channelId);
+            if (channel) {
+                channel.send({ content: `<@${adminId}> ⚠️ RCON coordinate request timed out. Make sure you are online in-game!` }).catch(()=>{});
+            }
         }
-        const session = bindSessions.get(guildId);
+    }, 5000);
 
-        const renderDashboard = async (inter, messageOverride = '') => {
-            const allBinds = await CustomBind.findAll({ where: { guildId } });
+    adminPosQueue.set(adminName, { guildId, adminId, channelId, type, timeoutTimer });
+
+    // RUST CONSOLE EDITION: Query the players command to fetch live coordinate vectors from G-Portal
+    sendRconCommand(guildId, `players`).catch(() => {});
+}
+
+async function triggerCustomEvent(guildId, eventType, data = {}) {
+    if (eventType === 'supply_drop') return await sendRconCommand(guildId, 'supply.drop');
+    if (eventType === 'elite_crate') return await sendRconCommand(guildId, 'spawn codelockedhackablecrate');
+    if (eventType === 'timed_crate') return await sendRconCommand(guildId, 'spawn hackablelockedcrate');
+    if (eventType === 'docked_cargo') {
+        const config = await GuildConfig.findOne({ where: { guildId } });
+        if (config && config.cargoDockX !== null && config.cargoDockY !== null && config.cargoDockZ !== null) {
+            const coords = `${config.cargoDockX},${config.cargoDockY},${config.cargoDockZ}`;
+            return await sendRconCommand(guildId, `spawn cargoshipdynamic1 ${coords}`);
+        }
+        return await sendRconCommand(guildId, 'cargoships.spawncargoship');
+    }
+    throw new Error('Unknown custom event type.');
+}
+
+async function processBountyLogic(guildId, killerDb, victimDb, client, config) {
+    const currency = config.economyCurrency || 'Scrap';
+    const guild = client.guilds.cache.get(guildId);
+    const gameChannel = config.logGameChannelId ? guild?.channels.cache.get(config.logGameChannelId) : null;
+
+    await killerDb.update({ currentKillstreak: (killerDb.currentKillstreak || 0) + 1 });
+
+    if (killerDb.currentKillstreak >= (config.bountyKillsToActivate || 5)) {
+        const cd = await BountyCooldown.findOne({ where: { guildId, userId: killerDb.userId } });
+        const now = new Date();
+        
+        if (!cd || cd.expiresAt < now) {
+            const existingBounty = await ActiveBounty.findOne({ where: { guildId, userId: killerDb.userId } });
             
-            let listText = allBinds.length === 0 ? '*No custom binds created yet.*' : '';
-            for (const b of allBinds) {
-                listText += `🎭 **${b.name}** [Trigger: \`${b.emote}\`] | Type: \`${b.actionType}\` | CD: ${b.cooldown}s | Cost: ${b.cost} Scrap\n`;
-            }
+            if (!existingBounty) {
+                await ActiveBounty.create({ guildId, userId: killerDb.userId, inGameName: killerDb.inGameName, reward: config.bountyRewardAmount || 500 });
+                const cdTime = new Date(now.getTime() + (config.bountyCooldownMinutes || 60) * 60000);
+                await BountyCooldown.upsert({ guildId, userId: killerDb.userId, expiresAt: cdTime });
 
-            const embed = new EmbedBuilder()
-                .setTitle('🔗 In-Game Emote & Bind Manager')
-                .setDescription(`${messageOverride ? `**${messageOverride}**\n\n` : ''}Bind server features (Kits, Teleports, Recyclers) directly to your **Rust Console Edition In-Game Emote / Voice Wheel**!\n\n**Active Binds:**\n${listText}`)
-                .setColor('#e67e22');
-
-            let bindOptions = allBinds.map(b => ({ label: b.name, description: `Trigger: ${b.emote} | Type: ${b.actionType}`, value: `edit_bind_${b.id}`, emoji: '📂' }));
-            if (bindOptions.length === 0) bindOptions.push({ label: 'No binds available', value: 'none' });
-
-            const row1Load = new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder().setCustomId('bind_select_existing').setPlaceholder('📂 Select an existing bind to edit...').addOptions(bindOptions.slice(0, 25))
-            );
-
-            const row2Create = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('btn_bind_start_create').setLabel('Create New Emote Bind').setStyle(ButtonStyle.Success).setEmoji('✨')
-            );
-
-            const payload = { embeds: [embed], components: [row1Load, row2Create], flags: 64 };
-            if (inter.isRepliable() && !inter.replied && !inter.deferred) return await inter.reply(payload);
-            return await inter.update(payload).catch(() => inter.followUp(payload));
-        };
-
-        const renderWizard = async (inter, messageOverride = '') => {
-            const feat = FEATURE_TYPES[session.actionType] || FEATURE_TYPES.custom;
-            const chosenEmote = RUST_EMOTES.find(e => e.value === session.emote) || { label: session.emote, emoji: '🎭' };
-
-            let targetStatus = session.targetValue || 'Not Configured';
-            if (session.actionType === 'teleport' || session.actionType === 'recycler') {
-                targetStatus = session.posX ? `X: ${session.posX}, Y: ${session.posY}, Z: ${session.posZ}` : '❌ Position Not Set';
-            }
-
-            const embed = new EmbedBuilder()
-                .setTitle(`🛠️ Bind Builder: ${session.name || 'New Emote Bind'}`)
-                .setDescription(`${messageOverride ? `**${messageOverride}**\n\n` : ''}Configure your in-game emote trigger and mapped feature below.`)
-                .addFields(
-                    { name: '1️⃣ Trigger Emote / Wheel', value: `${chosenEmote.emoji} **${chosenEmote.label}**`, inline: true },
-                    { name: '2️⃣ Mapped Feature & Target', value: `${feat.emoji} **${feat.name}**\n\`${targetStatus}\``, inline: true },
-                    { name: '3️⃣ Rules & Costs', value: `• **Cooldown:** ${session.cooldown}s\n• **Required Role:** ${session.roleId ? `<@&${session.roleId}>` : 'None (Everyone)'}\n• **Scrap Cost:** ${session.cost}`, inline: false }
-                )
-                .setColor('#3498db');
-
-            // ROW 1: Emote Trigger Dropdown
-            const row1Emote = new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder().setCustomId('bind_emote_select').setPlaceholder(`Trigger: ${chosenEmote.label}`)
-                    .addOptions(RUST_EMOTES.slice(0, 25))
-            );
-
-            // ROW 2: Feature Type Dropdown
-            const row2Feature = new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder().setCustomId('bind_feature_select').setPlaceholder(`Feature: ${feat.name}`)
-                    .addOptions(Object.keys(FEATURE_TYPES).map(k => ({ label: FEATURE_TYPES[k].name, description: FEATURE_TYPES[k].desc, value: k, emoji: FEATURE_TYPES[k].emoji })))
-            );
-
-            // ROW 3: Contextual Target/Data (Kit selector or Get Position button)
-            let row3Target;
-            if (session.actionType === 'kit') {
-                const kits = await ServerKit.findAll({ where: { guildId } });
-                let kitOpts = kits.map(k => ({ label: k.kitName, value: k.kitName, emoji: '🎁' }));
-                if (kitOpts.length === 0) kitOpts.push({ label: 'No kits found in DB', value: 'none' });
-
-                row3Target = new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder().setCustomId('bind_kit_select').setPlaceholder(session.targetValue ? `Kit: ${session.targetValue}` : '🎁 Select Kit from In-Game Database...').addOptions(kitOpts.slice(0, 25))
-                );
-            } else if (session.actionType === 'teleport' || session.actionType === 'recycler') {
-                row3Target = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('btn_bind_getpos').setLabel(session.posX ? '📍 Position Captured (Update)' : '📍 Get Admin Pos (In-Game)').setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder().setCustomId('btn_bind_manual_target').setLabel('Manual Coordinates').setStyle(ButtonStyle.Secondary).setEmoji('⌨️')
-                );
-            } else {
-                row3Target = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('btn_bind_manual_target').setLabel('Set Custom RCON Command').setStyle(ButtonStyle.Primary).setEmoji('✏️')
-                );
-            }
-
-            // ROW 4: Settings Buttons (Name, Role, Cooldown, Cost)
-            const row4Settings = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('btn_bind_name').setLabel('Name').setStyle(ButtonStyle.Secondary).setEmoji('✏️'),
-                new ButtonBuilder().setCustomId('btn_bind_role').setLabel('Role').setStyle(ButtonStyle.Secondary).setEmoji('🛡️'),
-                new ButtonBuilder().setCustomId('btn_bind_cooldown').setLabel('Cooldown').setStyle(ButtonStyle.Secondary).setEmoji('⏱️'),
-                new ButtonBuilder().setCustomId('btn_bind_cost').setLabel('Cost').setStyle(ButtonStyle.Secondary).setEmoji('🪙')
-            );
-
-            // ROW 5: Save & Cancel
-            const row5Action = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('btn_bind_save').setLabel(session.bindId ? 'Update Bind' : 'Save Bind').setStyle(ButtonStyle.Success).setEmoji('💾'),
-                new ButtonBuilder().setCustomId('btn_bind_cancel').setLabel('Cancel').setStyle(ButtonStyle.Danger).setEmoji('✖️')
-            );
-
-            const components = [row1Emote, row2Feature, row3Target, row4Settings, row5Action];
-            const payload = { embeds: [embed], components, flags: 64 };
-            if (inter.isRepliable() && !inter.replied && !inter.deferred) return await inter.reply(payload);
-            return await inter.update(payload).catch(() => inter.followUp(payload));
-        };
-
-        if (customId === 'admin_menu_select' && (selectedValue === 'setup_binds' || selectedValue.includes('bind'))) {
-            return await renderDashboard(interaction);
-        }
-
-        // --- SELECT MENUS ---
-        if (interaction.isStringSelectMenu()) {
-            if (customId === 'bind_select_existing') {
-                if (selectedValue === 'none') return await interaction.deferUpdate();
-                const bind = await CustomBind.findByPk(selectedValue.replace('edit_bind_', ''));
-                if (!bind) return await interaction.reply({ content: '❌ Bind not found.', flags: 64 });
-
-                session.bindId = bind.id;
-                session.emote = bind.emote;
-                session.actionType = bind.actionType;
-                session.targetValue = bind.targetValue;
-                session.name = bind.name;
-                session.cooldown = bind.cooldown;
-                session.cost = bind.cost;
-                session.roleId = bind.roleId;
-                if (bind.targetValue && bind.targetValue.includes(',')) {
-                    const parts = bind.targetValue.split(',').map(p => p.trim());
-                    session.posX = parts[0]; session.posY = parts[1]; session.posZ = parts[2];
+                if (gameChannel) {
+                    gameChannel.send({ embeds: [new EmbedBuilder().setTitle('🎯 BOUNTY PLACED!').setDescription(`**${killerDb.inGameName}** is unstoppable on a **${killerDb.currentKillstreak} killstreak**!\n\nA bounty of **${config.bountyRewardAmount || 500} ${currency}** has been placed on their head!`).setColor('#e74c3c')] }).catch(()=>{});
                 }
-                bindSessions.set(guildId, session);
-                return await renderWizard(interaction, `📂 Loaded bind: **${bind.name}**`);
             }
-
-            if (customId === 'bind_emote_select') {
-                session.emote = selectedValue;
-                const found = RUST_EMOTES.find(e => e.value === selectedValue);
-                session.name = session.name || (found ? found.label.replace(/^[^\w\s]+\s*/, '') : 'Emote Bind');
-                bindSessions.set(guildId, session);
-                return await renderWizard(interaction, `🎭 Trigger set to **${found?.label || selectedValue}**!`);
-            }
-
-            if (customId === 'bind_feature_select') {
-                session.actionType = selectedValue;
-                session.targetValue = ''; 
-                session.posX = ''; session.posY = ''; session.posZ = '';
-                bindSessions.set(guildId, session);
-                return await renderWizard(interaction, `✅ Feature selected: **${FEATURE_TYPES[selectedValue].name}**.`);
-            }
-
-            if (customId === 'bind_kit_select') {
-                if (selectedValue === 'none') return await interaction.deferUpdate();
-                session.targetValue = selectedValue;
-                session.name = session.name || `Kit: ${selectedValue}`;
-                bindSessions.set(guildId, session);
-                return await renderWizard(interaction, `🎁 Kit selected: **${selectedValue}**!`);
-            }
-        }
-
-        if (interaction.isRoleSelectMenu() && customId === 'select_bind_role') {
-            session.roleId = interaction.values[0] || null;
-            bindSessions.set(guildId, session);
-            return await renderWizard(interaction, `🛡️ Role restriction saved!`);
-        }
-
-        // --- BUTTONS ---
-        if (interaction.isButton()) {
-            if (customId === 'btn_bind_start_create') {
-                bindSessions.set(guildId, { bindId: null, emote: 'gesture wave', actionType: 'kit', targetValue: '', posX: '', posY: '', posZ: '', name: 'New Bind', cooldown: 0, cost: 0, roleId: null });
-                return await renderWizard(interaction);
-            }
-
-            if (customId === 'btn_bind_cancel') {
-                bindSessions.set(guildId, { step: 'menu' });
-                return await renderDashboard(interaction);
-            }
-
-            if (customId === 'btn_bind_name') {
-                const modal = new ModalBuilder().setCustomId('modal_bind_name').setTitle('Set Bind Name');
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_name').setLabel("Bind Name").setStyle(TextInputStyle.Short).setValue(session.name).setRequired(true)));
-                return await interaction.showModal(modal);
-            }
-
-            if (customId === 'btn_bind_role') {
-                const roleMenuRow = new ActionRowBuilder().addComponents(
-                    new RoleSelectMenuBuilder().setCustomId('select_bind_role').setPlaceholder('Select required role...').setMinValues(0).setMaxValues(1)
-                );
-                return await interaction.reply({ content: '🛡️ Choose the required Discord role for this bind:', components: [roleMenuRow], flags: 64 });
-            }
-
-            if (customId === 'btn_bind_cooldown') {
-                const modal = new ModalBuilder().setCustomId('modal_bind_cd').setTitle('Set Cooldown');
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_cd').setLabel("Cooldown in Seconds").setStyle(TextInputStyle.Short).setValue(session.cooldown.toString()).setRequired(true)));
-                return await interaction.showModal(modal);
-            }
-
-            if (customId === 'btn_bind_cost') {
-                const modal = new ModalBuilder().setCustomId('modal_bind_cost').setTitle('Set Scrap Cost');
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_cost').setLabel("Cost in Scrap").setStyle(TextInputStyle.Short).setValue(session.cost.toString()).setRequired(true)));
-                return await interaction.showModal(modal);
-            }
-
-            if (customId === 'btn_bind_getpos') {
-                const member = interaction.member;
-                const isOwner = interaction.guild.ownerId === interaction.user.id;
-                const isAdmin = member.permissions.has('Administrator') || member.permissions.has('ManageGuild');
-
-                if (!isOwner && !isAdmin) {
-                    return await interaction.reply({ content: '❌ You must be an Administrator or Server Owner to capture positions.', flags: 64 });
-                }
-
-                const userEco = await UserEconomy.findOne({ where: { guildId, userId: interaction.user.id } });
-                const inGameName = userEco?.inGameName || interaction.user.username;
-
-                await interaction.reply({ content: `📍 Requesting your position via RCON...`, flags: 64 });
-                queueAdminPos(inGameName, guildId, interaction.user.id, interaction.channel.id, 'custom_bind', client);
-                return;
-            }
-
-            if (customId === 'btn_bind_manual_target') {
-                const modal = new ModalBuilder().setCustomId('modal_bind_manual').setTitle('Manual Coordinates / Command');
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_target').setLabel("Enter X,Y,Z or Command").setStyle(TextInputStyle.Short).setValue(session.targetValue).setRequired(true)));
-                return await interaction.showModal(modal);
-            }
-
-            if (customId === 'btn_bind_save') {
-                if (!session.name) return await interaction.reply({ content: '❌ Please give your bind a name.', flags: 64 });
-
-                let finalCommand = '';
-                if (session.actionType === 'kit') finalCommand = `kit.give {player} ${session.targetValue}`;
-                else if (session.actionType === 'teleport') finalCommand = `teleport.pos {player} ${session.targetValue}`;
-                else if (session.actionType === 'recycler') finalCommand = `spawn recycler "${session.targetValue}"`;
-                else finalCommand = session.targetValue;
-
-                const dbData = {
-                    guildId,
-                    name: session.name,
-                    actionType: session.actionType,
-                    targetValue: session.targetValue,
-                    command: finalCommand,
-                    cooldown: session.cooldown,
-                    cost: session.cost,
-                    emote: session.emote,
-                    roleId: session.roleId
-                };
-
-                if (session.bindId) {
-                    await CustomBind.update(dbData, { where: { id: session.bindId } });
-                } else {
-                    await CustomBind.create(dbData);
-                }
-
-                bindSessions.set(guildId, { step: 'menu' });
-                return await renderDashboard(interaction, `✅ Custom bind **${session.name}** successfully saved!`);
-            }
-        }
-
-        if (interaction.isModalSubmit()) {
-            if (customId === 'modal_bind_name') {
-                session.name = interaction.fields.getTextInputValue('b_name').trim();
-                bindSessions.set(guildId, session);
-                return await renderWizard(interaction, `✅ Name set to **${session.name}**!`);
-            }
-            if (customId === 'modal_bind_cd') {
-                session.cooldown = parseInt(interaction.fields.getTextInputValue('b_cd')) || 0;
-                bindSessions.set(guildId, session);
-                return await renderWizard(interaction, `⏱️ Cooldown set to **${session.cooldown}s**!`);
-            }
-            if (customId === 'modal_bind_cost') {
-                session.cost = parseInt(interaction.fields.getTextInputValue('b_cost')) || 0;
-                bindSessions.set(guildId, session);
-                return await renderWizard(interaction, `🪙 Cost set to **${session.cost} Scrap**!`);
-            }
-            if (customId === 'modal_bind_manual') {
-                const val = interaction.fields.getTextInputValue('b_target').trim();
-                session.targetValue = val;
-                const parts = val.split(',').map(p => p.trim());
-                if (parts.length >= 3) {
-                    session.posX = parts[0]; session.posY = parts[1]; session.posZ = parts[2];
-                }
-                bindSessions.set(guildId, session);
-                return await renderWizard(interaction, `✅ Target/Coordinates saved!`);
-            }
-        }
-
-    } catch (error) {
-        console.error('[BIND HANDLER ERROR]', error);
-        if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-            await interaction.reply({ content: '❌ An error occurred processing custom binds.', flags: 64 }).catch(() => {});
         }
     }
-};
 
-bindHandler.autoSavePosition = async (guildId, x, y, z, rot = '') => {
-    const session = bindSessions.get(guildId);
-    if (!session) return;
-    session.posX = x;
-    session.posY = y;
-    session.posZ = z;
-    session.rotation = rot;
-    session.targetValue = `${x}, ${y}, ${z}`;
-};
+    const activeBounty = await ActiveBounty.findOne({ where: { guildId, userId: victimDb.userId } });
+    if (activeBounty) {
+        await killerDb.update({ wallet: killerDb.wallet + activeBounty.reward });
+        if (gameChannel) {
+            gameChannel.send({ embeds: [new EmbedBuilder().setTitle('🎯 BOUNTY CLAIMED!').setDescription(`**${killerDb.inGameName}** has killed **${victimDb.inGameName}** and claimed the bounty of **${activeBounty.reward} ${currency}**!`).setColor('#2ecc71')] }).catch(()=>{});
+        }
+        await activeBounty.destroy();
+    }
+}
 
-bindHandler.bindSessions = bindSessions;
-module.exports = bindHandler;
+module.exports = { connectRcon, sendRconCommand, triggerCustomEvent, activeConnections, adminPosQueue, queueAdminPos };
