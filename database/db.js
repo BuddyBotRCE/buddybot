@@ -142,7 +142,6 @@ const PveZone = sequelize.define('PveZone', {
     guildId: { type: DataTypes.STRING }, 
     zoneName: { type: DataTypes.STRING }, 
     
-    // New exact column names for the customZoneHandler
     radius: { type: DataTypes.STRING, allowNull: true },
     zoneColor: { type: DataTypes.STRING, defaultValue: 'green' },
     posX: { type: DataTypes.STRING, allowNull: true },
@@ -152,7 +151,11 @@ const PveZone = sequelize.define('PveZone', {
     enterMessage: { type: DataTypes.STRING }, 
     exitMessage: { type: DataTypes.STRING },
 
-    // Keeping old columns to prevent Sequelize syncing errors on live databases
+    // NEW ZONE RULES / FLAGS
+    allowBuild: { type: DataTypes.BOOLEAN, defaultValue: false },
+    allowPvp: { type: DataTypes.BOOLEAN, defaultValue: false },
+    allowPve: { type: DataTypes.BOOLEAN, defaultValue: false },
+
     shape: { type: DataTypes.STRING, defaultValue: 'sphere' }, 
     x: { type: DataTypes.FLOAT }, 
     y: { type: DataTypes.FLOAT }, 

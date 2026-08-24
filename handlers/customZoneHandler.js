@@ -1,6 +1,6 @@
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { PveZone } = require('../database/db');
-const { sendRconCommand, queueAdminPos } = require('../utils/rconManager'); // Hooked into your RCON Manager!
+const { sendRconCommand, queueAdminPos } = require('../utils/rconManager'); 
 
 // In-memory session manager for building Custom Zones
 const czSessions = new Map();
@@ -24,6 +24,9 @@ const customZoneHandler = async (interaction, client) => {
                 posZ: null,
                 enterMessage: null, 
                 exitMessage: null,
+                allowBuild: false, // Default rules
+                allowPvp: false,
+                allowPve: false,
                 isEditing: false 
             });
         }
@@ -40,10 +43,15 @@ const customZoneHandler = async (interaction, client) => {
             const zPos = (session.posX && session.posY && session.posZ) ? `${session.posX}, ${session.posY}, ${session.posZ}` : '❌ Not Set';
             const zEnter = session.enterMessage || '❌ Not Set';
             const zExit = session.exitMessage || '❌ Not Set';
+            
+            // Formatting flags for the embed
+            const fBuild = session.allowBuild ? '🟢 Allowed' : '🔴 Blocked';
+            const fPvp = session.allowPvp ? '🟢 Allowed' : '🔴 Blocked';
+            const fPve = session.allowPve ? '🟢 Allowed' : '🔴 Blocked';
 
             const embed = new EmbedBuilder()
                 .setTitle('🗺️ Custom Zone Builder')
-                .setDescription(`${messageOverride ? `**${messageOverride}**\n\n` : ''}Build, edit, or manage custom map zones (safe zones, arenas, VIP areas).\n\n**Current Draft:**\n• **Zone Name:** \`${zName}\`\n• **Size / Radius:** \`${zRadius}\`\n• **Coordinates:** \`${zPos}\`\n• **Map Color:** \`${zColor}\`\n• **Enter Message:** \`${zEnter}\`\n• **Exit Message:** \`${zExit}\`\n\n**Total Active Zones:** \`${allZones.length}\``)
+                .setDescription(`${messageOverride ? `**${messageOverride}**\n\n` : ''}Build, edit, or manage custom map zones (safe zones, arenas, VIP areas).\n\n**Current Draft:**\n• **Zone Name:** \`${zName}\`\n• **Size / Radius:** \`${zRadius}\`\n• **Coordinates:** \`${zPos}\`\n• **Map Color:** \`${zColor}\`\n• **Enter Message:** \`${zEnter}\`\n• **Exit Message:** \`${zExit}\`\n\n**Zone Rules:**\n• Building: ${fBuild} | PVP: ${fPvp} | PVE: ${fPve}\n\n**Total Active Zones:** \`${allZones.length}\``)
                 .setColor('#f39c12');
 
             // ROW 1: Load existing zones
@@ -91,16 +99,19 @@ const customZoneHandler = async (interaction, client) => {
                     ])
             );
 
-            // ROW 4: Setup Texts Dropdown (Combines Name and Messages into one dropdown to save space)
+            // ROW 4: Setup Texts & Rules Dropdown
             const row4Setup = new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder().setCustomId('cz_text_setup_select').setPlaceholder('⚙️ 4. Set Zone Name & Messages...')
+                new StringSelectMenuBuilder().setCustomId('cz_text_setup_select').setPlaceholder('⚙️ 4. Configure Details & Rules...')
                     .addOptions([
                         { label: 'Set Zone Name', description: 'Name your custom zone (No Spaces)', value: 'cz_set_name', emoji: '🏷️' },
-                        { label: 'Set Enter & Exit Messages', description: 'Text displayed when a player enters/leaves', value: 'cz_set_messages', emoji: '💬' }
+                        { label: 'Set Enter & Exit Messages', description: 'Text displayed when a player enters/leaves', value: 'cz_set_messages', emoji: '💬' },
+                        { label: `Toggle Building (${session.allowBuild ? 'ON' : 'OFF'})`, description: 'Allow or block building in this zone', value: 'cz_toggle_build', emoji: '🔨' },
+                        { label: `Toggle PVP Combat (${session.allowPvp ? 'ON' : 'OFF'})`, description: 'Allow or block Player vs Player combat', value: 'cz_toggle_pvp', emoji: '⚔️' },
+                        { label: `Toggle PVE Combat (${session.allowPve ? 'ON' : 'OFF'})`, description: 'Allow or block fighting NPCs/Animals', value: 'cz_toggle_pve', emoji: '🧟' }
                     ])
             );
 
-            // ROW 5: Final Action Buttons (Includes Get Admin Pos)
+            // ROW 5: Final Action Buttons
             const row5Buttons = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('btn_cz_pos').setLabel('Get Admin Pos').setStyle(ButtonStyle.Primary).setEmoji('📍'),
                 new ButtonBuilder().setCustomId('btn_cz_deploy').setLabel(session.isEditing ? 'Update Zone' : 'Deploy Zone').setStyle(ButtonStyle.Success).setEmoji('📦'),
@@ -119,7 +130,11 @@ const customZoneHandler = async (interaction, client) => {
 
         // --- ENTRY FROM ADMIN PANEL ---
         if (customId === 'admin_menu_select' && (selectedValue.includes('pve') || selectedValue.includes('zone'))) {
-            czSessions.set(guildId, { zoneName: null, radius: null, zoneColor: null, posX: null, posY: null, posZ: null, enterMessage: null, exitMessage: null, isEditing: false });
+            czSessions.set(guildId, { 
+                zoneName: null, radius: null, zoneColor: null, posX: null, posY: null, posZ: null, 
+                enterMessage: null, exitMessage: null, 
+                allowBuild: false, allowPvp: false, allowPve: false, isEditing: false 
+            });
             return await renderZonePanel(interaction);
         }
 
@@ -147,6 +162,7 @@ const customZoneHandler = async (interaction, client) => {
             }
 
             if (customId === 'cz_text_setup_select') {
+                // MODAL TRIGGERS
                 if (selectedValue === 'cz_set_name') {
                     const modal = new ModalBuilder().setCustomId('modal_cz_name').setTitle('Set Zone Name');
                     modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_name_val').setLabel("Zone Name (No spaces, e.g. vip_arena)").setStyle(TextInputStyle.Short).setValue(session.zoneName || '').setRequired(true)));
@@ -159,6 +175,23 @@ const customZoneHandler = async (interaction, client) => {
                         new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_exit').setLabel("Exit Message").setStyle(TextInputStyle.Paragraph).setValue(session.exitMessage || '').setRequired(false))
                     );
                     return await interaction.showModal(modal);
+                }
+
+                // TOGGLE RULES TRIGGERS (Instantly flips boolean and re-renders!)
+                if (selectedValue === 'cz_toggle_build') {
+                    session.allowBuild = !session.allowBuild;
+                    czSessions.set(guildId, session);
+                    return await renderZonePanel(interaction, `🔨 Building rule updated!`);
+                }
+                if (selectedValue === 'cz_toggle_pvp') {
+                    session.allowPvp = !session.allowPvp;
+                    czSessions.set(guildId, session);
+                    return await renderZonePanel(interaction, `⚔️ PVP rule updated!`);
+                }
+                if (selectedValue === 'cz_toggle_pve') {
+                    session.allowPve = !session.allowPve;
+                    czSessions.set(guildId, session);
+                    return await renderZonePanel(interaction, `🧟 PVE rule updated!`);
                 }
             }
 
@@ -175,6 +208,12 @@ const customZoneHandler = async (interaction, client) => {
                 session.posZ = existingZone.posZ || null;
                 session.enterMessage = existingZone.enterMessage || '';
                 session.exitMessage = existingZone.exitMessage || '';
+                
+                // Load rules, default to false if they were null
+                session.allowBuild = existingZone.allowBuild || false;
+                session.allowPvp = existingZone.allowPvp || false;
+                session.allowPve = existingZone.allowPve || false;
+
                 session.isEditing = existingZone.id; 
                 czSessions.set(guildId, session);
 
@@ -187,18 +226,15 @@ const customZoneHandler = async (interaction, client) => {
         // =========================================================
 
         if (interaction.isButton()) {
-            // --- THE NEW "GET ADMIN POS" BUTTON ON ROW 5 ---
             if (customId === 'btn_cz_pos') {
                 if (typeof queueAdminPos === 'function') {
                     await queueAdminPos(interaction);
                     return;
-                } else {
-                    return await interaction.reply({ content: '❌ `queueAdminPos` function not properly configured in rconManager.js.', flags: 64 });
-                }
+                } else return await interaction.reply({ content: '❌ `queueAdminPos` missing.', flags: 64 });
             }
 
             if (customId === 'btn_cz_clear') {
-                czSessions.set(guildId, { zoneName: null, radius: null, zoneColor: null, posX: null, posY: null, posZ: null, enterMessage: null, exitMessage: null, isEditing: false });
+                czSessions.set(guildId, { zoneName: null, radius: null, zoneColor: null, posX: null, posY: null, posZ: null, enterMessage: null, exitMessage: null, allowBuild: false, allowPvp: false, allowPve: false, isEditing: false });
                 return await renderZonePanel(interaction, '🧹 Draft cleared. Ready to make a new zone!');
             }
 
@@ -208,18 +244,18 @@ const customZoneHandler = async (interaction, client) => {
                 }
 
                 // Database Save / Update
+                const dbPayload = {
+                    zoneName: session.zoneName, radius: session.radius, zoneColor: session.zoneColor || 'green',
+                    posX: session.posX, posY: session.posY, posZ: session.posZ,
+                    enterMessage: session.enterMessage, exitMessage: session.exitMessage,
+                    allowBuild: session.allowBuild, allowPvp: session.allowPvp, allowPve: session.allowPve
+                };
+
                 if (session.isEditing) {
-                    await PveZone.update({
-                        zoneName: session.zoneName, radius: session.radius, zoneColor: session.zoneColor || 'green',
-                        posX: session.posX, posY: session.posY, posZ: session.posZ,
-                        enterMessage: session.enterMessage, exitMessage: session.exitMessage
-                    }, { where: { id: session.isEditing } });
+                    await PveZone.update(dbPayload, { where: { id: session.isEditing } });
                 } else {
-                    await PveZone.create({
-                        guildId, zoneName: session.zoneName, radius: session.radius, zoneColor: session.zoneColor || 'green',
-                        posX: session.posX, posY: session.posY, posZ: session.posZ,
-                        enterMessage: session.enterMessage, exitMessage: session.exitMessage
-                    });
+                    dbPayload.guildId = guildId;
+                    await PveZone.create(dbPayload);
                 }
 
                 // --- SEND TO RUST VIA RCON ---
@@ -230,12 +266,18 @@ const customZoneHandler = async (interaction, client) => {
                     if (session.zoneColor) await sendRconCommand(guildId, `zone color ${session.zoneName} ${session.zoneColor}`);
                     if (session.enterMessage) await sendRconCommand(guildId, `zone enter_message ${session.zoneName} "${session.enterMessage}"`);
                     if (session.exitMessage) await sendRconCommand(guildId, `zone leave_message ${session.zoneName} "${session.exitMessage}"`);
+                    
+                    // SEND FLAG COMMANDS (Adjust these strings slightly if your specific Rust Zone plugin expects different syntax)
+                    await sendRconCommand(guildId, `zone flag ${session.zoneName} build ${session.allowBuild}`);
+                    await sendRconCommand(guildId, `zone flag ${session.zoneName} pvp ${session.allowPvp}`);
+                    await sendRconCommand(guildId, `zone flag ${session.zoneName} pve ${session.allowPve}`);
+
                 } catch (e) {
                     console.log("[RCON ERROR] Failed to send zone commands. DB updated though.");
                 }
 
                 const actionWord = session.isEditing ? 'updated' : 'deployed';
-                czSessions.set(guildId, { zoneName: null, radius: null, zoneColor: null, posX: null, posY: null, posZ: null, enterMessage: null, exitMessage: null, isEditing: false }); // Reset
+                czSessions.set(guildId, { zoneName: null, radius: null, zoneColor: null, posX: null, posY: null, posZ: null, enterMessage: null, exitMessage: null, allowBuild: false, allowPvp: false, allowPve: false, isEditing: false }); // Reset
                 return await renderZonePanel(interaction, `✅ Zone **${session.zoneName}** successfully ${actionWord} directly to the Rust server!`);
             }
 
@@ -247,7 +289,7 @@ const customZoneHandler = async (interaction, client) => {
                 catch (e) { console.log("[RCON ERROR] Failed to delete zone via RCON."); }
 
                 const deletedName = session.zoneName;
-                czSessions.set(guildId, { zoneName: null, radius: null, zoneColor: null, posX: null, posY: null, posZ: null, enterMessage: null, exitMessage: null, isEditing: false }); // Reset
+                czSessions.set(guildId, { zoneName: null, radius: null, zoneColor: null, posX: null, posY: null, posZ: null, enterMessage: null, exitMessage: null, allowBuild: false, allowPvp: false, allowPve: false, isEditing: false }); // Reset
                 return await renderZonePanel(interaction, `🗑️ Zone **${deletedName}** has been deleted from the database and server.`);
             }
         }
@@ -283,7 +325,5 @@ const customZoneHandler = async (interaction, client) => {
     }
 };
 
-// EXPORT THE MEMORY MAP SO YOUR WEBHOOK CAN INJECT COORDINATES!
 customZoneHandler.czSessions = czSessions;
-
 module.exports = customZoneHandler;
