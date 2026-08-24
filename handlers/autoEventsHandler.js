@@ -75,20 +75,23 @@ const autoEventsHandler = async (interaction, client) => {
                 new StringSelectMenuBuilder().setCustomId('ae_slot_select').setPlaceholder(`2. Editing Slot ${session.selectedSlot}`).addOptions(slotOptions)
             );
 
-            // ROW 3: Configurations & Position Fetching
+            // ROW 3: Setup Dropdown (Replaces old buttons)
             const row3Setup = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('btn_ae_config').setLabel('Set Interval & Amount').setStyle(ButtonStyle.Primary).setEmoji('⚙️'),
-                new ButtonBuilder().setCustomId('btn_ae_getpos').setLabel('Get Admin Pos').setStyle(ButtonStyle.Primary).setEmoji('📍'),
-                new ButtonBuilder().setCustomId('btn_ae_manualpos').setLabel('Manual XYZ').setStyle(ButtonStyle.Secondary).setEmoji('✏️')
+                new StringSelectMenuBuilder().setCustomId('ae_setup_select').setPlaceholder('⚙️ 3. Configure Event & Position...')
+                    .addOptions([
+                        { label: 'Set Interval & Amount', description: 'Configure timers and spawn counts for this event', value: 'ae_set_timers', emoji: '⏱️' },
+                        { label: 'Enter Manual XYZ', description: 'Type custom coordinates manually instead of grabbing them', value: 'ae_manual_pos', emoji: '✏️' }
+                    ])
             );
 
-            // ROW 4: Slot Saving & Deletion
+            // ROW 4: Slot Saving & Deletion Buttons
             const row4SlotMgmt = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('btn_ae_saveslot').setLabel('Save Location to Slot').setStyle(ButtonStyle.Success).setEmoji('💾'),
+                new ButtonBuilder().setCustomId('btn_ae_getpos').setLabel('Get Admin Pos').setStyle(ButtonStyle.Primary).setEmoji('📍'),
+                new ButtonBuilder().setCustomId('btn_ae_saveslot').setLabel('Save to Slot').setStyle(ButtonStyle.Success).setEmoji('💾'),
                 new ButtonBuilder().setCustomId('btn_ae_delslot').setLabel('Clear Slot').setStyle(ButtonStyle.Danger).setEmoji('🗑️').setDisabled(!activeSlotData)
             );
 
-            // ROW 5: Master Toggles
+            // ROW 5: Master Toggle Button
             const isCurrentlyEnabled = config[`${activeEvent.dbPrefix}Enabled`];
             const row5Toggle = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('btn_ae_toggle').setLabel(isCurrentlyEnabled ? 'Disable Event' : 'Enable Event').setStyle(isCurrentlyEnabled ? ButtonStyle.Danger : ButtonStyle.Success).setEmoji('⚡')
@@ -119,6 +122,29 @@ const autoEventsHandler = async (interaction, client) => {
                 aeSessions.set(guildId, session);
                 return await renderAEPanel(interaction);
             }
+            
+            // NEW: Setup Dropdown Handler
+            if (customId === 'ae_setup_select') {
+                if (selectedValue === 'ae_set_timers') {
+                    const actEvent = EVENT_TYPES[session.selectedEvent];
+                    let [config] = await GuildConfig.findOrCreate({ where: { guildId } });
+                    const modal = new ModalBuilder().setCustomId('modal_ae_config').setTitle(`Configure ${actEvent.name}`);
+                    modal.addComponents(
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('interval').setLabel("Interval (Minutes)").setStyle(TextInputStyle.Short).setValue((config[`${actEvent.dbPrefix}Interval`] || 60).toString()).setRequired(true)),
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel("Spawn Amount per Interval").setStyle(TextInputStyle.Short).setValue((config[`${actEvent.dbPrefix}Amount`] || 1).toString()).setRequired(true))
+                    );
+                    return await interaction.showModal(modal);
+                }
+                if (selectedValue === 'ae_manual_pos') {
+                    const modal = new ModalBuilder().setCustomId('modal_ae_pos').setTitle('Set Custom XYZ');
+                    modal.addComponents(
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('x').setLabel("X").setStyle(TextInputStyle.Short).setRequired(true)),
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('y').setLabel("Y").setStyle(TextInputStyle.Short).setRequired(true)),
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('z').setLabel("Z").setStyle(TextInputStyle.Short).setRequired(true))
+                    );
+                    return await interaction.showModal(modal);
+                }
+            }
         }
 
         // --- BUTTON HANDLERS ---
@@ -128,27 +154,6 @@ const autoEventsHandler = async (interaction, client) => {
                     await queueAdminPos(interaction);
                     return;
                 } else return await interaction.reply({ content: '❌ `queueAdminPos` missing.', flags: 64 });
-            }
-
-            if (customId === 'btn_ae_manualpos') {
-                const modal = new ModalBuilder().setCustomId('modal_ae_pos').setTitle('Set Custom XYZ');
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('x').setLabel("X").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('y').setLabel("Y").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('z').setLabel("Z").setStyle(TextInputStyle.Short).setRequired(true))
-                );
-                return await interaction.showModal(modal);
-            }
-
-            if (customId === 'btn_ae_config') {
-                const actEvent = EVENT_TYPES[session.selectedEvent];
-                let [config] = await GuildConfig.findOrCreate({ where: { guildId } });
-                const modal = new ModalBuilder().setCustomId('modal_ae_config').setTitle(`Configure ${actEvent.name}`);
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('interval').setLabel("Interval (Minutes)").setStyle(TextInputStyle.Short).setValue((config[`${actEvent.dbPrefix}Interval`] || 60).toString()).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel("Spawn Amount per Interval").setStyle(TextInputStyle.Short).setValue((config[`${actEvent.dbPrefix}Amount`] || 1).toString()).setRequired(true))
-                );
-                return await interaction.showModal(modal);
             }
 
             if (customId === 'btn_ae_saveslot') {
@@ -191,7 +196,7 @@ const autoEventsHandler = async (interaction, client) => {
                 session.posY = interaction.fields.getTextInputValue('y').trim();
                 session.posZ = interaction.fields.getTextInputValue('z').trim();
                 aeSessions.set(guildId, session);
-                return await renderAEPanel(interaction, `✅ Draft Coordinates Set! Now click **Save Location to Slot** to lock them in.`);
+                return await renderAEPanel(interaction, `✅ Draft Coordinates Set! Now click **Save to Slot** to lock them in.`);
             }
 
             if (customId === 'modal_ae_config') {
