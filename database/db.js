@@ -94,6 +94,23 @@ const GuildConfig = sequelize.define('GuildConfig', {
     amWordsEnabled: { type: DataTypes.BOOLEAN, defaultValue: false },
     amWordsList: { type: DataTypes.TEXT, defaultValue: '' },
     amWordsAction: { type: DataTypes.STRING, defaultValue: 'delete' },
+
+    // --- NEW: AUTO EVENTS SETTINGS ---
+    aeHackableEnabled: { type: DataTypes.BOOLEAN, defaultValue: false },
+    aeHackableInterval: { type: DataTypes.INTEGER, defaultValue: 60 },
+    aeHackableAmount: { type: DataTypes.INTEGER, defaultValue: 1 },
+
+    aeSupplyEnabled: { type: DataTypes.BOOLEAN, defaultValue: false },
+    aeSupplyInterval: { type: DataTypes.INTEGER, defaultValue: 60 },
+    aeSupplyAmount: { type: DataTypes.INTEGER, defaultValue: 1 },
+
+    aeEliteEnabled: { type: DataTypes.BOOLEAN, defaultValue: false },
+    aeEliteInterval: { type: DataTypes.INTEGER, defaultValue: 60 },
+    aeEliteAmount: { type: DataTypes.INTEGER, defaultValue: 1 },
+
+    aeNodeEnabled: { type: DataTypes.BOOLEAN, defaultValue: false },
+    aeNodeInterval: { type: DataTypes.INTEGER, defaultValue: 60 },
+    aeNodeAmount: { type: DataTypes.INTEGER, defaultValue: 1 },
 });
 
 // --- NEW MULTI-SERVER MODEL ---
@@ -152,6 +169,17 @@ const ClanInvite = sequelize.define('ClanInvite', { id: { type: DataTypes.INTEGE
 const ClanWar = sequelize.define('ClanWar', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, challengerClanId: { type: DataTypes.INTEGER, allowNull: false }, targetClanId: { type: DataTypes.INTEGER, allowNull: false }, status: { type: DataTypes.STRING, defaultValue: 'active' } });
 const ReactionRole = sequelize.define('ReactionRole', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, messageId: { type: DataTypes.STRING, allowNull: false }, emoji: { type: DataTypes.STRING, allowNull: false }, roleId: { type: DataTypes.STRING, allowNull: false }, isVerifyOnly: { type: DataTypes.BOOLEAN, defaultValue: false } });
 
+// --- NEW AUTO EVENT LOCATION TABLE ---
+const AutoEventLocation = sequelize.define('AutoEventLocation', {
+    id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+    guildId: { type: DataTypes.STRING, allowNull: false },
+    eventType: { type: DataTypes.STRING, allowNull: false }, // 'hackable', 'supply', 'elite', 'node'
+    slot: { type: DataTypes.INTEGER, allowNull: false },
+    posX: { type: DataTypes.STRING, allowNull: false },
+    posY: { type: DataTypes.STRING, allowNull: false },
+    posZ: { type: DataTypes.STRING, allowNull: false }
+});
+
 async function initDb() { 
     await sequelize.authenticate(); 
     await sequelize.sync({ alter: true }); 
@@ -159,4 +187,5 @@ async function initDb() {
 }
 initDb();
 
-module.exports = { sequelize, GuildConfig, GameServer, UserEconomy, Giveaway, CustomBind, BindCooldown, ServerKit, ShopItem, ShopCooldown, CasinoCooldown, OrpConfig, PlayerOrpBase, BuddyPassChallenge, BuddyPassReward, TicketCategory, PveZone, ActiveBounty, BountyCooldown, Clan, ClanMember, ClanInvite, ClanWar, ReactionRole };
+// ADDED AutoEventLocation TO THE EXPORTS
+module.exports = { sequelize, GuildConfig, GameServer, UserEconomy, Giveaway, CustomBind, BindCooldown, ServerKit, ShopItem, ShopCooldown, CasinoCooldown, OrpConfig, PlayerOrpBase, BuddyPassChallenge, BuddyPassReward, TicketCategory, PveZone, AutoEventLocation, ActiveBounty, BountyCooldown, Clan, ClanMember, ClanInvite, ClanWar, ReactionRole };
