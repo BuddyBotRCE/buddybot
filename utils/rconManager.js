@@ -63,22 +63,26 @@ async function connectRcon(guildId, client) {
                 }
 
                 // 1. POSITION TRACKER (Supports Teleports, Recyclers, & Custom Binds)
-                if (msg.includes('X:') || msg.includes('pos') || msg.includes('Position') || msgLower.includes('vector') || /(-?\d+\.\d+)/.test(msg)) {
-                    for (const [adminName, setupData] of adminPosQueue.entries()) {
-                        if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
-                        const channel = client.channels.cache.get(setupData.channelId);
+                            // 1. POSITION TRACKER
+if (msg.includes('X:') || msg.includes('pos') || msg.includes('Position') || msgLower.includes('vector') || msgLower.includes('player is at') || /(-?\d+\.\d+)/.test(msg)) {
+    for (const [adminName, setupData] of adminPosQueue.entries()) {
+        if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
+        const channel = client.channels.cache.get(setupData.channelId);
 
-                        if (channel) {
-                            let posX = 0.00;
-                            let posY = 50.00;
-                            let posZ = 0.00;
+        if (channel) {
+            let posX = 0.00, posY = 50.00, posZ = 0.00;
+            const matches = msg.match(/-?\d+\.\d+/g);
+            if (matches && matches.length >= 3) {
+                posX = parseFloat(matches[0]);
+                posY = parseFloat(matches[1]);
+                posZ = parseFloat(matches[2]);
+            }
 
-                            const matches = msg.match(/-?\d+\.\d+/g);
-                            if (matches && matches.length >= 3) {
-                                posX = parseFloat(matches[0]);
-                                posY = parseFloat(matches[1]);
-                                posZ = parseFloat(matches[2]);
-                            }
+            if (setupData.type === 'custom_bind') {
+                await bindHandler.autoSavePosition(guildId, posX.toFixed(2), posY.toFixed(2), posZ.toFixed(2));
+                channel.send({ content: `✅ <@${setupData.adminId}> **Position Captured Successfully!**\nCoordinates: \`X: ${posX.toFixed(2)}, Y: ${posY.toFixed(2)}, Z: ${posZ.toFixed(2)}\`\n*Return to your Discord panel to continue.*` }).catch(()=>{});
+            }
+            // ... rest of your code ...
 
                             // If this position request came from the Custom Bind Wizard!
                             if (setupData.type === 'custom_bind') {
