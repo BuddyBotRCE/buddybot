@@ -12,7 +12,7 @@ module.exports = async (interaction, client) => {
         const isPremium = config?.isPremiumServer || false;
         
         const embed = new EmbedBuilder()
-            .setTitle('🏷️ BuddyBot License & Tier Manager')
+            .setTitle('⭐ BuddyBot Premium Manager')
             .setDescription(`Current Server Status: **${isPremium ? '⭐ PREMIUM TIER' : '🆓 FREE TIER'}**\n\n` + 
                 (isPremium 
                     ? `✅ Your server has full access to all premium features, custom zones, and automated modules.\n*Subscription Status:* \`${config?.subscriptionStatus || 'active'}\`` 
@@ -28,7 +28,7 @@ module.exports = async (interaction, client) => {
         // ROW 2: Management (Manage/Cancel & Transfer Server)
         const row2 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('btn_manage_stripe').setLabel('Manage / Cancel Subscription').setStyle(ButtonStyle.Secondary).setEmoji('⚙️').setDisabled(!config?.stripeCustomerId),
-            new ButtonBuilder().setCustomId('btn_transfer_license').setLabel('Transfer License Here').setStyle(ButtonStyle.Primary).setEmoji('🔄')
+            new ButtonBuilder().setCustomId('btn_transfer_license').setLabel('Transfer Premium Here').setStyle(ButtonStyle.Primary).setEmoji('🔄')
         );
 
         const componentsArray = [row1, row2];
@@ -77,9 +77,9 @@ module.exports = async (interaction, client) => {
         }
     }
 
-    // --- TRANSFER LICENSE TO THIS SERVER ---
+    // --- TRANSFER PREMIUM TO THIS SERVER ---
     if (customId === 'btn_transfer_license') {
-        const modal = new ModalBuilder().setCustomId('modal_transfer_license').setTitle('Transfer License');
+        const modal = new ModalBuilder().setCustomId('modal_transfer_license').setTitle('Transfer Premium');
         modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('stripe_email').setLabel("Your Stripe Checkout Email").setStyle(TextInputStyle.Short).setPlaceholder('your@email.com').setRequired(true)));
         return interaction.showModal(modal);
     }
@@ -87,7 +87,7 @@ module.exports = async (interaction, client) => {
     // --- ADMIN OVERRIDE EXECUTION ---
     if (customId === 'toggle_tier_status') {
         if (interaction.user.id !== process.env.GLOBAL_OWNER_ID) {
-            return interaction.reply({ content: '❌ **Access Denied:** Only the Bot Developer can manually overwrite tier licenses.', flags: 64 });
+            return interaction.reply({ content: '❌ **Access Denied:** Only the Bot Developer can manually overwrite tier statuses.', flags: 64 });
         }
         const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
         const newStatus = !(config?.isPremiumServer || false);
@@ -126,7 +126,7 @@ module.exports = async (interaction, client) => {
             } catch (error) { return interaction.editReply({ content: `❌ Stripe API Error: ${error.message}` }); }
         }
 
-        // 2. TRANSFER LICENSE SUBMISSION
+        // 2. TRANSFER PREMIUM SUBMISSION
         if (customId === 'modal_transfer_license') {
             await interaction.deferReply({ flags: 64 });
             const email = interaction.fields.getTextInputValue('stripe_email').trim().toLowerCase();
@@ -153,7 +153,7 @@ module.exports = async (interaction, client) => {
                 });
 
                 const embed = new EmbedBuilder()
-                    .setTitle('🔄 License Transferred Successfully!')
+                    .setTitle('🔄 Premium Transferred Successfully!')
                     .setDescription(`Your active subscription has been successfully unbound from your old server and transferred to **${interaction.guild.name}**!`)
                     .setColor('#2ecc71')
                     .setTimestamp();
