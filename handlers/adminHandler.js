@@ -88,6 +88,7 @@ module.exports = async (interaction, client) => {
         if (selectedValue === 'admin_tools') {
             const row1 = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('btn_admin_item').setLabel('Give Any Item').setStyle(ButtonStyle.Success).setEmoji('🎁'),
+                new ButtonBuilder().setCustomId('btn_admin_kit').setLabel('Give Kit').setStyle(ButtonStyle.Success).setEmoji('📦'),
                 new ButtonBuilder().setCustomId('btn_admin_vip').setLabel('Add VIP').setStyle(ButtonStyle.Primary).setEmoji('⭐'),
                 new ButtonBuilder().setCustomId('btn_admin_mod').setLabel('Add Moderator').setStyle(ButtonStyle.Secondary).setEmoji('🛡️')
             );
@@ -227,6 +228,56 @@ module.exports = async (interaction, client) => {
     }
 
     if (interaction.isButton()) {
+        // 1. Button click for Give Kit triggers kit dropdown selection
+        if (customId === 'btn_admin_kit') {
+            const kits = await ServerKit.findAll({ where: { guildId: interaction.guild.id } });
+            
+            // Fallback default list if no custom kits have been registered in the database yet
+            const kitOptions = kits.length > 0 
+                ? kits.slice(0, 25).map(k => ({ label: k.kitName, value: `givekit_select_${k.kitName}`, emoji: '📦' }))
+                : [
+                    { label: 'Starter Kit', value: 'givekit_select_starter', description: 'Basic tools and food', emoji: '📦' },
+                    { label: 'VIP Kit', value: 'givekit_select_vip', description: 'Advanced weapons and armor', emoji: '⭐' },
+                    { label: 'Builder Kit', value: 'givekit_select_builder', description: 'Stone, metal, and building tools', emoji: '🏗️' }
+                  ];
+
+            const row = new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('admin_kit_choice_select')
+                    .setPlaceholder('Step 1: Select which kit to give...')
+                    .addOptions(kitOptions)
+            );
+            return interaction.reply({ content: '📦 **Admin Kit Wizard:** Select the kit you want to give:', components: [row], flags: 64 });
+        }
+        // 2. Capture chosen kit, then ask for target player user select menu
+        if (customId === 'admin_kit_choice_select') {
+            const kitName = selectedValue.replace('givekit_select_', '');
+            const row = new ActionRowBuilder().addComponents(
+                new UserSelectMenuBuilder()
+                    .setCustomId(`admin_kit_target_${kitName}`)
+                    .setPlaceholder('Step 2: Select the player to receive this kit...')
+            );
+            return interaction.update({ content: `📦 **Admin Kit Wizard:** Kit selected: **${kitName}**. Now select the target player:`, components: [row] });
+        }
+
+        // 3. User select menu submitted -> Executes the RCON command
+        if (customId.startsWith('admin_kit_target_')) {
+            const kitName = customId.replace('admin_kit_target_', '');
+            const targetUserId = interaction.values[0];
+            
+            const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
+            if (!targetUser || !targetUser.inGameName) {
+                return interaction.reply({ content: `❌ This user has not linked an in-game Rust name yet!`, flags: 64 });
+            }
+
+            try {
+                // Sends standard Oxide/Carbon kit plugin command: kit.give "PlayerName" "KitName"
+                await sendRconCommand(interaction.guild.id, `kit.give "${targetUser.inGameName}" "${kitName}"`);
+                return interaction.update({ content: `✅ Successfully gave kit **${kitName}** to **${targetUser.inGameName}** (<@${targetUserId}>)!`, components: [] });
+            } catch (e) {
+                return interaction.update({ content: `❌ RCON Error giving kit: \`${e.message}\``, components: [] });
+            }
+        }
         if (customId === 'btn_admin_vip') {
             const modal = new ModalBuilder().setCustomId('modal_admin_vip_exec').setTitle('Grant VIP Status');
             modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ign').setLabel("Exact In-Game Name / SteamID").setStyle(TextInputStyle.Short).setRequired(true)));
