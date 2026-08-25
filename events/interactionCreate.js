@@ -60,7 +60,7 @@ module.exports = async (interaction, client) => {
             if (selectedValue === 'setup_bounties') return await bountyHandler(interaction, client);
             if (selectedValue === 'setup_kits') return await kitHandler(interaction, client);
             if (selectedValue === 'setup_tier') return require('../handlers/premiumHandler')(interaction, client);
-            if (selectedValue === 'setup_binds') return require('../handlers/bindHandler')(interaction, client); // <-- Is this line here?
+            if (selectedValue === 'setup_binds') return require('../handlers/bindHandler')(interaction, client);
             
             // --> NEW ROUTING LINKS <--
             if (selectedValue.includes('pve') || selectedValue.includes('zone')) return await customZoneHandler(interaction, client);
@@ -74,6 +74,11 @@ module.exports = async (interaction, client) => {
         // 🚦 2. COMPONENT & MODAL ROUTING STATION
         // ====================================================================
 
+        // --- SUGGESTIONS ROUTER ---
+        if (customId.startsWith('sug_') || customId === 'select_sug_channel' || customId === 'select_sug_role' || customId === 'btn_player_open_suggestion' || customId.startsWith('modal_sug_')) {
+            return await suggestionHandler(interaction, client);
+        }
+
         // --- AUTO MOD ROUTER ---
         if (customId.startsWith('am_') || customId.startsWith('btn_am_') || customId.startsWith('modal_am_')) {
             return await autoModHandler(interaction, client);
@@ -86,7 +91,6 @@ module.exports = async (interaction, client) => {
 
         // --- REACTION ROLES & VERIFICATION ROUTER ---
         if (customId.startsWith('rr_') || customId.startsWith('select_rr_') || customId.startsWith('btn_rr_') || customId.startsWith('modal_rr_') || customId.includes('reaction') || customId.includes('verify') || customId.includes('verification')) {
-            // Ignore the verify email modal from premiumHandler if it exists
             if (customId === 'btn_open_verify_modal' || customId === 'modal_verify_email') {
                 return await premiumHandler(interaction, client);
             }
@@ -107,9 +111,6 @@ module.exports = async (interaction, client) => {
         }
         if (customId === 'toggle_tier_status') {
             return await premiumHandler(interaction, client);
-        }
-       if (customId.startsWith('sug_') || customId === 'select_sug_channel' || customId === 'select_sug_role' || customId === 'btn_player_open_suggestion') {
-    const suggestionHandler = require('../handlers/suggestionHandler');
         }
         if (customId.startsWith('tk_') || customId.startsWith('btn_tk_') || customId.includes('ticket')) {
             return await ticketHandler(interaction, client);
