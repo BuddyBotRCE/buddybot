@@ -16,7 +16,7 @@ if (process.env.DATABASE_URL) {
     console.log('[DATABASE] Connected to local SQLite database.');
 }
 
-// --- EXISTING MODELS ---
+// --- MASTER GUILD CONFIG MODEL ---
 const GuildConfig = sequelize.define('GuildConfig', {
     guildId: { type: DataTypes.STRING, primaryKey: true },
     rconIp: { type: DataTypes.STRING, allowNull: true },
@@ -51,9 +51,15 @@ const GuildConfig = sequelize.define('GuildConfig', {
     aiModel: { type: DataTypes.STRING, defaultValue: 'gpt-4o-mini' },
     aiApiKey: { type: DataTypes.STRING, allowNull: true },
     aiBaseUrl: { type: DataTypes.STRING, defaultValue: 'https://api.openai.com/v1' },
+    
+    // Logging Channels
     logAdminChannelId: { type: DataTypes.STRING, allowNull: true },
     logGameChannelId: { type: DataTypes.STRING, allowNull: true },
     logDiscordChannelId: { type: DataTypes.STRING, allowNull: true },
+    logMemberChannelId: { type: DataTypes.STRING, allowNull: true },
+    logMessageChannelId: { type: DataTypes.STRING, allowNull: true },
+    logVoiceChannelId: { type: DataTypes.STRING, allowNull: true },
+
     suggestionChannelId: { type: DataTypes.STRING, allowNull: true },
     suggestionPingRoleId: { type: DataTypes.STRING, allowNull: true },
     bountyKillsToActivate: { type: DataTypes.INTEGER, defaultValue: 5 },
@@ -90,7 +96,6 @@ const GameServer = sequelize.define('GameServer', { id: { type: DataTypes.INTEGE
 const UserEconomy = sequelize.define('UserEconomy', { guildId: { type: DataTypes.STRING, primaryKey: true }, userId: { type: DataTypes.STRING, primaryKey: true }, wallet: { type: DataTypes.INTEGER, defaultValue: 0 }, bank: { type: DataTypes.INTEGER, defaultValue: 0 }, inGameName: { type: DataTypes.STRING, allowNull: true }, lastDaily: { type: DataTypes.DATE, allowNull: true }, lastVoteTime: { type: DataTypes.DATE, allowNull: true }, xp: { type: DataTypes.INTEGER, defaultValue: 0 }, level: { type: DataTypes.INTEGER, defaultValue: 1 }, pvpKills: { type: DataTypes.INTEGER, defaultValue: 0 }, pveKills: { type: DataTypes.INTEGER, defaultValue: 0 }, deaths: { type: DataTypes.INTEGER, defaultValue: 0 }, currentKillstreak: { type: DataTypes.INTEGER, defaultValue: 0 } });
 const Giveaway = sequelize.define('Giveaway', { messageId: { type: DataTypes.STRING, primaryKey: true }, guildId: { type: DataTypes.STRING }, channelId: { type: DataTypes.STRING }, prize: { type: DataTypes.STRING }, endTime: { type: DataTypes.DATE }, winnersCount: { type: DataTypes.INTEGER, defaultValue: 1 }, entries: { type: DataTypes.TEXT, defaultValue: '[]' }, isActive: { type: DataTypes.BOOLEAN, defaultValue: true } });
 
-// --- UPDATED CUSTOM BINDS MODEL ---
 const CustomBind = sequelize.define('CustomBind', { 
     guildId: { type: DataTypes.STRING, allowNull: false }, 
     name: { type: DataTypes.STRING, defaultValue: 'Custom Bind' }, 
@@ -101,10 +106,7 @@ const CustomBind = sequelize.define('CustomBind', {
     command: { type: DataTypes.TEXT, allowNull: true }, 
     cooldown: { type: DataTypes.INTEGER, defaultValue: 0 }, 
     cost: { type: DataTypes.INTEGER, defaultValue: 0 }, 
-    roleId: { type: DataTypes.STRING, allowNull: true },
-    logMemberChannelId: { type: DataTypes.STRING, allowNull: true }, // Joins, leaves, bans
-    logMessageChannelId: { type: DataTypes.STRING, allowNull: true }, // Message edits & deletes
-    logVoiceChannelId: { type: DataTypes.STRING, allowNull: true },   // Voice channel movements
+    roleId: { type: DataTypes.STRING, allowNull: true }
 });
 
 const BindCooldown = sequelize.define('BindCooldown', { guildId: { type: DataTypes.STRING, primaryKey: true }, userId: { type: DataTypes.STRING, primaryKey: true }, bindId: { type: DataTypes.INTEGER, primaryKey: true }, expiresAt: { type: DataTypes.DATE } });

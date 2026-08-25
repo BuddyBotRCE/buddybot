@@ -24,6 +24,7 @@ const bountyHandler = require(handlerPath('bountyHandler'));
 const kitHandler = require(handlerPath('kitHandler'));
 const bindHandler = require('../handlers/bindHandler');
 const adminHandler = require(handlerPath('adminHandler'));
+const loggingHandler = require(handlerPath('loggingHandler'));
 
 // --- NEW MODULES ---
 const customZoneHandler = require(handlerPath('customZoneHandler'));
@@ -59,6 +60,7 @@ module.exports = async (interaction, client) => {
             if (selectedValue === 'setup_minigames') return await casinoHandler(interaction, client);
             if (selectedValue === 'setup_bounties') return await bountyHandler(interaction, client);
             if (selectedValue === 'setup_kits') return await kitHandler(interaction, client);
+            if (selectedValue === 'setup_logging' || selectedValue.includes('log')) return await loggingHandler(interaction, client);
             if (selectedValue === 'setup_tier') return require('../handlers/premiumHandler')(interaction, client);
             if (selectedValue === 'setup_binds') return require('../handlers/bindHandler')(interaction, client);
             
@@ -73,6 +75,11 @@ module.exports = async (interaction, client) => {
         // ====================================================================
         // 🚦 2. COMPONENT & MODAL ROUTING STATION
         // ====================================================================
+
+        // --- LOGGING ROUTER ---
+        if (customId.startsWith('btn_log_') || customId.startsWith('select_log_chan_')) {
+            return await loggingHandler(interaction, client);
+        }
 
         // --- SUGGESTIONS ROUTER ---
         if (customId.startsWith('sug_') || customId === 'select_sug_channel' || customId === 'select_sug_role' || customId === 'btn_player_open_suggestion' || customId.startsWith('modal_sug_')) {

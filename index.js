@@ -69,8 +69,10 @@ app.post('/webhook/stripe', async (req, res) => {
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => console.log(`[SYSTEM] Webhook listener running on port ${PORT}`));
 
-// --- START DISCORD LOGGER ---
+// --- START DISCORD LOGGERS ---
 require('./utils/discordLogger')(client);
+require('./events/discordAuditLogger')(client); // <--- ADDED: Boots up joins, leaves, bans, messages, & voice logs!
+
 client.on('messageCreate', async message => require('./events/messageCreate')(message, client));
 
 // Load Slash Commands Recursively (Supports subfolders like admin/ and player/)
@@ -94,7 +96,7 @@ function loadCommandsRecursively(dir) {
 }
 loadCommandsRecursively(commandsPath);
 
-    // Load Events Explicitly
+// Load Events Explicitly
 const interactionCreateEvent = path.join(__dirname, 'events', 'interactionCreate.js');
 if (fs.existsSync(interactionCreateEvent)) {
     const event = require(interactionCreateEvent);
@@ -108,15 +110,15 @@ if (fs.existsSync(interactionCreateEvent)) {
     console.log('[SYSTEM] Loaded event: interactionCreate');
 }
 
-    // --- INITIALIZE BACKGROUND AUTO-EVENT MANAGER LOOP SAFELY ---
-    try {
-        const { initAutoEventLoop } = require('./utils/autoEventManager');
-        if (typeof initAutoEventLoop === 'function') {
-            initAutoEventLoop(client);
-        }
-    } catch (e) {
-        console.log('[SYSTEM] Auto event loop file skipped or not found.');
+// --- INITIALIZE BACKGROUND AUTO-EVENT MANAGER LOOP SAFELY ---
+try {
+    const { initAutoEventLoop } = require('./utils/autoEventManager');
+    if (typeof initAutoEventLoop === 'function') {
+        initAutoEventLoop(client);
     }
+} catch (e) {
+    console.log('[SYSTEM] Auto event loop file skipped or not found.');
+}
 
 client.once('ready', async () => {
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
