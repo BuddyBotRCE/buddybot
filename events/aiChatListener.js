@@ -1,6 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
 const { GuildConfig } = require('../database/db');
-const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 module.exports = (client) => {
     client.on('messageCreate', async (message) => {
@@ -9,7 +8,7 @@ module.exports = (client) => {
         const config = await GuildConfig.findOne({ where: { guildId: message.guild.id } });
         if (!config || config.aiEnabled === false) return; // AI is globally disabled for this server
 
-        // Check if bot is mentioned or if it's a designated AI channel
+        // Check if bot is mentioned
         const isMentioned = message.mentions.has(client.user);
         if (!isMentioned) return;
 
@@ -30,14 +29,13 @@ module.exports = (client) => {
             return await message.reply('⚠️ The server administrator has not configured an AI API key yet!');
         }
 
-        // 3. Query the configured LLM API (OpenAI, Anthropic, DeepSeek, Groq, OpenRouter, etc.)
+        // 3. Query the configured LLM API using Native Node.js Fetch
         try {
             await message.channel.sendTyping();
 
             const baseUrl = config.aiBaseUrl || 'https://api.openai.com/v1';
             const modelName = config.aiModel || 'gpt-4o-mini';
             
-            // Format endpoint for standard OpenAI-compatible completions
             const endpoint = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
 
             const response = await fetch(endpoint, {
