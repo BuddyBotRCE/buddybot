@@ -72,6 +72,7 @@ app.listen(PORT, () => console.log(`[SYSTEM] Webhook listener running on port ${
 // --- START DISCORD LOGGERS ---
 require('./utils/discordLogger')(client);
 require('./events/discordAuditLogger')(client); // <--- ADDED: Boots up joins, leaves, bans, messages, & voice logs!
+require('./events/aiChatListener')(client);
 
 client.on('messageCreate', async message => require('./events/messageCreate')(message, client));
 

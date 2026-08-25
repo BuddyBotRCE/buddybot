@@ -51,7 +51,9 @@ const GuildConfig = sequelize.define('GuildConfig', {
     aiModel: { type: DataTypes.STRING, defaultValue: 'gpt-4o-mini' },
     aiApiKey: { type: DataTypes.STRING, allowNull: true },
     aiBaseUrl: { type: DataTypes.STRING, defaultValue: 'https://api.openai.com/v1' },
-    
+    aiEnabled: { type: DataTypes.BOOLEAN, defaultValue: true },
+    aiPremadeResponses: { type: DataTypes.TEXT, defaultValue: '[]' }, // Stored as a JSON string array of { trigger: '', response: '' }
+   
     // Logging Channels
     logAdminChannelId: { type: DataTypes.STRING, allowNull: true },
     logGameChannelId: { type: DataTypes.STRING, allowNull: true },
@@ -159,7 +161,7 @@ const CustomEmbed = sequelize.define('CustomEmbed', {
     thumbnailUrl: { type: DataTypes.STRING, allowNull: true },
     imageUrl: { type: DataTypes.STRING, allowNull: true },
     footerText: { type: DataTypes.STRING, allowNull: true }
-});
+    });
 
 async function initDb() { 
     await sequelize.authenticate(); 

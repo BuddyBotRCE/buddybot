@@ -43,13 +43,19 @@ module.exports = async (interaction, client) => {
         }
         if (selectedValue === 'setup_ai') {
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+            const isEnabled = config?.aiEnabled !== false;
+            
+            let premadeCount = 0;
+            try { premadeCount = JSON.parse(config?.aiPremadeResponses || '[]').length; } catch(e){}
+
             const embed = new EmbedBuilder()
-                .setTitle('🤖 AI Integration Settings')
-                .setDescription(`Configure your server AI assistant and LLM integration.\n\n` +
+                .setTitle('🤖 AI Integration & Premade Responses')
+                .setDescription(`Configure your server AI assistant, toggle state, and custom canned answers.\n\n` +
+                    `• **Status:** ${isEnabled ? '🟢 ACTIVE (Enabled)' : '🔴 DISABLED'}\n` +
                     `• **Provider:** \`${config?.aiProvider || 'openai'}\`\n` +
                     `• **Model:** \`${config?.aiModel || 'gpt-4o-mini'}\`\n` +
-                    `• **API Key:** ${config?.aiApiKey ? '🟢 Configured & Active' : '🔴 Not Set'}\n` +
-                    `• **Base URL:** \`${config?.aiBaseUrl || 'https://api.openai.com/v1'}\``)
+                    `• **API Key:** ${config?.aiApiKey ? '🟢 Configured' : '🔴 Not Set'}\n` +
+                    `• **Premade Answers:** \`${premadeCount} configured\``)
                 .setColor('#9b59b6');
 
             const row1 = new ActionRowBuilder().addComponents(
@@ -57,18 +63,20 @@ module.exports = async (interaction, client) => {
                     .setCustomId('select_ai_provider')
                     .setPlaceholder('Choose AI Platform / Provider...')
                     .addOptions([
-                        { label: 'OpenAI', value: 'openai', description: 'GPT-4o, GPT-4o-mini', emoji: '🟢' },
-                        { label: 'Anthropic (Claude)', value: 'anthropic', description: 'Claude 3.7 / Sonnet', emoji: '🟠' },
-                        { label: 'Google Gemini', value: 'gemini', description: 'Gemini Flash & Pro', emoji: '🔵' },
-                        { label: 'DeepSeek', value: 'deepseek', description: 'DeepSeek Chat & Pro', emoji: '🟣' },
-                        { label: 'Groq', value: 'groq', description: 'Ultra-fast Llama hosting', emoji: '⚡' },
-                        { label: 'OpenRouter', value: 'openrouter', description: 'Multi-model gateway API', emoji: '🌐' },
-                        { label: 'Custom / Local (Ollama)', value: 'custom', description: 'Self-hosted LLMs', emoji: '💻' }
+                        { label: 'OpenAI', value: 'openai', emoji: '🟢' },
+                        { label: 'Anthropic (Claude)', value: 'anthropic', emoji: '🟠' },
+                        { label: 'Google Gemini', value: 'gemini', emoji: '🔵' },
+                        { label: 'DeepSeek', value: 'deepseek', emoji: '🟣' },
+                        { label: 'Groq', value: 'groq', emoji: '⚡' },
+                        { label: 'OpenRouter', value: 'openrouter', emoji: '🌐' },
+                        { label: 'Custom / Ollama', value: 'custom', emoji: '💻' }
                     ])
             );
 
             const row2 = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('btn_ai_set_key').setLabel('Enter API Key & Model').setStyle(ButtonStyle.Primary).setEmoji('🔑')
+                new ButtonBuilder().setCustomId('btn_ai_toggle').setLabel(isEnabled ? 'Disable AI' : 'Enable AI').setStyle(isEnabled ? ButtonStyle.Danger : ButtonStyle.Success).setEmoji(isEnabled ? '🔴' : '🟢'),
+                new ButtonBuilder().setCustomId('btn_ai_set_key').setLabel('API Key & Model').setStyle(ButtonStyle.Primary).setEmoji('🔑'),
+                new ButtonBuilder().setCustomId('btn_ai_premade').setLabel('Premade Responses').setStyle(ButtonStyle.Secondary).setEmoji('📝')
             );
 
             return interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
@@ -408,3 +416,5 @@ module.exports = async (interaction, client) => {
         }
     }
 };
+
+module.exports;
