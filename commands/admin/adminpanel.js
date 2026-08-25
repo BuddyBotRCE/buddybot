@@ -9,7 +9,7 @@ module.exports = {
     async execute(interaction) {
         const adminEmbed = new EmbedBuilder()
             .setTitle('🛠️ Admin Panel & Dashboard')
-            .setDescription('Configure bot modules, automated moderation, reaction roles, and community tools.')
+            .setDescription('Configure bot modules, automated moderation, announcement builders, and community tools.')
             .setColor('#2b2d31');
         
         const row1 = new ActionRowBuilder().addComponents(
@@ -23,7 +23,6 @@ module.exports = {
                     { label: 'BuddyPass Manager', value: 'setup_buddypass', emoji: '⭐' },
                     { label: 'Clan System Manager', value: 'setup_clans', emoji: '🛡️' },
                     { label: 'Bounties System', value: 'setup_bounties', emoji: '🎯' },
-                    { label: 'Reaction Roles & Verify', value: 'setup_reaction_roles', emoji: '🔘' },
                     { label: 'Auto-Moderation Suite', value: 'setup_automod', emoji: '🛡️' },
                     { label: 'Custom Zones Builder', value: 'setup_custom_zones', description: 'Create and manage map zones', emoji: '🗺️' },
                     { label: 'Auto-Events (Premium)', value: 'setup_autoevents', emoji: '🚁' },
@@ -34,12 +33,10 @@ module.exports = {
                     { label: 'Cross-Chat', value: 'setup_crosschat', emoji: '💬' },
                     { label: 'ORP Manager', value: 'setup_orp', emoji: '🛡️' },
                     { label: 'Server Wipe Panel', value: 'setup_wipe', emoji: '☢️' },
-                    { label: 'Post Custom Embed', value: 'setup_embed', emoji: '📢' },
+                    { label: 'Post Custom Embed', value: 'setup_postembed', description: 'Create announcements with templates & banners', emoji: '📢' },
                     { label: 'AI Integration Setup', value: 'setup_ai', emoji: '🤖' },
                     { label: 'Logging System', value: 'setup_logging', emoji: '📊' },
-                    { label: 'Suggestions System', value: 'setup_suggestions', emoji: '💡' },
-                    { label: '🛡️ Setup Verification', value: 'setup_verification' },
-                    { label: '🎭 Setup Reaction Roles', value: 'setup_reactionroles' },
+                    { label: 'Suggestions System', value: 'setup_suggestions', emoji: '💡' }
                 ])
         );
 

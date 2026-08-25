@@ -2,6 +2,7 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelect
 const { GuildConfig, GameServer, UserEconomy, ReactionRole, PveZone } = require('../database/db');
 const { connectRcon, sendRconCommand } = require('../utils/rconManager');
 const { RUST_CATEGORIES } = require('../utils/rustCatalog');
+const postEmbedHandler = require('./postEmbedHandler');
 
 module.exports = async (interaction, client) => {
     const customId = interaction.customId || '';
@@ -18,21 +19,10 @@ module.exports = async (interaction, client) => {
             const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('log_action_select').setPlaceholder('Select a log channel to configure...').addOptions([{ label: 'Set Admin Logs Channel', value: 'log_admin', emoji: '🛡️' }, { label: 'Set Game Feeds Channel', value: 'log_game', emoji: '🎮' }, { label: 'Set Discord Logs Channel', value: 'log_discord', emoji: '💬' }]));
             return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
         }
-        
-        // --- UPDATED REACTION ROLE MENU GENERATION ---
-        if (selectedValue === 'setup_reaction_roles') {
-            const embed = new EmbedBuilder().setTitle('🔘 Reaction Roles & Verification Manager').setDescription('Select an option below to create a panel or manage existing ones.').setColor('#3498db');
-            const row = new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder()
-                    .setCustomId('rr_action_select')
-                    .setPlaceholder('⚙️ Choose Role Panel Type to Create...')
-                    .addOptions([
-                        { label: 'Create Reaction Roles', value: 'create_reaction_roles', description: 'Toggleable roles (Add/Remove)', emoji: '🔄' }, 
-                        { label: 'Create Verification Panel', value: 'create_verification_panel', description: 'One-time click (Add-Only)', emoji: '✅' },
-                        { label: 'Remove Reaction Role', value: 'rr_remove', description: 'Delete a panel configuration by ID', emoji: '🗑️' }
-                    ])
-            );
-            return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+
+        // --- NEW POST EMBED BUILDER ROUTE ---
+        if (selectedValue === 'setup_postembed') {
+            return await postEmbedHandler(interaction, client);
         }
         
         if (selectedValue === 'setup_multiserver') {
