@@ -149,6 +149,18 @@ const AutoEventLocation = sequelize.define('AutoEventLocation', {
     posZ: { type: DataTypes.STRING, allowNull: false }
 });
 
+const CustomEmbed = sequelize.define('CustomEmbed', {
+    id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+    guildId: { type: DataTypes.STRING, allowNull: false },
+    templateName: { type: DataTypes.STRING, defaultValue: 'Custom Announcement' },
+    title: { type: DataTypes.STRING, defaultValue: '📢 Server Announcement' },
+    description: { type: DataTypes.TEXT, allowNull: true },
+    color: { type: DataTypes.STRING, defaultValue: '#3498db' },
+    thumbnailUrl: { type: DataTypes.STRING, allowNull: true },
+    imageUrl: { type: DataTypes.STRING, allowNull: true },
+    footerText: { type: DataTypes.STRING, allowNull: true }
+});
+
 async function initDb() { 
     await sequelize.authenticate(); 
     await sequelize.sync({ alter: true }); 
@@ -156,4 +168,4 @@ async function initDb() {
 }
 initDb();
 
-module.exports = { sequelize, GuildConfig, GameServer, UserEconomy, Giveaway, CustomBind, BindCooldown, ServerKit, ShopItem, ShopCooldown, CasinoCooldown, OrpConfig, PlayerOrpBase, BuddyPassChallenge, BuddyPassReward, TicketCategory, PveZone, AutoEvent, AutoEventLocation, ActiveBounty, BountyCooldown, Clan, ClanMember, ClanInvite, ClanWar, ReactionRole };
+module.exports = { sequelize, GuildConfig, GameServer, UserEconomy, Giveaway, CustomBind, BindCooldown, ServerKit, ShopItem, ShopCooldown, CasinoCooldown, OrpConfig, PlayerOrpBase, BuddyPassChallenge, BuddyPassReward, TicketCategory, PveZone, AutoEvent, AutoEventLocation, ActiveBounty, BountyCooldown, Clan, ClanMember, ClanInvite, ClanWar, ReactionRole, CustomEmbed };

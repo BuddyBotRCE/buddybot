@@ -63,6 +63,7 @@ module.exports = async (interaction, client) => {
             if (selectedValue === 'setup_logging' || selectedValue.includes('log')) return await loggingHandler(interaction, client);
             if (selectedValue === 'setup_tier') return require('../handlers/premiumHandler')(interaction, client);
             if (selectedValue === 'setup_binds') return require('../handlers/bindHandler')(interaction, client);
+            if (selectedValue === 'setup_postembed' || selectedValue.includes('embed')) return await require('../handlers/postEmbedHandler')(interaction, client);
             
             // --> NEW ROUTING LINKS <--
             if (selectedValue.includes('pve') || selectedValue.includes('zone')) return await customZoneHandler(interaction, client);
@@ -108,6 +109,10 @@ module.exports = async (interaction, client) => {
         if (customId.includes('clan') || customId.includes('bank') || customId.startsWith('modal_clan_') || customId.startsWith('btn_clan_') || customId.startsWith('btn_bank_') || customId.startsWith('clan_modal_') || customId.startsWith('select_clan_')) {
             return await clanHandler(interaction, client);
         }
+        // Component router section:
+        if (customId.startsWith('btn_emb_') || customId.startsWith('modal_emb_') || customId === 'select_emb_target_channel' || customId === 'select_emb_template') {
+            return await require('../handlers/postEmbedHandler')(interaction, client);
+}
 
         // --- EXISTING MODULE ROUTERS ---
         if (customId.startsWith('ae_') || customId.startsWith('modal_ae_') || customId.startsWith('btn_finalize_tpl_aeslot')) {
