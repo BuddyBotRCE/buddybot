@@ -2,10 +2,33 @@ const WebSocket = require('ws');
 const { GuildConfig, UserEconomy, CustomBind, BindCooldown, ActiveBounty, BountyCooldown } = require('../database/db');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const bindHandler = require('../handlers/bindHandler');
-const registerEventParser = require('./rustEventParser');
 
 const activeConnections = new Map();
 const adminPosQueue = new Map(); 
+
+// --- EMBEDDED RUST EVENT PARSER ---
+function registerEventParser(rconMock, emit) {
+    rconMock.on('message', (msg) => {
+        if (!msg || !msg.message) return;
+        const line = msg.message.toLowerCase();
+
+        if (line.includes("cargo ship") && line.includes("docked")) {
+            emit("cargoDocked", { raw: msg.message, timestamp: Date.now() });
+        }
+        if (line.includes("supply_drop") || line.includes("supply drop")) {
+            emit("supplyDrop", { raw: msg.message, timestamp: Date.now() });
+        }
+        if (line.includes("locked crate") && line.includes("hack started")) {
+            emit("lockedCrateHackStart", { raw: msg.message, timestamp: Date.now() });
+        }
+        if (line.includes("locked crate") && line.includes("hack completed")) {
+            emit("lockedCrateHackFinish", { raw: msg.message, timestamp: Date.now() });
+        }
+        if (line.includes("spawned") && line.includes("crate_elite")) {
+            emit("eliteCrate", { raw: msg.message, timestamp: Date.now() });
+        }
+    });
+}
 
 async function connectRcon(guildId, client) {
     const config = await GuildConfig.findOne({ where: { guildId: guildId } });
@@ -24,7 +47,7 @@ async function connectRcon(guildId, client) {
         ws.on('close', () => activeConnections.delete(guildId));
         ws.on('error', () => { clearTimeout(timeout); activeConnections.delete(guildId); });
 
-        // --- ATTACH RCON EVENT PARSER EMITTER ---
+        // --- ATTACH PARSER TO WEBSOCKET STREAM ---
         const eventEmitterCallback = async (eventName, data) => {
             try {
                 const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
@@ -49,22 +72,21 @@ async function connectRcon(guildId, client) {
                 if (eventName === "eliteCrate") {
                     await channel.send("💎 **Elite Crate spawned!**").catch(() => {});
                 }
-            } catch (err) {
-                console.error('[RCON EVENT DISPATCH ERROR]', err);
-            }
+            } catch (err) {}
         };
 
-        // Register the modular event parser on this socket stream
-        registerEventParser({ on: (event, cb) => {
-            if (event === 'message') {
-                ws.on('message', (raw) => {
-                    try {
-                        const parsed = JSON.parse(raw);
-                        if (parsed && parsed.Message) cb({ message: parsed.Message });
-                    } catch (e) {}
-                });
+        registerEventParser({
+            on: (event, cb) => {
+                if (event === 'message') {
+                    ws.on('message', (raw) => {
+                        try {
+                            const parsed = JSON.parse(raw);
+                            if (parsed && parsed.Message) cb({ message: parsed.Message });
+                        } catch (e) {}
+                    });
+                }
             }
-        }}, eventEmitterCallback);
+        }, eventEmitterCallback);
 
         ws.on('message', async (data) => {
             try {
@@ -79,7 +101,7 @@ async function connectRcon(guildId, client) {
                 const guild = client.guilds.cache.get(guildId);
 
                 // ==========================================
-                // 1. RUST CONSOLE POSITION INTERCEPTOR (entity.find_self / players)
+                // 1. RUST CONSOLE POSITION INTERCEPTOR
                 // ==========================================
                 if (adminPosQueue.size > 0) {
                     const matches = msg.match(/-?\d+\.\d+/g);
