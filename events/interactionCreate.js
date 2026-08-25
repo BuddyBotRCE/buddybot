@@ -152,6 +152,10 @@ module.exports = async (interaction, client) => {
         if (customId === 'btn_admin_kit' || customId === 'admin_kit_choice_select' || customId.startsWith('admin_kit_target_')) {
             return await adminHandler(interaction, client);
         }
+        // Inside your interactionCreate.js modal submission section:
+        if (customId === 'modal_ae_settings' || customId.startsWith('modal_ae_')) {
+            return await require('../handlers/autoEventsHandler')(interaction, client);
+        } 
 
         // Fallback for uncaught buttons
         return await adminHandler(interaction, client);
