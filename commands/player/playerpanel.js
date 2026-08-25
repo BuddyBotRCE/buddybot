@@ -50,15 +50,17 @@ module.exports = {
             new ButtonBuilder().setCustomId('hub_vote_info').setLabel('Vote & Claim').setStyle(ButtonStyle.Success).setEmoji('🗳️'),
             new ButtonBuilder().setCustomId('ticket_create').setLabel('Open Ticket').setStyle(ButtonStyle.Secondary).setEmoji('🎫')
         );
-        // Inside your Player Panel code where you define buttons:
-const suggestionButtonRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-        .setCustomId('btn_player_open_suggestion')
-        .setLabel('Make a Suggestion')
-        .setStyle(ButtonStyle.Primary)
-        .setEmoji('💡')
-);
 
-        return interaction.reply({ embeds: [embed], components: [row1, row2, row3], flags: 64 });
+        // Added the Make a Suggestion button row here
+        const suggestionButtonRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('btn_player_open_suggestion')
+                .setLabel('Make a Suggestion')
+                .setStyle(ButtonStyle.Primary)
+                .setEmoji('💡')
+        );
+
+        // Include row3 and suggestionButtonRow in components array (Discord allows up to 5 action rows)
+        return interaction.reply({ embeds: [embed], components: [row1, row2, row3, suggestionButtonRow], flags: 64 });
     }
 };
