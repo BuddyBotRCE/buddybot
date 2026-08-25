@@ -1,6 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { AutoEvent, AutoEventLocation } = require('../database/db');
+const { AutoEvent, AutoEventLocation, GuildConfig } = require('../database/db');
 const { sendRconCommand, queueAdminPos } = require('../utils/rconManager'); 
+const registerEventParser = require('../utils/rustEventParser');
 
 const aeSessions = new Map();
 
@@ -145,7 +146,6 @@ const autoEventsHandler = async (interaction, client) => {
             if (customId === 'btn_ae_getpos') {
                 if (typeof queueAdminPos === 'function') {
                     await queueAdminPos(interaction);
-                    // The webhook will handle the saving via autoEventsHandler.autoSaveLocation
                     return;
                 } else return await interaction.reply({ content: '❌ `queueAdminPos` missing.', flags: 64 });
             }
@@ -169,7 +169,6 @@ const autoEventsHandler = async (interaction, client) => {
                 const locs = await AutoEventLocation.findAll({ where: { eventId: ev.id } });
                 const prefab = TYPE_INFO[ev.eventType].prefab;
 
-                // Fire RCON command for every location saved to this event
                 let fired = 0;
                 for (const loc of locs) {
                     try {
@@ -218,19 +217,15 @@ const autoEventsHandler = async (interaction, client) => {
 };
 
 // =========================================================================
-// 💥 NEW: AUTO-SAVE WEBHOOK RECEIVER FUNCTION 💥
-// Your webhook in index.js can call this function directly to auto-save!
-// Example: autoEventsHandler.autoSaveLocation(guildId, x, y, z);
+// 💥 AUTO-SAVE & RCON WORLD EVENT PARSER HELPER 💥
 // =========================================================================
 autoEventsHandler.autoSaveLocation = async (guildId, x, y, z) => {
     const session = aeSessions.get(guildId);
     if (!session || !session.selectedEventId) return;
 
-    // Find the next available slot number
     const highestSlot = await AutoEventLocation.findOne({ where: { eventId: session.selectedEventId }, order: [['slot', 'DESC']] });
     const nextSlotNum = highestSlot ? highestSlot.slot + 1 : 1;
 
-    // Auto-save it straight to the DB!
     await AutoEventLocation.create({
         guildId,
         eventId: session.selectedEventId,
@@ -238,6 +233,42 @@ autoEventsHandler.autoSaveLocation = async (guildId, x, y, z) => {
         posX: x.toString(),
         posY: y.toString(),
         posZ: z.toString()
+    });
+};
+
+// Hook up live world event listener to incoming RCON connections
+autoEventsHandler.initRconEventListener = (guildId, rconClient) => {
+    if (!rconClient) return;
+
+    registerEventParser(rconClient, async (eventName, data) => {
+        try {
+            const config = await GuildConfig.findOne({ where: { guildId } });
+            if (!config || !config.logGameChannelId) return;
+
+            const guild = global.discordClient?.guilds.cache.get(guildId) || require('discord.js').Client.prototype.guilds?.cache?.get(guildId);
+            if (!guild) return;
+
+            const channel = guild.channels.cache.get(config.logGameChannelId);
+            if (!channel) return;
+
+            if (eventName === "cargoDocked") {
+                await channel.send("🚢 **Cargo Ship has docked!**").catch(() => {});
+            }
+            if (eventName === "supplyDrop") {
+                await channel.send("📦 **Supply Drop detected!**").catch(() => {});
+            }
+            if (eventName === "lockedCrateHackStart") {
+                await channel.send("🔓 **Locked Crate hack has started!**").catch(() => {});
+            }
+            if (eventName === "lockedCrateHackFinish") {
+                await channel.send("✅ **Locked Crate hack completed!**").catch(() => {});
+            }
+            if (eventName === "eliteCrate") {
+                await channel.send("💎 **Elite Crate spawned!**").catch(() => {});
+            }
+        } catch (err) {
+            console.error('[AUTO EVENT RCON DISPATCH ERROR]', err);
+        }
     });
 };
 

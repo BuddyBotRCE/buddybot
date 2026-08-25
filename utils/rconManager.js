@@ -2,6 +2,7 @@ const WebSocket = require('ws');
 const { GuildConfig, UserEconomy, CustomBind, BindCooldown, ActiveBounty, BountyCooldown } = require('../database/db');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const bindHandler = require('../handlers/bindHandler');
+const registerEventParser = require('./rustEventParser');
 
 const activeConnections = new Map();
 const adminPosQueue = new Map(); 
@@ -22,6 +23,48 @@ async function connectRcon(guildId, client) {
         });
         ws.on('close', () => activeConnections.delete(guildId));
         ws.on('error', () => { clearTimeout(timeout); activeConnections.delete(guildId); });
+
+        // --- ATTACH RCON EVENT PARSER EMITTER ---
+        const eventEmitterCallback = async (eventName, data) => {
+            try {
+                const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
+                const guild = client.guilds.cache.get(guildId);
+                if (!currentConfig || !currentConfig.logGameChannelId || !guild) return;
+
+                const channel = guild.channels.cache.get(currentConfig.logGameChannelId);
+                if (!channel) return;
+
+                if (eventName === "cargoDocked") {
+                    await channel.send("🚢 **Cargo Ship has docked!**").catch(() => {});
+                }
+                if (eventName === "supplyDrop") {
+                    await channel.send("📦 **Supply Drop detected!**").catch(() => {});
+                }
+                if (eventName === "lockedCrateHackStart") {
+                    await channel.send("🔓 **Locked Crate hack has started!**").catch(() => {});
+                }
+                if (eventName === "lockedCrateHackFinish") {
+                    await channel.send("✅ **Locked Crate hack completed!**").catch(() => {});
+                }
+                if (eventName === "eliteCrate") {
+                    await channel.send("💎 **Elite Crate spawned!**").catch(() => {});
+                }
+            } catch (err) {
+                console.error('[RCON EVENT DISPATCH ERROR]', err);
+            }
+        };
+
+        // Register the modular event parser on this socket stream
+        registerEventParser({ on: (event, cb) => {
+            if (event === 'message') {
+                ws.on('message', (raw) => {
+                    try {
+                        const parsed = JSON.parse(raw);
+                        if (parsed && parsed.Message) cb({ message: parsed.Message });
+                    } catch (e) {}
+                });
+            }
+        }}, eventEmitterCallback);
 
         ws.on('message', async (data) => {
             try {
@@ -194,8 +237,6 @@ async function queueAdminPos(adminName, guildId, adminId, channelId, type = 'cus
     }, 5000);
 
     adminPosQueue.set(adminName, { guildId, adminId, channelId, type, timeoutTimer });
-
-    // Rust Console Edition command to list connected players and their live coordinates
     sendRconCommand(guildId, `players`).catch(() => {});
 }
 
