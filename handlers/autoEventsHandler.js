@@ -1,7 +1,6 @@
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { AutoEvent, AutoEventLocation, GuildConfig } = require('../database/db');
+const { AutoEvent, AutoEventLocation } = require('../database/db');
 const { sendRconCommand, queueAdminPos } = require('../utils/rconManager'); 
-const registerEventParser = require('../utils/rustEventParser');
 
 const aeSessions = new Map();
 
@@ -217,7 +216,7 @@ const autoEventsHandler = async (interaction, client) => {
 };
 
 // =========================================================================
-// 💥 AUTO-SAVE & RCON WORLD EVENT PARSER HELPER 💥
+// 💥 AUTO-SAVE LOCATION HELPER 💥
 // =========================================================================
 autoEventsHandler.autoSaveLocation = async (guildId, x, y, z) => {
     const session = aeSessions.get(guildId);
@@ -233,42 +232,6 @@ autoEventsHandler.autoSaveLocation = async (guildId, x, y, z) => {
         posX: x.toString(),
         posY: y.toString(),
         posZ: z.toString()
-    });
-};
-
-// Hook up live world event listener to incoming RCON connections
-autoEventsHandler.initRconEventListener = (guildId, rconClient) => {
-    if (!rconClient) return;
-
-    registerEventParser(rconClient, async (eventName, data) => {
-        try {
-            const config = await GuildConfig.findOne({ where: { guildId } });
-            if (!config || !config.logGameChannelId) return;
-
-            const guild = global.discordClient?.guilds.cache.get(guildId) || require('discord.js').Client.prototype.guilds?.cache?.get(guildId);
-            if (!guild) return;
-
-            const channel = guild.channels.cache.get(config.logGameChannelId);
-            if (!channel) return;
-
-            if (eventName === "cargoDocked") {
-                await channel.send("🚢 **Cargo Ship has docked!**").catch(() => {});
-            }
-            if (eventName === "supplyDrop") {
-                await channel.send("📦 **Supply Drop detected!**").catch(() => {});
-            }
-            if (eventName === "lockedCrateHackStart") {
-                await channel.send("🔓 **Locked Crate hack has started!**").catch(() => {});
-            }
-            if (eventName === "lockedCrateHackFinish") {
-                await channel.send("✅ **Locked Crate hack completed!**").catch(() => {});
-            }
-            if (eventName === "eliteCrate") {
-                await channel.send("💎 **Elite Crate spawned!**").catch(() => {});
-            }
-        } catch (err) {
-            console.error('[AUTO EVENT RCON DISPATCH ERROR]', err);
-        }
     });
 };
 
