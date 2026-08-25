@@ -101,7 +101,10 @@ const CustomBind = sequelize.define('CustomBind', {
     command: { type: DataTypes.TEXT, allowNull: true }, 
     cooldown: { type: DataTypes.INTEGER, defaultValue: 0 }, 
     cost: { type: DataTypes.INTEGER, defaultValue: 0 }, 
-    roleId: { type: DataTypes.STRING, allowNull: true } 
+    roleId: { type: DataTypes.STRING, allowNull: true },
+    logMemberChannelId: { type: DataTypes.STRING, allowNull: true }, // Joins, leaves, bans
+    logMessageChannelId: { type: DataTypes.STRING, allowNull: true }, // Message edits & deletes
+    logVoiceChannelId: { type: DataTypes.STRING, allowNull: true },   // Voice channel movements
 });
 
 const BindCooldown = sequelize.define('BindCooldown', { guildId: { type: DataTypes.STRING, primaryKey: true }, userId: { type: DataTypes.STRING, primaryKey: true }, bindId: { type: DataTypes.INTEGER, primaryKey: true }, expiresAt: { type: DataTypes.DATE } });
