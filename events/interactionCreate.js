@@ -25,6 +25,7 @@ const kitHandler = require(handlerPath('kitHandler'));
 const bindHandler = require('../handlers/bindHandler');
 const adminHandler = require(handlerPath('adminHandler'));
 const loggingHandler = require(handlerPath('loggingHandler'));
+const postEmbedHandler = require(handlerPath('postEmbedHandler'));
 
 // --- NEW MODULES ---
 const customZoneHandler = require(handlerPath('customZoneHandler'));
@@ -45,6 +46,40 @@ module.exports = async (interaction, client) => {
         const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
 
         // ====================================================================
+        // 🚦 0. UNIVERSAL MODAL SUBMISSION ROUTER (Catch modals first)
+        // ====================================================================
+        if (interaction.isModalSubmit()) {
+            if (customId === 'modal_ae_settings' || customId.startsWith('modal_ae_')) {
+                return await autoEventsHandler(interaction, client);
+            }
+            if (customId.startsWith('modal_emb_') || customId === 'modal_admin_embed') {
+                return await postEmbedHandler(interaction, client);
+            }
+            if (customId.startsWith('modal_sug_')) {
+                return await suggestionHandler(interaction, client);
+            }
+            if (customId.startsWith('modal_am_') || customId === 'modal_automod_config') {
+                return await autoModHandler(interaction, client);
+            }
+            if (customId.startsWith('modal_cz_')) {
+                return await customZoneHandler(interaction, client);
+            }
+            if (customId.startsWith('modal_rr_')) {
+                return await reactionRoleHandler(interaction, client);
+            }
+            if (customId.startsWith('modal_clan_') || customId.startsWith('clan_modal_')) {
+                return await clanHandler(interaction, client);
+            }
+            if (customId.startsWith('modal_tk_')) {
+                return await ticketHandler(interaction, client);
+            }
+            if (customId.startsWith('modal_ga_')) {
+                return await giveawayHandler(interaction, client);
+            }
+            return await adminHandler(interaction, client);
+        }
+
+        // ====================================================================
         // 🚦 1. ADMIN MENU ROUTER
         // ====================================================================
         if (customId === 'admin_menu_select') {
@@ -61,11 +96,10 @@ module.exports = async (interaction, client) => {
             if (selectedValue === 'setup_bounties') return await bountyHandler(interaction, client);
             if (selectedValue === 'setup_kits') return await kitHandler(interaction, client);
             if (selectedValue === 'setup_logging' || selectedValue.includes('log')) return await loggingHandler(interaction, client);
-            if (selectedValue === 'setup_tier') return require('../handlers/premiumHandler')(interaction, client);
-            if (selectedValue === 'setup_binds') return require('../handlers/bindHandler')(interaction, client);
-            if (selectedValue === 'setup_postembed' || selectedValue.includes('embed')) return await require('../handlers/postEmbedHandler')(interaction, client);
+            if (selectedValue === 'setup_tier') return await premiumHandler(interaction, client);
+            if (selectedValue === 'setup_binds') return await bindHandler(interaction, client);
+            if (selectedValue === 'setup_postembed' || selectedValue.includes('embed')) return await postEmbedHandler(interaction, client);
             
-            // --> NEW ROUTING LINKS <--
             if (selectedValue.includes('pve') || selectedValue.includes('zone')) return await customZoneHandler(interaction, client);
             if (selectedValue === 'setup_reactionroles' || selectedValue === 'setup_verification') return await reactionRoleHandler(interaction, client); 
             if (selectedValue === 'setup_automod') return await autoModHandler(interaction, client);
@@ -74,88 +108,87 @@ module.exports = async (interaction, client) => {
         }
 
         // ====================================================================
-        // 🚦 2. COMPONENT & MODAL ROUTING STATION
+        // 🚦 2. COMPONENT ROUTING STATION (Buttons & Select Menus)
         // ====================================================================
 
-        // --- LOGGING ROUTER ---
         if (customId.startsWith('btn_log_') || customId.startsWith('select_log_chan_')) {
             return await loggingHandler(interaction, client);
         }
 
-        // --- SUGGESTIONS ROUTER ---
-        if (customId.startsWith('sug_') || customId === 'select_sug_channel' || customId === 'select_sug_role' || customId === 'btn_player_open_suggestion' || customId.startsWith('modal_sug_')) {
+        if (customId.startsWith('sug_') || customId === 'select_sug_channel' || customId === 'select_sug_role' || customId === 'btn_player_open_suggestion') {
             return await suggestionHandler(interaction, client);
         }
 
-        // --- AUTO MOD ROUTER ---
-        if (customId.startsWith('am_') || customId.startsWith('btn_am_') || customId.startsWith('modal_am_')) {
+        if (customId.startsWith('am_') || customId.startsWith('btn_am_')) {
             return await autoModHandler(interaction, client);
         }
 
-        // --- CUSTOM ZONES ROUTER ---
-        if (customId.startsWith('cz_') || customId.startsWith('btn_cz_') || customId.startsWith('modal_cz_') || customId === 'select_custom_zone' || customId.includes('pve') || customId.includes('zone')) {
+        if (customId.startsWith('cz_') || customId.startsWith('btn_cz_') || customId === 'select_custom_zone' || customId.includes('pve') || customId.includes('zone')) {
             return await customZoneHandler(interaction, client);
         }
 
-        // --- REACTION ROLES & VERIFICATION ROUTER ---
-        if (customId.startsWith('rr_') || customId.startsWith('select_rr_') || customId.startsWith('btn_rr_') || customId.startsWith('modal_rr_') || customId.includes('reaction') || customId.includes('verify') || customId.includes('verification')) {
-            if (customId === 'btn_open_verify_modal' || customId === 'modal_verify_email') {
+        if (customId.startsWith('rr_') || customId.startsWith('select_rr_') || customId.startsWith('btn_rr_') || customId.includes('reaction') || customId.includes('verify') || customId.includes('verification')) {
+            if (customId === 'btn_open_verify_modal') {
                 return await premiumHandler(interaction, client);
             }
             return await reactionRoleHandler(interaction, client);
         }
 
-        // --- CLANS ROUTER ---
-        if (customId.includes('clan') || customId.includes('bank') || customId.startsWith('modal_clan_') || customId.startsWith('btn_clan_') || customId.startsWith('btn_bank_') || customId.startsWith('clan_modal_') || customId.startsWith('select_clan_')) {
+        if (customId.includes('clan') || customId.includes('bank') || customId.startsWith('btn_clan_') || customId.startsWith('btn_bank_') || customId.startsWith('select_clan_')) {
             return await clanHandler(interaction, client);
         }
-        // Component router section:
-        if (customId.startsWith('btn_emb_') || customId.startsWith('modal_emb_') || customId === 'select_emb_target_channel' || customId === 'select_emb_template') {
-            return await require('../handlers/postEmbedHandler')(interaction, client);
-}
 
-        // --- EXISTING MODULE ROUTERS ---
-        if (customId.startsWith('ae_') || customId.startsWith('modal_ae_') || customId.startsWith('btn_finalize_tpl_aeslot')) {
+        if (customId.startsWith('btn_emb_') || customId === 'select_emb_target_channel' || customId === 'select_emb_template') {
+            return await postEmbedHandler(interaction, client);
+        }
+
+        if (customId.startsWith('ae_') || customId === 'btn_finalize_tpl_aeslot') {
             return await autoEventsHandler(interaction, client);
         }
+
         if (customId.includes('econ') || customId.includes('balance') || customId.includes('daily') || customId.includes('deposit') || customId.includes('withdraw') || customId.includes('admin_give') || customId.includes('admin_take')) {
             return await economyHandler(interaction, client);
         }
+
         if (customId === 'toggle_tier_status') {
             return await premiumHandler(interaction, client);
         }
+
         if (customId.startsWith('tk_') || customId.startsWith('btn_tk_') || customId.includes('ticket')) {
             return await ticketHandler(interaction, client);
         }
+
         if (customId.startsWith('ga_') || customId.includes('giveaway')) {
             return await giveawayHandler(interaction, client);
         }
+
         if (customId.includes('shop') || customId.startsWith('buy_item_')) {
             return await shopHandler(interaction, client);
         }
+
         if (customId.startsWith('bp_') || customId.includes('buddypass')) {
             return await buddyPassHandler(interaction, client);
         }
-        if (customId.includes('casino') || customId.startsWith('modal_play_')) {
+
+        if (customId.includes('casino')) {
             return await casinoHandler(interaction, client);
         }
+
         if (customId.includes('bounty') || customId.includes('bounties')) {
             return await bountyHandler(interaction, client);
         }
+
         if (customId.includes('kit') && !customId.includes('ticket')) {
             return await kitHandler(interaction, client);
         }
+
         if (customId.startsWith('bind_') || customId.startsWith('btn_bind_') || customId.includes('bind')) {
             return await bindHandler(interaction, client);
         }
-        // --- ADMIN KIT WIZARD & TOOLS ROUTER ---
+
         if (customId === 'btn_admin_kit' || customId === 'admin_kit_choice_select' || customId.startsWith('admin_kit_target_')) {
             return await adminHandler(interaction, client);
         }
-        // Inside your interactionCreate.js modal submission section:
-        if (customId === 'modal_ae_settings' || customId.startsWith('modal_ae_')) {
-            return await require('../handlers/autoEventsHandler')(interaction, client);
-        } 
 
         // Fallback for uncaught buttons
         return await adminHandler(interaction, client);
