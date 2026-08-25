@@ -108,8 +108,8 @@ module.exports = async (interaction, client) => {
         if (customId === 'toggle_tier_status') {
             return await premiumHandler(interaction, client);
         }
-        if (customId.includes('suggestion')) {
-            return await suggestionHandler(interaction, client);
+       if (customId.startsWith('sug_') || customId === 'select_sug_channel' || customId === 'select_sug_role' || customId === 'btn_player_open_suggestion') {
+    const suggestionHandler = require('../handlers/suggestionHandler');
         }
         if (customId.startsWith('tk_') || customId.startsWith('btn_tk_') || customId.includes('ticket')) {
             return await ticketHandler(interaction, client);
