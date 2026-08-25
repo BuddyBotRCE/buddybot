@@ -86,8 +86,15 @@ module.exports = async (interaction, client) => {
             return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🌐 RCON Setup').setColor('#3498db')], components: [row], flags: 64 });
         }
         if (selectedValue === 'admin_tools') {
-            const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_admin_item').setLabel('Give Items').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId('btn_admin_rcon').setLabel('Send Cmd').setStyle(ButtonStyle.Danger));
-            return interaction.reply({ content: '🧰 Live Admin Tools', components: [row], flags: 64 });
+            const row1 = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('btn_admin_item').setLabel('Give Any Item').setStyle(ButtonStyle.Success).setEmoji('🎁'),
+                new ButtonBuilder().setCustomId('btn_admin_vip').setLabel('Add VIP').setStyle(ButtonStyle.Primary).setEmoji('⭐'),
+                new ButtonBuilder().setCustomId('btn_admin_mod').setLabel('Add Moderator').setStyle(ButtonStyle.Secondary).setEmoji('🛡️')
+            );
+            const row2 = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('btn_admin_rcon').setLabel('Custom RCON Cmd').setStyle(ButtonStyle.Danger).setEmoji('⚡')
+            );
+            return interaction.reply({ content: '🧰 **Live Admin Tools:** Choose an administrative action below:', components: [row1, row2], flags: 64 });
         }
         if (selectedValue === 'setup_crosschat') {
             const row = new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_crosschat_channel').setPlaceholder('Select channel...').addChannelTypes(ChannelType.GuildText));
@@ -220,6 +227,16 @@ module.exports = async (interaction, client) => {
     }
 
     if (interaction.isButton()) {
+        if (customId === 'btn_admin_vip') {
+            const modal = new ModalBuilder().setCustomId('modal_admin_vip_exec').setTitle('Grant VIP Status');
+            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ign').setLabel("Exact In-Game Name / SteamID").setStyle(TextInputStyle.Short).setRequired(true)));
+            return interaction.showModal(modal);
+        }
+        if (customId === 'btn_admin_mod') {
+            const modal = new ModalBuilder().setCustomId('modal_admin_mod_exec').setTitle('Grant Server Moderator');
+            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ign').setLabel("Exact In-Game Name / SteamID").setStyle(TextInputStyle.Short).setRequired(true)));
+            return interaction.showModal(modal);
+        }
         if (customId === 'btn_wipe_full') {
             const modal = new ModalBuilder().setCustomId('modal_wipe_full').setTitle('Confirm FULL Wipe');
             modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('confirm_text').setLabel('Type WIPE to permanently delete everything').setStyle(TextInputStyle.Short).setRequired(true)));
@@ -340,6 +357,26 @@ module.exports = async (interaction, client) => {
     }
 
     if (interaction.isModalSubmit()) {
+        if (customId === 'modal_admin_vip_exec') {
+            const target = interaction.fields.getTextInputValue('ign').trim();
+            try {
+                // Adjust to your server's specific VIP group/permission command (e.g., oxide/carbon group or standard RCE permission)
+                await sendRconCommand(interaction.guild.id, `ownerid ${target} "VIP Status"`);
+                return interaction.reply({ content: `✅ Successfully granted VIP status to **${target}**!`, flags: 64 });
+            } catch (e) {
+                return interaction.reply({ content: `❌ RCON Error executing VIP command: \`${e.message}\``, flags: 64 });
+            }
+        }
+
+        if (customId === 'modal_admin_mod_exec') {
+            const target = interaction.fields.getTextInputValue('ign').trim();
+            try {
+                await sendRconCommand(interaction.guild.id, `moderatorid ${target} "Server Moderator"`);
+                return interaction.reply({ content: `✅ Successfully granted Moderator rights to **${target}**!`, flags: 64 });
+            } catch (e) {
+                return interaction.reply({ content: `❌ RCON Error executing Moderator command: \`${e.message}\``, flags: 64 });
+            }
+        }
         if (customId === 'modal_automod_config') {
             const action = interaction.fields.getTextInputValue('action').trim().toLowerCase();
             const caps = parseInt(interaction.fields.getTextInputValue('caps')) || 70;
