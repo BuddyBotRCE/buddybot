@@ -238,6 +238,7 @@ module.exports = async (interaction, client) => {
             );
             return interaction.showModal(modal);
         }
+
         if (customId === 'btn_multiserver_add') {
             const modal = new ModalBuilder().setCustomId('modal_multiserver_add').setTitle('Add Game Server');
             modal.addComponents(
@@ -321,6 +322,21 @@ module.exports = async (interaction, client) => {
             modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ai_key').setLabel("API Key").setStyle(TextInputStyle.Short).setValue(config?.aiApiKey || '').setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ai_model').setLabel("Model Name (e.g. gpt-4o-mini)").setStyle(TextInputStyle.Short).setValue(config?.aiModel || 'gpt-4o-mini').setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ai_url').setLabel("Base API URL").setStyle(TextInputStyle.Short).setValue(config?.aiBaseUrl || 'https://api.openai.com/v1').setRequired(true)));
             return interaction.showModal(modal);
         }
+        if (customId === 'btn_ai_toggle') {
+            let [config] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
+            const newState = config.aiEnabled === false ? true : false;
+            await config.update({ aiEnabled: newState });
+            return interaction.reply({ content: `✅ AI assistant has been turned **${newState ? 'ON 🟢' : 'OFF 🔴'}**!`, flags: 64 });
+        }
+
+        if (customId === 'btn_ai_premade') {
+            const modal = new ModalBuilder().setCustomId('modal_ai_add_premade').setTitle('Add Premade AI Response');
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('trigger_word').setLabel('Trigger Keyword/Phrase (e.g. wipe)').setStyle(TextInputStyle.Short).setRequired(true)),
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('response_text').setLabel('Bot Response').setStyle(TextInputStyle.Paragraph).setRequired(true))
+            );
+            return interaction.showModal(modal);
+        }
     }
 
     if (interaction.isModalSubmit()) {
@@ -330,6 +346,19 @@ module.exports = async (interaction, client) => {
             if (!['warn', 'timeout', 'ban'].includes(action)) return interaction.reply({ content: '❌ Action must be either `warn`, `timeout`, or `ban`.', flags: 64 });
             await GuildConfig.upsert({ guildId: interaction.guild.id, autoModAction: action, autoModCapsLimit: caps });
             return interaction.reply({ content: `✅ Auto-Mod settings updated!\n• Punishment: \`${action}\`\n• Caps Limit: \`${caps}%\``, flags: 64 });
+        }
+        if (customId === 'modal_ai_add_premade') {
+            const trigger = interaction.fields.getTextInputValue('trigger_word').trim();
+            const responseText = interaction.fields.getTextInputValue('response_text').trim();
+
+            let [config] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
+            let list = [];
+            try { list = JSON.parse(config.aiPremadeResponses || '[]'); } catch(e){}
+
+            list.push({ trigger, response: responseText });
+            await config.update({ aiPremadeResponses: JSON.stringify(list) });
+
+            return interaction.reply({ content: `✅ Successfully added premade response for trigger: **"${trigger}"**!`, flags: 64 });
         }
         if (customId === 'modal_ai_credentials') {
             const apiKey = interaction.fields.getTextInputValue('ai_key');
