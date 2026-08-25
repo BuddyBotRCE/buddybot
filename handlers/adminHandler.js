@@ -43,9 +43,34 @@ module.exports = async (interaction, client) => {
         }
         if (selectedValue === 'setup_ai') {
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-            const embed = new EmbedBuilder().setTitle('🤖 AI Integration Settings').setDescription(`• **Provider:** \`${config?.aiProvider || 'openai'}\`\n• **Model:** \`${config?.aiModel || 'gpt-4o-mini'}\`\n• **API Key:** ${config?.aiApiKey ? 'Configured' : 'Not Set'}\n• **Base URL:** \`${config?.aiBaseUrl || 'https://api.openai.com/v1'}\``).setColor('#9b59b6');
-            const row1 = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('select_ai_provider').setPlaceholder('Choose AI Platform / Provider...').addOptions([{ label: 'OpenAI', value: 'openai' }, { label: 'OpenRouter', value: 'openrouter' }, { label: 'Groq', value: 'groq' }, { label: 'DeepSeek', value: 'deepseek' }, { label: 'Custom', value: 'custom' }]));
-            const row2 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_ai_set_key').setLabel('Set API Key & Model').setStyle(ButtonStyle.Primary).setEmoji('🔑'));
+            const embed = new EmbedBuilder()
+                .setTitle('🤖 AI Integration Settings')
+                .setDescription(`Configure your server AI assistant and LLM integration.\n\n` +
+                    `• **Provider:** \`${config?.aiProvider || 'openai'}\`\n` +
+                    `• **Model:** \`${config?.aiModel || 'gpt-4o-mini'}\`\n` +
+                    `• **API Key:** ${config?.aiApiKey ? '🟢 Configured & Active' : '🔴 Not Set'}\n` +
+                    `• **Base URL:** \`${config?.aiBaseUrl || 'https://api.openai.com/v1'}\``)
+                .setColor('#9b59b6');
+
+            const row1 = new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('select_ai_provider')
+                    .setPlaceholder('Choose AI Platform / Provider...')
+                    .addOptions([
+                        { label: 'OpenAI', value: 'openai', description: 'GPT-4o, GPT-4o-mini', emoji: '🟢' },
+                        { label: 'Anthropic (Claude)', value: 'anthropic', description: 'Claude 3.7 / Sonnet', emoji: '🟠' },
+                        { label: 'Google Gemini', value: 'gemini', description: 'Gemini Flash & Pro', emoji: '🔵' },
+                        { label: 'DeepSeek', value: 'deepseek', description: 'DeepSeek Chat & Pro', emoji: '🟣' },
+                        { label: 'Groq', value: 'groq', description: 'Ultra-fast Llama hosting', emoji: '⚡' },
+                        { label: 'OpenRouter', value: 'openrouter', description: 'Multi-model gateway API', emoji: '🌐' },
+                        { label: 'Custom / Local (Ollama)', value: 'custom', description: 'Self-hosted LLMs', emoji: '💻' }
+                    ])
+            );
+
+            const row2 = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('btn_ai_set_key').setLabel('Enter API Key & Model').setStyle(ButtonStyle.Primary).setEmoji('🔑')
+            );
+
             return interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
         }
         if (selectedValue === 'setup_rcon') {
@@ -134,16 +159,37 @@ module.exports = async (interaction, client) => {
             return interaction.showModal(modal);
         }
         if (customId === 'select_ai_provider') {
-            let defaultUrl = 'https://api.openai.com/v1'; let defaultModel = 'gpt-4o-mini';
-            if (selectedValue === 'openrouter') { defaultUrl = 'https://openrouter.ai/api/v1'; defaultModel = 'openai/gpt-4o-mini'; } 
-            else if (selectedValue === 'groq') { defaultUrl = 'https://api.groq.com/openai/v1'; defaultModel = 'llama-3.3-70b-versatile'; } 
-            else if (selectedValue === 'deepseek') { defaultUrl = 'https://api.deepseek.com/v1'; defaultModel = 'deepseek-chat'; } 
-            else if (selectedValue === 'gemini') { defaultUrl = 'https://generativelanguage.googleapis.com/v1beta/openai/'; defaultModel = 'gemini-3.7-flash'; }
-            else if (selectedValue === 'custom') { defaultUrl = 'http://localhost:11434/v1'; defaultModel = 'llama3'; }
+            let defaultUrl = 'https://api.openai.com/v1'; 
+            let defaultModel = 'gpt-4o-mini';
+
+            if (selectedValue === 'anthropic') { 
+                defaultUrl = 'https://api.anthropic.com/v1'; 
+                defaultModel = 'claude-3-7-sonnet'; 
+            } else if (selectedValue === 'gemini') { 
+                defaultUrl = 'https://generativelanguage.googleapis.com/v1beta/openai/'; 
+                defaultModel = 'gemini-2.5-flash'; 
+            } else if (selectedValue === 'deepseek') { 
+                defaultUrl = 'https://api.deepseek.com/v1'; 
+                defaultModel = 'deepseek-chat'; 
+            } else if (selectedValue === 'groq') { 
+                defaultUrl = 'https://api.groq.com/openai/v1'; 
+                defaultModel = 'llama-3.3-70b-versatile'; 
+            } else if (selectedValue === 'openrouter') { 
+                defaultUrl = 'https://openrouter.ai/api/v1'; 
+                defaultModel = 'anthropic/claude-3.7-sonnet'; 
+            } else if (selectedValue === 'custom') { 
+                defaultUrl = 'http://localhost:11434/v1'; 
+                defaultModel = 'llama3'; 
+            }
+
             let [config] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
             await config.update({ aiProvider: selectedValue, aiBaseUrl: defaultUrl, aiModel: defaultModel });
-            const row2 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_ai_set_key').setLabel('Set API Key & Model').setStyle(ButtonStyle.Primary).setEmoji('🔑'));
-            return interaction.update({ content: `✅ AI Platform set to **${selectedValue.toUpperCase()}**! Now click **Set API Key & Model**.`, embeds: [], components: [row2] });
+
+            const row2 = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('btn_ai_set_key').setLabel('Enter API Key & Model').setStyle(ButtonStyle.Primary).setEmoji('🔑')
+            );
+
+            return interaction.update({ content: `✅ AI Platform set to **${selectedValue.toUpperCase()}** (Default model: \`${defaultModel}\`)!\nNow click **Enter API Key & Model** to save your credentials.`, embeds: [], components: [row2] });
         }
     }
 
