@@ -148,6 +148,10 @@ module.exports = async (interaction, client) => {
         if (customId.startsWith('bind_') || customId.startsWith('btn_bind_') || customId.includes('bind')) {
             return await bindHandler(interaction, client);
         }
+        // --- ADMIN KIT WIZARD & TOOLS ROUTER ---
+        if (customId === 'btn_admin_kit' || customId === 'admin_kit_choice_select' || customId.startsWith('admin_kit_target_')) {
+            return await adminHandler(interaction, client);
+        }
 
         // Fallback for uncaught buttons
         return await adminHandler(interaction, client);
