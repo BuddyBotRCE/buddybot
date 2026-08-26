@@ -133,11 +133,12 @@ async function connectRcon(guildId, client) {
                                     if (setupData.interaction) {
                                         await czHandler.refreshPanelViaInteraction(
                                             setupData.interaction, 
-                                            `✅ **Zone Center Captured Automatically!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``
+                                            `✅ **Zone Center Captured Automatically!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``,
+                                            setupData.targetId // 👈 WE NOW PASS THE ZONE ID HERE SO IT DOESN'T GO TO MAIN MENU
                                         );
                                     }
                                 }
-                            } 
+                            }
                             // ROUTE 3: CUSTOM BINDS (Fallback)
                             else {
                                 await bindHandler.autoSavePosition(guildId, posX, posY, posZ);
