@@ -44,7 +44,6 @@ async function connectRcon(guildId, client) {
             activeConnections.set(guildId, ws);
             resolve("Connection established!");
         });
-        
         ws.on('close', () => activeConnections.delete(guildId));
         ws.on('error', () => { clearTimeout(timeout); activeConnections.delete(guildId); });
 
@@ -52,7 +51,7 @@ async function connectRcon(guildId, client) {
         const eventEmitterCallback = async (eventName, data) => {
             try {
                 const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
-                if (!client) return; // Failsafe
+                if (!client) return;
                 const guild = client.guilds.cache.get(guildId);
                 if (!currentConfig || !currentConfig.logGameChannelId || !guild) return;
 
@@ -94,9 +93,13 @@ async function connectRcon(guildId, client) {
                 // 1. RUST CONSOLE POSITION INTERCEPTOR
                 // ==========================================
                 if (adminPosQueue.size > 0) {
-                    const matches = msg.match(/-?\d+\.\d+/g);
-                    if (matches && matches.length >= 3) {
-                        for (const [adminId, setupData] of adminPosQueue.entries()) {
+                    for (const [adminId, setupData] of adminPosQueue.entries()) {
+                        
+                        // Push log to memory in case it times out so we can see what the server said
+                        if (setupData.logs) setupData.logs.push(msg);
+
+                        const matches = msg.match(/-?\d+\.\d+/g);
+                        if (matches && matches.length >= 3) {
                             if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
                             const channel = client ? client.channels.cache.get(setupData.channelId) : null;
 
@@ -243,7 +246,7 @@ async function sendRconCommand(guildId, commandStr, client = null) {
     return true;
 }
 
-// === UPDATED QUEUE ADMIN POS ===
+// === UPDATED QUEUE ADMIN POS WITH DIAGNOSTICS ===
 async function queueAdminPos(interaction, type = 'custom_bind') {
     const guildId = interaction.guild.id;
     const adminId = interaction.user.id;
@@ -255,20 +258,26 @@ async function queueAdminPos(interaction, type = 'custom_bind') {
         if (old.timeoutTimer) clearTimeout(old.timeoutTimer);
     }
 
-    // Increased timeout to 8 seconds to give RCON more time to reply
+    // Increased timeout to 12 seconds, and prints server response on failure!
     const timeoutTimer = setTimeout(async () => {
         if (adminPosQueue.has(adminId)) {
+            const data = adminPosQueue.get(adminId);
             adminPosQueue.delete(adminId);
+            
             const channel = client.channels.cache.get(channelId);
             if (channel) {
-                channel.send({ content: `<@${adminId}> ⚠️ **Position request timed out.** Ensure your server is online, credentials are set in the Admin Panel, and you are actively in-game.` }).catch(()=>{});
+                let debugStr = data.logs && data.logs.length > 0 
+                    ? data.logs.join('\n').substring(0, 1000) 
+                    : "No response received from server. Make sure RCON is connected!";
+
+                channel.send({ content: `<@${adminId}> ⚠️ **Position request timed out.**\nHere is what the server responded with:\n\`\`\`text\n${debugStr}\n\`\`\`\n*(If your coordinates are in the text above, send this output to the developer so we can tune the scanner!)*` }).catch(()=>{});
             }
         }
-    }, 8000);
+    }, 12000);
 
-    adminPosQueue.set(adminId, { guildId, adminId, channelId, type, timeoutTimer });
+    // Give it an empty logs array to store what the server says
+    adminPosQueue.set(adminId, { guildId, adminId, channelId, type, timeoutTimer, logs: [] });
     
-    // Explicitly pass client so connection handles correctly
     try {
         await sendRconCommand(guildId, `players`, client);
     } catch (err) {
