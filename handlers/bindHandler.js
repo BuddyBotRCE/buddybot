@@ -182,7 +182,6 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
             new ButtonBuilder().setCustomId('bind_btn_back').setLabel('Back to List').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
         ));
     }
-    // STEP 1: PICK CATEGORY
     else if (session.view === 'emote_category') {
         embed.setTitle('💬 Select Quick-Chat Category').setDescription('Choose a category to view its quick-chat wheel commands.');
         
@@ -195,7 +194,6 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
             new ButtonBuilder().setCustomId('bind_back_bind').setLabel('Cancel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
         ));
     }
-    // STEP 2: PICK PHRASE FROM CATEGORY
     else if (session.view === 'emote_picker') {
         const cat = session.selectedCategory || 'cat_combat';
         const options = CHAT_OPTIONS_MAP[cat] || CHAT_OPTIONS_MAP.cat_combat;
@@ -295,14 +293,12 @@ const bindHandler = async (interaction, client) => {
             return await renderBindPanel(interaction, `✨ Created new ${type} bind!`);
         }
 
-        // --- SELECT CATEGORY ---
         if (customId === 'bind_do_category' && interaction.isStringSelectMenu()) {
             session.selectedCategory = interaction.values[0];
             session.view = 'emote_picker';
             return await renderBindPanel(interaction);
         }
 
-        // --- SELECT PHRASE ---
         if (customId === 'bind_do_emote' && interaction.isStringSelectMenu()) {
             const cat = session.selectedCategory || 'cat_combat';
             const options = CHAT_OPTIONS_MAP[cat] || [];
@@ -395,6 +391,7 @@ const bindHandler = async (interaction, client) => {
             if (customId === 'bind_btn_getpos') {
                 const loadingPayload = await buildPanelPayload(guildId, '⏳ **Extracting your position from the server...**');
                 await interaction.update(loadingPayload);
+                // 👈 FIX: THIS IS NOW SET TO 'custom_bind' (WAS 'custom_zone')
                 await queueAdminPos(interaction, 'custom_bind', session.selectedBindId);
                 return;
             }
@@ -442,7 +439,9 @@ bindHandler.refreshPanelViaInteraction = async (interaction, messageOverride, bi
         }
 
         const payload = await buildPanelPayload(guildId, messageOverride);
-        await interaction.editReply(payload);
+        if (interaction.isRepliable()) {
+            await interaction.editReply(payload);
+        }
     } catch (e) {
         console.error("Failed to live-refresh Bind panel:", e);
     }
