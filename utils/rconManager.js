@@ -134,16 +134,28 @@ async function connectRcon(guildId, client) {
                                 }
                             } 
                             else if (setupData.type === 'custom_bind') {
-                                const bindHandler = require('../handlers/bindHandler');
-                                if (bindHandler && bindHandler.autoSavePosition) {
-                                    await bindHandler.autoSavePosition(guildId, posX, posY, posZ, setupData.targetId);
-                                    if (setupData.interaction) {
-                                        await bindHandler.refreshPanelViaInteraction(
-                                            setupData.interaction, 
-                                            `✅ **Position Captured Automatically!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``,
-                                            setupData.targetId
-                                        );
+                                // Direct database save to bypass circular dependency blocks!
+                                const { CustomBind } = require('../database/db');
+                                const bind = await CustomBind.findByPk(setupData.targetId);
+                                
+                                if (bind) {
+                                    let command = '';
+                                    if (bind.actionType === 'teleport') {
+                                        command = `teleportpos "{player}" ${posX} ${posY} ${posZ}`;
+                                    } else if (bind.actionType === 'recycler') {
+                                        command = `spawn recycler_static ${posX} ${posY} ${posZ}`;
                                     }
+                                    // Save it instantly to the database
+                                    await bind.update({ posX, posY, posZ, command });
+                                }
+
+                                const bindHandler = require('../handlers/bindHandler');
+                                if (bindHandler && bindHandler.refreshPanelViaInteraction) {
+                                    await bindHandler.refreshPanelViaInteraction(
+                                        setupData.interaction, 
+                                        `✅ **Position Captured Automatically!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``,
+                                        setupData.targetId
+                                    );
                                 }
                             }
 

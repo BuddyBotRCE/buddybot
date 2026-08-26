@@ -439,8 +439,9 @@ const bindHandler = async (interaction, client) => {
 
             if (customId === 'bind_btn_ground') {
                 const bind = await CustomBind.findByPk(session.selectedBindId);
-                if (!bind || !bind.posY) {
-                    return await renderBindPanel(interaction, `❌ **Please 'Set Position' first!**`);
+                // Stricter check so it doesn't fail if Y is exactly 0
+                if (!bind || bind.posY === null || bind.posY === undefined) {
+                    return await renderBindPanel(interaction, `❌ **Please click 'Set Position' first!**`);
                 }
                 
                 const loweredY = (parseFloat(bind.posY) - 0.5).toFixed(2);
