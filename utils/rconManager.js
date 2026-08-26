@@ -222,18 +222,20 @@ async function connectRcon(guildId, client) {
                 // ==========================================
                 // 4. CHAT PARSER & CUSTOM BINDS EXECUTION
                 // ==========================================
-                // 👈 FIX: Catch ANY of the Rust Console chat bracket types
-                if (msgLower.match(/\[(?:chat|team chat|team|local|local chat|server|server chat)\]/i)) {
-                    const chatMatch = msg.match(/\[(?:CHAT|TEAM CHAT|TEAM|LOCAL|LOCAL CHAT|SERVER|SERVER CHAT)\] (.*?): (.*)/i);
+                // 👈 FIX: Universal Chat Catcher for [Team], [Local], [Server], [Chat]
+                const chatMatch = msg.match(/\[(.*?)\]\s*(.*?)\s*:\s*(.*)/i);
+                
+                if (chatMatch) {
+                    const channelType = chatMatch[1].toLowerCase();
                     
-                    if (chatMatch) {
-                        const playerName = chatMatch[1].replace(/\[.*?\]/g, '').trim(); 
-                        const chatText = chatMatch[2].toLowerCase().trim();
+                    if (channelType.includes('chat') || channelType.includes('team') || channelType.includes('local') || channelType.includes('server')) {
+                        
+                        const playerName = chatMatch[2].replace(/\[.*?\]/g, '').trim(); 
+                        const chatText = chatMatch[3].toLowerCase().trim();
 
                         if (currentConfig && currentConfig.crossChatChannelId && client) {
                             const crossChatChannel = client.channels.cache.get(currentConfig.crossChatChannelId);
-                            // Only cross-chat global [CHAT] to Discord
-                            if (crossChatChannel && !playerName.includes('[Discord]') && msgLower.includes('[chat]')) {
+                            if (crossChatChannel && !playerName.includes('[Discord]') && channelType.includes('chat')) {
                                 crossChatChannel.send(`💬 **[In-Game] ${playerName}**: ${chatText}`);
                             }
                         }
@@ -385,6 +387,7 @@ async function processBountyLogic(guildId, killerDb, victimDb, client, config) {
     if (activeBounty) {
         await killerDb.update({ wallet: killerDb.wallet + activeBounty.reward });
         if (gameChannel) {
+            // 👈 FIX: Typo from before is fixed here (EmbedBuilder)
             gameChannel.send({ embeds: [new EmbedBuilder().setTitle('🎯 BOUNTY CLAIMED!').setDescription(`**${killerDb.inGameName}** has killed **${victimDb.inGameName}** and claimed the bounty of **${activeBounty.reward} ${currency}**!`).setColor('#2ecc71')] }).catch(()=>{});
         }
         await activeBounty.destroy();
