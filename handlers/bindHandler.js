@@ -419,9 +419,11 @@ bindHandler.autoSavePosition = async (guildId, x, y, z, bindId) => {
 
     let command = '';
     if (bind.actionType === 'teleport') {
-        command = `teleportpos "{player}" "${x},${y},${z}"`;
+        // Rust expects spaces between X Y Z, no commas or quotes around the numbers
+        command = `teleportpos "{player}" ${x} ${y} ${z}`;
     } else if (bind.actionType === 'recycler') {
-        command = `spawn recycler_static "${x},${y},${z}"`;
+        // Spawn also expects spaces
+        command = `spawn recycler_static ${x} ${y} ${z}`;
     }
 
     await CustomBind.update({ posX: x, posY: y, posZ: z, command }, { where: { id: bindId } });
