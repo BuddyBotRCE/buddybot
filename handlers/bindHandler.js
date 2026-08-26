@@ -175,7 +175,6 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
                 new ButtonBuilder().setCustomId('bind_btn_kitselect').setLabel('Select In-Game Kit').setStyle(ButtonStyle.Success).setEmoji('📦')
             ));
         } else if (activeBind.actionType === 'teleport' || activeBind.actionType === 'recycler') {
-            // BOTH Teleport and Recycler now get the Place on Ground button
             components.push(new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('bind_btn_getpos').setLabel('Set Position (Auto-Capture)').setStyle(ButtonStyle.Success).setEmoji('📍'),
                 new ButtonBuilder().setCustomId('bind_btn_ground').setLabel('Place on Ground').setStyle(ButtonStyle.Secondary).setEmoji('⬇️')
@@ -439,7 +438,6 @@ const bindHandler = async (interaction, client) => {
 
             if (customId === 'bind_btn_ground') {
                 const bind = await CustomBind.findByPk(session.selectedBindId);
-                // Stricter check so it doesn't fail if Y is exactly 0
                 if (!bind || bind.posY === null || bind.posY === undefined) {
                     return await renderBindPanel(interaction, `❌ **Please click 'Set Position' first!**`);
                 }
@@ -473,7 +471,6 @@ const bindHandler = async (interaction, client) => {
         }
     }
 };
-
 
 bindHandler.refreshPanelViaInteraction = async (interaction, messageOverride, bindId = null) => {
     try {
