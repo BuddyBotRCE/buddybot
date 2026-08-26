@@ -13,7 +13,6 @@ const TYPE_INFO = {
     cargo: { name: 'Docked Cargo', emoji: '🚢', prefab: 'cargoshipdynamic1' }
 };
 
-// Safe Discord Responder to prevent panel freezing
 async function safeRespond(interaction, payload) {
     try {
         if (interaction.isModalSubmit() || interaction.isMessageComponent()) {
@@ -28,9 +27,7 @@ async function safeRespond(interaction, payload) {
 
 const autoEventsHandler = async (interaction, client) => {
     try {
-        // =======================================================
-        // 🛡️ SECURITY BARRIER: OWNERS, ADMINS, & MODERATORS ONLY
-        // =======================================================
+        // 🛡️ SECURITY BARRIER
         const member = interaction.member;
         const isOwner = interaction.guild?.ownerId === member.id;
         const isAdminPerm = member.permissions.has(PermissionsBitField.Flags.Administrator);
@@ -52,7 +49,6 @@ const autoEventsHandler = async (interaction, client) => {
         const customId = interaction.customId || '';
         const guildId = interaction.guild.id;
 
-        // Initialize user session with View State Tracking
         if (!aeSessions.has(guildId)) aeSessions.set(guildId, { selectedEventId: null, view: 'main' });
         const session = aeSessions.get(guildId);
 
@@ -66,9 +62,7 @@ const autoEventsHandler = async (interaction, client) => {
             const embed = new EmbedBuilder().setColor('#3498db').setTitle('⚙️ Auto Events Manager');
             if (messageOverride) embed.setDescription(`**${messageOverride}**\n\n`);
 
-            // ---------------------------------------------------
-            // PAGE 1: MAIN PANEL (Only Event Buttons, Disable & Delete)
-            // ---------------------------------------------------
+            // PAGE 1: MAIN PANEL
             if (session.view === 'main') {
                 let activeList = '';
                 let inactiveList = '';
@@ -86,7 +80,6 @@ const autoEventsHandler = async (interaction, client) => {
                     { name: '🛠️ Manage', value: "👇 **Click an event below to open its positions and settings.**", inline: false }
                 );
 
-                // Row 1 & 2: The 5 Event Buttons
                 const row1 = new ActionRowBuilder();
                 const row2 = new ActionRowBuilder();
                 const keys = Object.keys(TYPE_INFO);
@@ -98,7 +91,6 @@ const autoEventsHandler = async (interaction, client) => {
                     row2.addComponents(new ButtonBuilder().setCustomId(`ae_load_${keys[i]}`).setLabel(TYPE_INFO[keys[i]].name).setEmoji(TYPE_INFO[keys[i]].emoji).setStyle(ButtonStyle.Secondary));
                 }
 
-                // Row 3: Disable and Delete Buttons
                 const row3 = new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('ae_btn_disable_mode').setLabel('Disable / Enable Event').setStyle(ButtonStyle.Secondary).setEmoji('⚡'),
                     new ButtonBuilder().setCustomId('ae_btn_delete_mode').setLabel('Delete Event').setStyle(ButtonStyle.Danger).setEmoji('💀')
@@ -106,9 +98,7 @@ const autoEventsHandler = async (interaction, client) => {
                 
                 components.push(row1, row2, row3);
             }
-            // ---------------------------------------------------
             // PAGE 1.5: SELECT EVENT TO DISABLE OR DELETE
-            // ---------------------------------------------------
             else if (session.view === 'select_disable' || session.view === 'select_delete') {
                 const isDisable = session.view === 'select_disable';
                 embed.addFields({ name: 'Action Required', value: isDisable ? "⚡ Select which event you want to Enable/Disable:" : "💀 Select which event you want to completely clear and delete:" });
@@ -124,9 +114,7 @@ const autoEventsHandler = async (interaction, client) => {
                 );
                 components.push(row1, row2);
             }
-            // ---------------------------------------------------
             // PAGE 2: INSIDE THE EVENT (Positions & Config)
-            // ---------------------------------------------------
             else if (session.view === 'event') {
                 const activeEvent = await AutoEvent.findByPk(session.selectedEventId);
                 if (!activeEvent) {
@@ -147,7 +135,6 @@ const autoEventsHandler = async (interaction, client) => {
                     { name: `📍 Saved Spawn Locations`, value: locList }
                 );
 
-                // Row 1: Event Tools (Name, Get Pos, Clear Pos, Test)
                 components.push(new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('ae_btn_settings').setLabel('Name & Qty').setStyle(ButtonStyle.Primary).setEmoji('📝'),
                     new ButtonBuilder().setCustomId('ae_btn_getpos').setLabel('Add Player Pos').setStyle(ButtonStyle.Success).setEmoji('📍'),
@@ -155,7 +142,6 @@ const autoEventsHandler = async (interaction, client) => {
                     new ButtonBuilder().setCustomId('ae_btn_test').setLabel('Test Event').setStyle(ButtonStyle.Primary).setEmoji('🚀').setDisabled(eventLocs.length === 0)
                 ));
 
-                // Row 2: Back Button
                 components.push(new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('ae_btn_back').setLabel('Back to Main Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
                 ));
@@ -167,14 +153,11 @@ const autoEventsHandler = async (interaction, client) => {
         // =======================================================
         // INTERACTION ROUTING LOGIC
         // =======================================================
-
-        // Admin Panel Entry
         if (customId === 'admin_menu_select') {
             session.view = 'main';
             return await renderAEPanel(interaction);
         }
 
-        // --- 1. MODAL SUBMISSIONS ---
         if (interaction.isModalSubmit() && customId === 'modal_ae_settings') {
             const newName = interaction.fields.getTextInputValue('ev_name').trim() || "Custom Event";
             let amount = parseInt(interaction.fields.getTextInputValue('ev_qty'));
@@ -186,7 +169,6 @@ const autoEventsHandler = async (interaction, client) => {
             return await renderAEPanel(interaction, `✅ Event Name and Quantity saved!`);
         }
 
-        // --- 2. DROPDOWNS (From Disable/Delete modes) ---
         if (interaction.isStringSelectMenu()) {
             const typeKey = interaction.values[0];
             
@@ -212,10 +194,7 @@ const autoEventsHandler = async (interaction, client) => {
             }
         }
 
-        // --- 3. BUTTONS ---
         if (interaction.isButton()) {
-            
-            // Go to Event Page
             if (customId.startsWith('ae_load_')) {
                 const typeKey = customId.replace('ae_load_', '');
                 let ev = await AutoEvent.findOne({ where: { guildId, eventType: typeKey } });
@@ -228,7 +207,6 @@ const autoEventsHandler = async (interaction, client) => {
                 return await renderAEPanel(interaction);
             }
 
-            // Trigger Main Panel Modes
             if (customId === 'ae_btn_disable_mode') {
                 session.view = 'select_disable';
                 return await renderAEPanel(interaction);
@@ -243,7 +221,6 @@ const autoEventsHandler = async (interaction, client) => {
                 return await renderAEPanel(interaction);
             }
 
-            // Inside Event Page Actions
             if (customId === 'ae_btn_settings') {
                 const ev = await AutoEvent.findByPk(session.selectedEventId);
                 const modal = new ModalBuilder().setCustomId('modal_ae_settings').setTitle(`Edit Event Name & Amount`);
@@ -260,10 +237,10 @@ const autoEventsHandler = async (interaction, client) => {
                 return await renderAEPanel(interaction, `⏪ Removed the last saved position.`);
             }
 
-            // Add Player Pos (Triggers RCON)
+            // 🎯 HERE WE STAPLE THE EVENT ID TO THE RCON REQUEST!
             if (customId === 'ae_btn_getpos') {
-                await queueAdminPos(interaction, 'auto_event');
-                return await interaction.reply({ content: '⏳ **Bot is listening for 20 seconds!**\nYour server hides positions from the player list. Tab into your game, open your Admin F1 Console, and type `printpos` to broadcast your coordinates!', flags: 64 });
+                await queueAdminPos(interaction, 'auto_event', session.selectedEventId);
+                return await interaction.reply({ content: '⏳ **Extracting your position from the server...**', flags: 64 });
             }
 
             if (customId === 'ae_btn_test') {
@@ -293,16 +270,16 @@ const autoEventsHandler = async (interaction, client) => {
 // ==========================================
 // RCON AUTO-SAVE RECEIVER
 // ==========================================
-autoEventsHandler.autoSaveLocation = async (guildId, x, y, z) => {
-    const session = aeSessions.get(guildId);
-    if (!session || !session.selectedEventId) return;
+// We explicitly accept the eventId from the RCON file now!
+autoEventsHandler.autoSaveLocation = async (guildId, x, y, z, eventId) => {
+    if (!eventId) return;
 
-    const highestSlot = await AutoEventLocation.findOne({ where: { eventId: session.selectedEventId }, order: [['slot', 'DESC']] });
+    const highestSlot = await AutoEventLocation.findOne({ where: { eventId: eventId }, order: [['slot', 'DESC']] });
     const nextSlotNum = highestSlot ? highestSlot.slot + 1 : 1;
 
     await AutoEventLocation.create({
         guildId,
-        eventId: session.selectedEventId,
+        eventId: eventId,
         slot: nextSlotNum,
         posX: x.toString(),
         posY: y.toString(),
