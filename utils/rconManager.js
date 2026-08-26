@@ -134,9 +134,7 @@ async function connectRcon(guildId, client) {
                             } 
                             else if (setupData.type === 'custom_bind') {
                                 try {
-                                    console.log(`[DEBUG-BINDS] Saving Coords to Bind ID ${setupData.targetId}: X:${posX}, Y:${posY}, Z:${posZ}`);
                                     const bind = await CustomBind.findByPk(setupData.targetId);
-                                    
                                     if (bind) {
                                         let command = '';
                                         if (bind.actionType === 'teleport') {
@@ -145,9 +143,6 @@ async function connectRcon(guildId, client) {
                                             command = `spawn recycler_static ${posX} ${posY} ${posZ}`;
                                         }
                                         await bind.update({ command });
-                                        console.log(`[DEBUG-BINDS] Successfully updated DB Command: ${command}`);
-                                    } else {
-                                        console.error(`[DEBUG-BINDS] Could not find Bind ID ${setupData.targetId} in DB!`);
                                     }
 
                                     const bindHandler = require('../handlers/bindHandler');
@@ -158,9 +153,7 @@ async function connectRcon(guildId, client) {
                                             setupData.targetId
                                         );
                                     }
-                                } catch (error) {
-                                    console.error("[DEBUG-BINDS] Error saving bind position:", error);
-                                }
+                                } catch (error) {}
                             }
 
                             adminPosQueue.delete(adminId);
@@ -236,53 +229,52 @@ async function connectRcon(guildId, client) {
                 }
 
                 // ==========================================
-                // 4. CHAT PARSER (RCE FORMAT: PlayerName (Channel): Message)
+                // 4. CLEAN & FOOLPROOF CHAT & QUICK-CHAT CATCHER
                 // ==========================================
-                if (msg.includes(':') && !msgLower.includes('[killfeed]') && !msgLower.includes('rcon')) {
-                    const parts = msg.split(':');
-                    const leftSide = parts[0].trim(); // e.g. "PlayerName (Server)" or "PlayerName (Local)"
-                    const chatText = parts.slice(1).join(':').toLowerCase().trim();
-
-                    // Clean up left side to isolate just the player name (remove parentheses and channel name)
-                    let rawPlayerName = leftSide.replace(/\s*\(.*?\)\s*/g, '').trim();
-
-                    // Check if chat matches a configured Custom Bind
-                    const serverBinds = await CustomBind.findAll({ where: { guildId: guildId } });
-                    const activeBind = serverBinds.find(b => 
-                        (b.targetValue && chatText.includes(b.targetValue.toLowerCase())) || 
-                        (b.name && chatText.includes(b.name.toLowerCase()))
-                    );
+                // If it's a chat line (contains a colon and isn't a system log)
+                if (msg.includes(':') && !msgLower.includes('[killfeed]') && !msgLower.includes('rcon') && !msgLower.includes('server')) {
                     
-                    if (activeBind) {
-                        const playersList = await UserEconomy.findAll({ where: { guildId: guildId } });
-                        let matchedPlayer = null;
-                        
-                        for (const p of playersList) {
-                            if (p.inGameName && rawPlayerName.toLowerCase().includes(p.inGameName.toLowerCase())) {
-                                matchedPlayer = p;
-                                break;
-                            }
-                        }
+                    const serverBinds = await CustomBind.findAll({ where: { guildId: guildId } });
+                    if (serverBinds.length === 0) return;
 
-                        if (matchedPlayer) {
-                            console.log(`[DEBUG-BINDS] Matched Wheel Emote: "${chatText}" to Bind ID ${activeBind.id} for ${matchedPlayer.inGameName}`);
-                            
-                            if (activeBind.cost > 0 && matchedPlayer.wallet < activeBind.cost) {
-                                await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, you need ${activeBind.cost} ${currentConfig?.economyCurrency || 'Scrap'} to use this!"`, client);
-                                return;
-                            }
-                            
-                            if (activeBind.cost > 0) {
-                                await matchedPlayer.update({ wallet: matchedPlayer.wallet - activeBind.cost });
-                            }
+                    const playersList = await UserEconomy.findAll({ where: { guildId: guildId } });
 
-                            const finalCommandString = activeBind.command.replace(/{player}/gi, matchedPlayer.inGameName);
-                            const commands = finalCommandString.split('\n');
-                            for (const cmd of commands) {
-                                if (cmd.trim() !== '') {
-                                    console.log(`[DEBUG-BINDS] Executing Command: ${cmd.trim()}`);
-                                    await sendRconCommand(guildId, cmd.trim(), client);
+                    for (const bind of serverBinds) {
+                        if (!bind.targetValue) continue;
+
+                        // Check if the raw console message contains the quick-chat phrase (e.g. "Going for Wood")
+                        if (msgLower.includes(bind.targetValue.toLowerCase())) {
+                            
+                            // Now find which registered player's name is in this exact log line
+                            let matchedPlayer = null;
+                            for (const p of playersList) {
+                                if (p.inGameName && msg.toLowerCase().includes(p.inGameName.toLowerCase())) {
+                                    matchedPlayer = p;
+                                    break;
                                 }
+                            }
+
+                            if (matchedPlayer) {
+                                console.log(`[CLEAN-CATCH] Triggered Bind ID ${bind.id} (${bind.actionType}) for player: ${matchedPlayer.inGameName}`);
+
+                                // Economy check
+                                if (bind.cost > 0 && matchedPlayer.wallet < bind.cost) {
+                                    await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, you need ${bind.cost} ${currentConfig?.economyCurrency || 'Scrap'} to use this!"`, client);
+                                    return;
+                                }
+                                if (bind.cost > 0) {
+                                    await matchedPlayer.update({ wallet: matchedPlayer.wallet - bind.cost });
+                                }
+
+                                // Execute command
+                                const finalCommandString = bind.command.replace(/{player}/gi, matchedPlayer.inGameName);
+                                const commands = finalCommandString.split('\n');
+                                for (const cmd of commands) {
+                                    if (cmd.trim() !== '') {
+                                        await sendRconCommand(guildId, cmd.trim(), client);
+                                    }
+                                }
+                                break; // Stop checking other binds for this message
                             }
                         }
                     }
