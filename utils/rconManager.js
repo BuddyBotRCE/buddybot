@@ -222,14 +222,17 @@ async function connectRcon(guildId, client) {
                 // ==========================================
                 // 4. CHAT PARSER & CUSTOM BINDS EXECUTION
                 // ==========================================
-                if (msgLower.includes('[chat]') || msgLower.includes('[team chat]') || msgLower.includes('[team]')) {
-                    const chatMatch = msg.match(/\[(?:CHAT|TEAM CHAT|TEAM)\] (.*?): (.*)/i);
+                // 👈 FIX: Catch ANY of the Rust Console chat bracket types
+                if (msgLower.match(/\[(?:chat|team chat|team|local|local chat|server|server chat)\]/i)) {
+                    const chatMatch = msg.match(/\[(?:CHAT|TEAM CHAT|TEAM|LOCAL|LOCAL CHAT|SERVER|SERVER CHAT)\] (.*?): (.*)/i);
+                    
                     if (chatMatch) {
                         const playerName = chatMatch[1].replace(/\[.*?\]/g, '').trim(); 
                         const chatText = chatMatch[2].toLowerCase().trim();
 
                         if (currentConfig && currentConfig.crossChatChannelId && client) {
                             const crossChatChannel = client.channels.cache.get(currentConfig.crossChatChannelId);
+                            // Only cross-chat global [CHAT] to Discord
                             if (crossChatChannel && !playerName.includes('[Discord]') && msgLower.includes('[chat]')) {
                                 crossChatChannel.send(`💬 **[In-Game] ${playerName}**: ${chatText}`);
                             }
