@@ -112,13 +112,11 @@ async function connectRcon(guildId, client) {
                         if (foundPos) {
                             if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
 
+                            // ROUTE 1: AUTO EVENTS
                             if (setupData.type === 'auto_event') {
                                 const aeHandler = require('../handlers/autoEventsHandler');
                                 if (aeHandler && aeHandler.autoSaveLocation) {
-                                    // 1. Save it to the database
                                     await aeHandler.autoSaveLocation(guildId, posX, posY, posZ, setupData.targetId);
-                                    
-                                    // 2. TRIGGER THE DISCORD PANEL TO VISUALLY REFRESH LIVE!
                                     if (setupData.interaction) {
                                         await aeHandler.refreshPanelViaInteraction(
                                             setupData.interaction, 
@@ -126,7 +124,22 @@ async function connectRcon(guildId, client) {
                                         );
                                     }
                                 }
-                            } else {
+                            } 
+                            // ROUTE 2: CUSTOM ZONES
+                            else if (setupData.type === 'custom_zone') {
+                                const czHandler = require('../handlers/customZoneHandler');
+                                if (czHandler && czHandler.autoSaveLocation) {
+                                    await czHandler.autoSaveLocation(guildId, posX, posY, posZ, setupData.targetId);
+                                    if (setupData.interaction) {
+                                        await czHandler.refreshPanelViaInteraction(
+                                            setupData.interaction, 
+                                            `✅ **Zone Center Captured Automatically!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``
+                                        );
+                                    }
+                                }
+                            } 
+                            // ROUTE 3: CUSTOM BINDS (Fallback)
+                            else {
                                 await bindHandler.autoSavePosition(guildId, posX, posY, posZ);
                             }
 
