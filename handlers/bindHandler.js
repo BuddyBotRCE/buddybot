@@ -1,61 +1,135 @@
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } = require('discord.js');
-const { CustomBind } = require('../database/db');
-const { queueAdminPos, sendRconCommand } = require('../utils/rconManager'); 
+const { CustomBind, ServerKit } = require('../database/db');
+const { queueAdminPos } = require('../utils/rconManager'); 
 
 const bindSessions = new Map();
 
+// Rust In-Game Quick Chat Wheel Options
+const QUICK_CHAT_WHEEL_OPTIONS = [
+    { label: 'Help / Assistance', value: 'help', emoji: '🆘', description: 'Quick chat wheel: Help' },
+    { label: 'Friendly / Hello', value: 'hello', emoji: '👋', description: 'Quick chat wheel: Hello' },
+    { label: 'Danger / Enemy', value: 'danger', emoji: '⚠️', description: 'Quick chat wheel: Danger' },
+    { label: 'Base / Building', value: 'base', emoji: '🏠', description: 'Quick chat wheel: Base' },
+    { label: 'Loot / Cargo', value: 'loot', emoji: '🎁', description: 'Quick chat wheel: Loot' },
+    { label: 'Yes / Affirmative', value: 'yes', emoji: '✅', description: 'Quick chat wheel: Yes' },
+    { label: 'No / Negative', value: 'no', emoji: '❌', description: 'Quick chat wheel: No' },
+    { label: 'Wait / Hold', value: 'wait', emoji: '⏳', description: 'Quick chat wheel: Hold on' }
+];
+
 const buildPanelPayload = async (guildId, messageOverride = '') => {
-    if (!bindSessions.has(guildId)) bindSessions.set(guildId, { selectedBindId: null, view: 'main', tempPos: null });
+    if (!bindSessions.has(guildId)) bindSessions.set(guildId, { selectedBindId: null, view: 'main' });
     const session = bindSessions.get(guildId);
     
     const allBinds = await CustomBind.findAll({ where: { guildId }, order: [['id', 'ASC']] });
     let components = [];
     
-    const embed = new EmbedBuilder().setColor('#3498db').setTitle('🗣️ Custom Binds Manager');
+    const embed = new EmbedBuilder().setColor('#3498db').setTitle('🗣️ Custom Binds & Quick Chat Wheel Manager');
     if (messageOverride) embed.setDescription(`**${messageOverride}**\n\n`);
 
+    // ---------------------------------------------------
+    // PAGE 1: MAIN MENU (LIST + TYPE BUTTONS)
+    // ---------------------------------------------------
     if (session.view === 'main') {
         let bindList = '';
         for (const b of allBinds) {
-            bindList += `${b.emote || '⭐'} **${b.name}** (Triggers: \`${b.targetValue || b.emote}\`)\n`;
+            const typeEmoji = b.actionType === 'kit' ? '📦' : b.actionType === 'teleport' ? '🌀' : '♻️';
+            bindList += `${typeEmoji} **${b.name}** [Type: *${b.actionType.toUpperCase()}*] | Wheel: \`${b.emote || 'None'}\` | Cost: ${b.cost || 0} Scrap\n`;
         }
 
         embed.addFields(
-            { name: '📋 Configured Binds', value: bindList || "*No custom binds created yet.*", inline: false },
-            { name: '🛠️ Manage Binds', value: "👇 **Click a bind below to edit it, or create a new one.**", inline: false }
+            { name: '📋 Configured Custom Binds', value: bindList || "*No custom binds created yet.*", inline: false },
+            { name: '🛠️ Create New Bind', value: "👇 **Click a button below to choose your bind type:**", inline: false }
         );
 
-        const row1 = new ActionRowBuilder();
-        for (const b of allBinds.slice(0, 4)) {
-            row1.addComponents(new ButtonBuilder().setCustomId(`bind_load_${b.id}`).setLabel(b.name.substring(0, 20)).setStyle(ButtonStyle.Secondary).setEmoji(b.emote || '⭐'));
+        // Action Type Buttons
+        components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('bind_create_kit').setLabel('Kit Bind').setStyle(ButtonStyle.Primary).setEmoji('📦'),
+            new ButtonBuilder().setCustomId('bind_create_teleport').setLabel('Teleport Bind').setStyle(ButtonStyle.Success).setEmoji('🌀'),
+            new ButtonBuilder().setCustomId('bind_create_recycler').setLabel('Recycler Bind').setStyle(ButtonStyle.Secondary).setEmoji('♻️')
+        ));
+
+        // Existing Binds Management Buttons (Max 4)
+        if (allBinds.length > 0) {
+            const row2 = new ActionRowBuilder();
+            for (const b of allBinds.slice(0, 4)) {
+                row2.addComponents(new ButtonBuilder().setCustomId(`bind_load_${b.id}`).setLabel(b.name.substring(0, 20)).setStyle(ButtonStyle.Secondary).setEmoji('⭐'));
+            }
+            components.push(row2);
         }
-        
-        row1.addComponents(new ButtonBuilder().setCustomId('bind_create_new').setLabel('➕ Create Bind').setStyle(ButtonStyle.Primary));
-        components.push(row1);
     } 
+    // ---------------------------------------------------
+    // PAGE 2: CONFIGURING INDIVIDUAL BIND
+    // ---------------------------------------------------
     else if (session.view === 'bind') {
         const activeBind = await CustomBind.findByPk(session.selectedBindId);
         if (!activeBind) {
             session.view = 'main';
-            return await buildPanelPayload(guildId, '❌ Custom bind not found.');
+            return await buildPanelPayload(guildId, '❌ Bind not found.');
         }
 
-        embed.setTitle(`🗣️ Managing Bind: ${activeBind.name}`);
+        const posText = (activeBind.posX && activeBind.posZ) ? `\`X: ${activeBind.posX}, Y: ${activeBind.posY || '0'}, Z: ${activeBind.posZ}\`` : '*Not Set*';
+
+        embed.setTitle(`🗣️ Managing Bind: ${activeBind.name} (${activeBind.actionType.toUpperCase()})`);
         
         embed.addFields(
-            { name: `📊 Bind Configuration`, value: `**Trigger / Emote:** ${activeBind.emote} (\`${activeBind.targetValue || activeBind.emote}\`)\n**Cost:** ${activeBind.cost || 0} Scrap\n**Cooldown:** ${activeBind.cooldown || 0}s`, inline: true },
-            { name: `⚙️ RCON Command Executed`, value: `\`\`\`${activeBind.command || 'None'}\`\`\``, inline: false }
+            { name: `📊 Settings & Requirements`, value: `**Quick Chat Wheel:** ${activeBind.emote || 'Not Set'}\n**Type:** ${activeBind.actionType}\n**Target Kit:** ${activeBind.targetValue || 'N/A'}\n**Coordinates:** ${posText}`, inline: true },
+            { name: `🛡️ Economy & Security`, value: `**Cost:** ${activeBind.cost || 0} Scrap\n**Cooldown:** ${activeBind.cooldown || 0}s\n**Required Role ID:** \`${activeBind.roleId || 'None'}\``, inline: true }
         );
 
+        // Row 1: Configurations
         components.push(new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('bind_btn_settings').setLabel('Edit Name & Command').setStyle(ButtonStyle.Primary).setEmoji('📝'),
-            new ButtonBuilder().setCustomId('bind_btn_cost').setLabel('Cost & Cooldown').setStyle(ButtonStyle.Secondary).setEmoji('💰')
+            new ButtonBuilder().setCustomId('bind_btn_name').setLabel('Rename').setStyle(ButtonStyle.Primary).setEmoji('📝'),
+            new ButtonBuilder().setCustomId('bind_btn_emote').setLabel('Quick Chat Wheel').setStyle(ButtonStyle.Secondary).setEmoji('💬'),
+            new ButtonBuilder().setCustomId('bind_btn_options').setLabel('Cost, CD & Role').setStyle(ButtonStyle.Primary).setEmoji('⚙️')
         ));
 
+        // Row 2: Type Specific Actions (Kit selection or Position setting)
+        if (activeBind.actionType === 'kit') {
+            components.push(new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('bind_btn_kitselect').setLabel('Select In-Game Kit').setStyle(ButtonStyle.Success).setEmoji('📦')
+            ));
+        } else if (activeBind.actionType === 'teleport' || activeBind.actionType === 'recycler') {
+            components.push(new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('bind_btn_getpos').setLabel('Set Position (Auto-Capture)').setStyle(ButtonStyle.Success).setEmoji('📍')
+            ));
+        }
+
+        // Row 3: Delete & Back
         components.push(new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('bind_btn_test').setLabel('Test Command').setStyle(ButtonStyle.Success).setEmoji('🚀'),
             new ButtonBuilder().setCustomId('bind_btn_delete').setLabel('Delete Bind').setStyle(ButtonStyle.Danger).setEmoji('💀'),
             new ButtonBuilder().setCustomId('bind_btn_back').setLabel('Back to List').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+        ));
+    }
+    // ---------------------------------------------------
+    // PAGE 3: QUICK CHAT WHEEL EMOTE SELECTOR
+    // ---------------------------------------------------
+    else if (session.view === 'emote_picker') {
+        embed.setTitle('💬 Select In-Game Quick Chat Wheel Option').setDescription('Choose which quick-chat wheel phrase triggers this command in-game.');
+        components.push(new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder().setCustomId('bind_do_emote').setPlaceholder('Select quick chat wheel option...').addOptions(QUICK_CHAT_WHEEL_OPTIONS)
+        ));
+        components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('bind_back_bind').setLabel('Cancel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+        ));
+    }
+    // ---------------------------------------------------
+    // PAGE 4: KIT SELECTOR
+    // ---------------------------------------------------
+    else if (session.view === 'kit_picker') {
+        embed.setTitle('📦 Select In-Game Kit').setDescription('Choose which kit this bind will grant to players.');
+        const serverKits = await ServerKit.findAll({ where: { guildId } });
+
+        if (serverKits.length > 0) {
+            components.push(new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder().setCustomId('bind_do_kit').setPlaceholder('Select a server kit...')
+                    .addOptions(serverKits.slice(0, 25).map(k => ({ label: k.kitName, value: k.kitName, emoji: '📦' })))
+            ));
+        } else {
+            embed.addFields({ name: '⚠️ No Kits Found', value: 'Please create kits in your kit manager first.' });
+        }
+
+        components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('bind_back_bind').setLabel('Cancel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
         ));
     }
 
@@ -107,96 +181,118 @@ const bindHandler = async (interaction, client) => {
             return await renderBindPanel(interaction);
         }
 
-        // --- MODAL SUBMISSIONS ---
-        if (interaction.isModalSubmit() && customId === 'modal_bind_settings') {
-            const name = interaction.fields.getTextInputValue('bind_name').trim() || "Custom Bind";
-            const targetValue = interaction.fields.getTextInputValue('bind_trigger').trim() || "!kit";
-            const command = interaction.fields.getTextInputValue('bind_cmd').trim() || "";
-
-            if (session.selectedBindId) {
-                await CustomBind.update({ name, targetValue, command }, { where: { id: session.selectedBindId } });
-            }
-            return await renderBindPanel(interaction, `✅ Custom Bind settings saved!`);
+        // --- BUTTON: CREATE BIND TYPES ---
+        if (customId.startsWith('bind_create_')) {
+            const type = customId.replace('bind_create_', '');
+            const newBind = await CustomBind.create({ 
+                guildId, 
+                name: `New ${type.charAt(0).toUpperCase() + type.slice(1)} Bind`, 
+                actionType: type, 
+                emote: 'Not Set', 
+                cost: 0,
+                cooldown: 0
+            });
+            session.selectedBindId = newBind.id;
+            session.view = 'bind';
+            return await renderBindPanel(interaction, `✨ Created new ${type} bind!`);
         }
 
-        if (interaction.isModalSubmit() && customId === 'modal_bind_cost') {
-            let cost = parseInt(interaction.fields.getTextInputValue('bind_cost'));
-            let cooldown = parseInt(interaction.fields.getTextInputValue('bind_cd'));
+        // --- DROPDOWN: QUICK CHAT WHEEL SELECTION ---
+        if (customId === 'bind_do_emote' && interaction.isStringSelectMenu()) {
+            const wheelOption = QUICK_CHAT_WHEEL_OPTIONS.find(o => o.value === interaction.values[0]);
+            const emote = wheelOption ? `${wheelOption.emoji} ${wheelOption.label}` : interaction.values[0];
+            await CustomBind.update({ emote, targetValue: interaction.values[0] }, { where: { id: session.selectedBindId } });
+            session.view = 'bind';
+            return await renderBindPanel(interaction, `💬 Quick chat wheel trigger updated!`);
+        }
+
+        // --- DROPDOWN: KIT SELECTION ---
+        if (customId === 'bind_do_kit' && interaction.isStringSelectMenu()) {
+            const kitName = interaction.values[0];
+            const command = `kit.give "{player}" "${kitName}"`;
+            await CustomBind.update({ targetValue: kitName, command }, { where: { id: session.selectedBindId } });
+            session.view = 'bind';
+            return await renderBindPanel(interaction, `📦 Bound to kit: **${kitName}**!`);
+        }
+
+        // --- MODALS ---
+        if (interaction.isModalSubmit() && customId === 'modal_bind_name') {
+            const name = interaction.fields.getTextInputValue('b_name').trim() || "Custom Bind";
+            if (session.selectedBindId) {
+                await CustomBind.update({ name }, { where: { id: session.selectedBindId } });
+            }
+            return await renderBindPanel(interaction, `✅ Bind renamed successfully!`);
+        }
+
+        if (interaction.isModalSubmit() && customId === 'modal_bind_options') {
+            let cost = parseInt(interaction.fields.getTextInputValue('b_cost'));
+            let cooldown = parseInt(interaction.fields.getTextInputValue('b_cd'));
+            let roleId = interaction.fields.getTextInputValue('b_role').trim() || null;
             if (isNaN(cost) || cost < 0) cost = 0;
             if (isNaN(cooldown) || cooldown < 0) cooldown = 0;
+            if (roleId === '' || roleId.toLowerCase() === 'none') roleId = null;
 
             if (session.selectedBindId) {
-                await CustomBind.update({ cost, cooldown }, { where: { id: session.selectedBindId } });
+                await CustomBind.update({ cost, cooldown, roleId }, { where: { id: session.selectedBindId } });
             }
-            return await renderBindPanel(interaction, `💰 Cost and Cooldown saved!`);
+            return await renderBindPanel(interaction, `⚙️ Options (Cost, Cooldown, Role) saved!`);
         }
 
         // --- BUTTONS ---
         if (interaction.isButton()) {
-            if (customId === 'bind_create_new') {
-                const newBind = await CustomBind.create({ 
-                    guildId, 
-                    name: 'New Bind', 
-                    emote: '⭐', 
-                    targetValue: '!cmd', 
-                    command: 'say "Hello World!"',
-                    cost: 0,
-                    cooldown: 0
-                });
-                session.selectedBindId = newBind.id;
-                session.view = 'bind';
-                return await renderBindPanel(interaction, `✨ Created a new custom bind!`);
-            }
-
             if (customId.startsWith('bind_load_')) {
                 session.selectedBindId = parseInt(customId.replace('bind_load_', ''));
                 session.view = 'bind';
                 return await renderBindPanel(interaction);
             }
 
-            if (customId === 'bind_btn_back') {
-                session.selectedZoneId = null;
-                session.view = 'main';
+            if (customId === 'bind_btn_back' || customId === 'bind_back_bind') {
+                session.view = 'bind';
+                if (customId === 'bind_btn_back') session.selectedBindId = null;
                 return await renderBindPanel(interaction);
             }
 
-            if (customId === 'bind_btn_settings') {
+            if (customId === 'bind_btn_emote') {
+                session.view = 'emote_picker';
+                return await renderBindPanel(interaction);
+            }
+
+            if (customId === 'bind_btn_kitselect') {
+                session.view = 'kit_picker';
+                return await renderBindPanel(interaction);
+            }
+
+            if (customId === 'bind_btn_name') {
                 const b = await CustomBind.findByPk(session.selectedBindId);
-                const modal = new ModalBuilder().setCustomId('modal_bind_settings').setTitle(`Edit Bind Details`);
+                const modal = new ModalBuilder().setCustomId('modal_bind_name').setTitle(`Rename Bind`);
+                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_name').setLabel("Bind Name").setStyle(TextInputStyle.Short).setValue(b.name || '').setRequired(true)));
+                return await interaction.showModal(modal);
+            }
+
+            if (customId === 'bind_btn_options') {
+                const b = await CustomBind.findByPk(session.selectedBindId);
+                const modal = new ModalBuilder().setCustomId('modal_bind_options').setTitle(`Configure Costs & Security`);
                 modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('bind_name').setLabel("Bind Name").setStyle(TextInputStyle.Short).setValue(b.name || '').setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('bind_trigger').setLabel("In-game Chat Trigger (e.g. !kit)").setStyle(TextInputStyle.Short).setValue(b.targetValue || '').setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('bind_cmd').setLabel("RCON Command (Use {player})").setStyle(TextInputStyle.Paragraph).setValue(b.command || '').setRequired(true))
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_cost').setLabel("Scrap Cost (0 for free)").setStyle(TextInputStyle.Short).setValue((b.cost || 0).toString()).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_cd').setLabel("Cooldown in Seconds").setStyle(TextInputStyle.Short).setValue((b.cooldown || 0).toString()).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_role').setLabel("Required Discord Role ID (leave blank)").setStyle(TextInputStyle.Short).setValue(b.roleId || '').setRequired(false))
                 );
                 return await interaction.showModal(modal);
             }
 
-            if (customId === 'bind_btn_cost') {
-                const b = await CustomBind.findByPk(session.selectedBindId);
-                const modal = new ModalBuilder().setCustomId('modal_bind_cost').setTitle(`Edit Cost & Cooldown`);
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('bind_cost').setLabel("Cost in Scrap (0 for free)").setStyle(TextInputStyle.Short).setValue((b.cost || 0).toString()).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('bind_cd').setLabel("Cooldown in Seconds (0 for none)").setStyle(TextInputStyle.Short).setValue((b.cooldown || 0).toString()).setRequired(true))
-                );
-                return await interaction.showModal(modal);
-            }
-
-            if (customId === 'bind_btn_test') {
-                const b = await CustomBind.findByPk(session.selectedBindId);
-                try {
-                    const testCmd = b.command.replace(/{player}/gi, `"${interaction.user.username}"`);
-                    await sendRconCommand(guildId, testCmd);
-                    return await renderBindPanel(interaction, `🚀 Test command sent to server successfully!`);
-                } catch (e) {
-                    return await renderBindPanel(interaction, `❌ Failed to execute command. Is RCON connected?`);
-                }
+            // 🎯 POSITION CAPTURE FOR TELEPORT & RECYCLER
+            if (customId === 'bind_btn_getpos') {
+                const loadingPayload = await buildPanelPayload(guildId, '⏳ **Extracting your position from the server...**');
+                await interaction.update(loadingPayload);
+                await queueAdminPos(interaction, 'custom_bind', session.selectedBindId);
+                return;
             }
 
             if (customId === 'bind_btn_delete') {
                 await CustomBind.destroy({ where: { id: session.selectedBindId } });
                 session.selectedBindId = null;
                 session.view = 'main';
-                return await renderBindPanel(interaction, `💀 Custom Bind deleted.`);
+                return await renderBindPanel(interaction, `💀 Bind successfully deleted.`);
             }
         }
 
@@ -208,9 +304,41 @@ const bindHandler = async (interaction, client) => {
     }
 };
 
-// Required for compatibility with RCON position capture if used in commands
-bindHandler.autoSavePosition = async (guildId, x, y, z) => {
-    // Reserved for position-based custom binds if needed
+// ==========================================
+// RCON AUTO-SAVE RECEIVER FOR POSITION BINDS
+// ==========================================
+bindHandler.autoSavePosition = async (guildId, x, y, z, bindId) => {
+    if (!bindId) return;
+    const bind = await CustomBind.findByPk(bindId);
+    if (!bind) return;
+
+    let command = '';
+    if (bind.actionType === 'teleport') {
+        command = `teleportpos "{player}" "${x},${y},${z}"`;
+    } else if (bind.actionType === 'recycler') {
+        command = `spawn recycler_static "${x},${y},${z}"`;
+    }
+
+    await CustomBind.update({ posX: x, posY: y, posZ: z, command }, { where: { id: bindId } });
+};
+
+// LIVE UPDATE HOOK FOR RCON MANAGER
+bindHandler.refreshPanelViaInteraction = async (interaction, messageOverride, bindId = null) => {
+    try {
+        const guildId = interaction.guild.id;
+        if (bindId) {
+            if (!bindSessions.has(guildId)) bindSessions.set(guildId, { selectedBindId: bindId, view: 'bind' });
+            const session = bindSessions.get(guildId);
+            session.selectedBindId = bindId;
+            session.view = 'bind';
+            bindSessions.set(guildId, session);
+        }
+
+        const payload = await buildPanelPayload(guildId, messageOverride);
+        await interaction.editReply(payload);
+    } catch (e) {
+        console.error("Failed to live-refresh Bind panel:", e);
+    }
 };
 
 module.exports = bindHandler;
