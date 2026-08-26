@@ -140,7 +140,8 @@ async function connectRcon(guildId, client) {
                                     if (bind) {
                                         let command = '';
                                         if (bind.actionType === 'teleport') {
-                                            command = `teleport2pos "{player}" ${posX} ${posY} ${posZ}`;
+                                            // 👈 Corrected back to RCE standard 'teleportpos'
+                                            command = `teleportpos "{player}" ${posX} ${posY} ${posZ}`;
                                         } else if (bind.actionType === 'recycler') {
                                             command = `spawn recycler_static ${posX} ${posY} ${posZ}`;
                                         }
@@ -236,46 +237,57 @@ async function connectRcon(guildId, client) {
                 }
 
                 // ==========================================
-                // 4. CHAT PARSER & CUSTOM BINDS EXECUTION
+                // 4. CHAT PARSER & CUSTOM BINDS EXECUTION (BULLETPROOF RCE)
                 // ==========================================
-                const chatMatch = msg.match(/\[(.*?)\]\s*(.*?)\s*:\s*(.*)/i);
-                
-                if (chatMatch) {
-                    const channelType = chatMatch[1].toLowerCase();
-                    
-                    if (channelType.includes('chat') || channelType.includes('team') || channelType.includes('local') || channelType.includes('server')) {
-                        
-                        const playerName = chatMatch[2].replace(/\[.*?\]/g, '').trim(); 
-                        const chatText = chatMatch[3].toLowerCase().trim();
+                // Looks for any log with a colon that isn't a killfeed or system message
+                if (msg.includes(':') && !msgLower.includes('[killfeed]') && !msgLower.includes('rcon')) {
+                    const parts = msg.split(':');
+                    const leftSide = parts[0]; 
+                    const chatText = parts.slice(1).join(':').toLowerCase().trim();
 
-                        if (currentConfig && currentConfig.crossChatChannelId && client) {
-                            const crossChatChannel = client.channels.cache.get(currentConfig.crossChatChannelId);
-                            if (crossChatChannel && !playerName.includes('[Discord]') && channelType.includes('chat')) {
-                                crossChatChannel.send(`💬 **[In-Game] ${playerName}**: ${chatText}`);
+                    // Handle Cross-Chat if it's explicitly global chat
+                    if (msgLower.includes('[chat]') && currentConfig && currentConfig.crossChatChannelId && client) {
+                        const crossChatChannel = client.channels.cache.get(currentConfig.crossChatChannelId);
+                        const chatMatch = msg.match(/\[(.*?)\]\s*(.*?)\s*:\s*(.*)/i);
+                        if (chatMatch && crossChatChannel && !chatMatch[2].includes('[Discord]')) {
+                            const pName = chatMatch[2].replace(/\[.*?\]/g, '').trim(); 
+                            crossChatChannel.send(`💬 **[In-Game] ${pName}**: ${chatText}`);
+                        }
+                    }
+
+                    // Check if chat matches a Bind
+                    const serverBinds = await CustomBind.findAll({ where: { guildId: guildId } });
+                    const activeBind = serverBinds.find(b => 
+                        (b.targetValue && chatText.includes(b.targetValue.toLowerCase())) || 
+                        (b.name && chatText.includes(b.name.toLowerCase()))
+                    );
+                    
+                    if (activeBind) {
+                        // Bind matches! Now, did a registered player say it?
+                        const playersList = await UserEconomy.findAll({ where: { guildId: guildId } });
+                        let matchedPlayer = null;
+                        
+                        for (const p of playersList) {
+                            // Check if the left side of the colon contains their in-game name
+                            if (p.inGameName && leftSide.toLowerCase().includes(p.inGameName.toLowerCase())) {
+                                matchedPlayer = p;
+                                break;
                             }
                         }
 
-                        const serverBinds = await CustomBind.findAll({ where: { guildId: guildId } });
-                        
-                        const activeBind = serverBinds.find(b => 
-                            (b.targetValue && chatText.includes(b.targetValue.toLowerCase())) || 
-                            (b.name && chatText.includes(b.name.toLowerCase()))
-                        );
-                        
-                        if (activeBind) {
-                            console.log(`[DEBUG-BINDS] Matched Chat: "${chatText}" to Bind ID ${activeBind.id}`);
-                            const userProfile = await UserEconomy.findOne({ where: { guildId: guildId, inGameName: playerName } });
+                        if (matchedPlayer) {
+                            console.log(`[DEBUG-BINDS] Matched Wheel Emote: "${chatText}" to Bind ID ${activeBind.id} for ${matchedPlayer.inGameName}`);
                             
-                            if (activeBind.cost > 0 && (!userProfile || userProfile.wallet < activeBind.cost)) {
-                                await sendRconCommand(guildId, `say "${playerName}, you need ${activeBind.cost} ${currentConfig?.economyCurrency || 'Scrap'} to use this!"`, client);
+                            if (activeBind.cost > 0 && matchedPlayer.wallet < activeBind.cost) {
+                                await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, you need ${activeBind.cost} ${currentConfig?.economyCurrency || 'Scrap'} to use this!"`, client);
                                 return;
                             }
                             
-                            if (activeBind.cost > 0 && userProfile) {
-                                await userProfile.update({ wallet: userProfile.wallet - activeBind.cost });
+                            if (activeBind.cost > 0) {
+                                await matchedPlayer.update({ wallet: matchedPlayer.wallet - activeBind.cost });
                             }
 
-                            const finalCommandString = activeBind.command.replace(/{player}/gi, playerName);
+                            const finalCommandString = activeBind.command.replace(/{player}/gi, matchedPlayer.inGameName);
                             const commands = finalCommandString.split('\n');
                             for (const cmd of commands) {
                                 if (cmd.trim() !== '') {
