@@ -1,8 +1,20 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } = require('discord.js');
 const { PveZone } = require('../database/db'); 
 const { queueAdminPos } = require('../utils/rconManager'); 
 
 const czSessions = new Map();
+
+// PREDEFINED COLOR LIST FOR THE DROPDOWN
+const ZONE_COLORS = [
+    { label: 'Red (Hostile / PvP)', value: '#FF0000', emoji: '🔴' },
+    { label: 'Green (Safe / PvE)', value: '#00FF00', emoji: '🟢' },
+    { label: 'Blue (Neutral)', value: '#0000FF', emoji: '🔵' },
+    { label: 'Yellow (Warning)', value: '#FFFF00', emoji: '🟡' },
+    { label: 'Purple (Event)', value: '#800080', emoji: '🟣' },
+    { label: 'Orange (Build Zone)', value: '#FFA500', emoji: '🟠' },
+    { label: 'White (Custom)', value: '#FFFFFF', emoji: '⚪' },
+    { label: 'Black (Hidden)', value: '#000000', emoji: '⚫' }
+];
 
 const buildPanelPayload = async (guildId, messageOverride = '') => {
     if (!czSessions.has(guildId)) czSessions.set(guildId, { selectedZoneId: null, view: 'main' });
@@ -51,29 +63,55 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
             ? `\`X: ${activeZone.posX}, Y: ${activeZone.posY || '0'}, Z: ${activeZone.posZ}\`` 
             : '*No center position saved. Click "Set Zone Center" below.*';
 
+        const colorDisplay = ZONE_COLORS.find(c => c.value === activeZone.color)?.label || activeZone.color || 'Red';
+
         embed.addFields(
-            { name: `📊 Zone Configuration`, value: `**Radius:** ${activeZone.radius || 0}m\n**Color:** \`${activeZone.color || '#FF0000'}\`\n**Map Visibility:** ${activeZone.visible ? '👁️ Visible' : '🙈 Hidden'}\n**Status:** ${activeZone.isEnabled ? '🟢 ENABLED' : '🔴 DISABLED'}`, inline: true },
-            { name: `⚙️ Rule Flags`, value: `**PvP:** ${activeZone.pvp ? '🟢 ON' : '🔴 OFF'}\n**PvE:** ${activeZone.pve ? '🟢 ON' : '🔴 OFF'}\n**Building:** ${activeZone.build ? '🟢 ON' : '🔴 OFF'}`, inline: true },
+            { name: `📊 Configuration`, value: `**Radius:** ${activeZone.radius || 0}m\n**Color:** ${colorDisplay}\n**Map Vis:** ${activeZone.visible ? '👁️ Visible' : '🙈 Hidden'}\n**Status:** ${activeZone.isEnabled ? '🟢 ENABLED' : '🔴 DISABLED'}`, inline: true },
+            { name: `⚙️ Rule Flags`, value: `**PvP:** ${activeZone.pvp ? '🟢 ON' : '🔴 OFF'}\n**PvE:** ${activeZone.pve ? '🟢 ON' : '🔴 OFF'}\n**Build:** ${activeZone.build ? '🟢 ON' : '🔴 OFF'}`, inline: true },
+            { name: `💬 In-Game Messages`, value: `**Enter:** ${activeZone.enterMessage || '*None*'}\n**Exit:** ${activeZone.exitMessage || '*None*'}`, inline: false },
             { name: `🎯 Center Coordinates`, value: posText, inline: false }
         );
 
+        // Row 1: Core Config
         components.push(new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('cz_btn_settings').setLabel('Name & Radius').setStyle(ButtonStyle.Primary).setEmoji('📝'),
-            new ButtonBuilder().setCustomId('cz_btn_color').setLabel('Set Color').setStyle(ButtonStyle.Primary).setEmoji('🎨'),
-            new ButtonBuilder().setCustomId('cz_btn_getpos').setLabel('Set Zone Center').setStyle(ButtonStyle.Success).setEmoji('📍')
+            new ButtonBuilder().setCustomId('cz_btn_color_menu').setLabel('Select Color').setStyle(ButtonStyle.Primary).setEmoji('🎨'),
+            new ButtonBuilder().setCustomId('cz_btn_messages').setLabel('Set Messages').setStyle(ButtonStyle.Primary).setEmoji('💬')
         ));
 
+        // Row 2: Location & Toggles
+        components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('cz_btn_getpos').setLabel('Set Zone Center').setStyle(ButtonStyle.Success).setEmoji('📍'),
+            new ButtonBuilder().setCustomId('cz_btn_visible').setLabel(activeZone.visible ? 'Map Visible' : 'Map Hidden').setStyle(activeZone.visible ? ButtonStyle.Success : ButtonStyle.Secondary).setEmoji('👁️'),
+            new ButtonBuilder().setCustomId('cz_btn_toggle').setLabel(activeZone.isEnabled ? 'Disable Zone' : 'Enable Zone').setStyle(activeZone.isEnabled ? ButtonStyle.Secondary : ButtonStyle.Success).setEmoji('⚡')
+        ));
+
+        // Row 3: Rule Flags
         components.push(new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('cz_btn_pvp').setLabel(`PvP: ${activeZone.pvp ? 'ON' : 'OFF'}`).setStyle(activeZone.pvp ? ButtonStyle.Success : ButtonStyle.Danger).setEmoji('⚔️'),
             new ButtonBuilder().setCustomId('cz_btn_pve').setLabel(`PvE: ${activeZone.pve ? 'ON' : 'OFF'}`).setStyle(activeZone.pve ? ButtonStyle.Success : ButtonStyle.Danger).setEmoji('🐻'),
             new ButtonBuilder().setCustomId('cz_btn_build').setLabel(`Build: ${activeZone.build ? 'ON' : 'OFF'}`).setStyle(activeZone.build ? ButtonStyle.Success : ButtonStyle.Danger).setEmoji('🔨')
         ));
 
+        // Row 4: Dangerous / Nav
         components.push(new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('cz_btn_visible').setLabel(activeZone.visible ? 'Visible' : 'Hidden').setStyle(activeZone.visible ? ButtonStyle.Success : ButtonStyle.Secondary).setEmoji('👁️'),
-            new ButtonBuilder().setCustomId('cz_btn_toggle').setLabel(activeZone.isEnabled ? 'Disable Zone' : 'Enable Zone').setStyle(activeZone.isEnabled ? ButtonStyle.Secondary : ButtonStyle.Success).setEmoji('⚡'),
-            new ButtonBuilder().setCustomId('cz_btn_delete').setLabel('Delete').setStyle(ButtonStyle.Danger).setEmoji('💀'),
-            new ButtonBuilder().setCustomId('cz_btn_back').setLabel('Back').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+            new ButtonBuilder().setCustomId('cz_btn_delete').setLabel('Delete Zone').setStyle(ButtonStyle.Danger).setEmoji('💀'),
+            new ButtonBuilder().setCustomId('cz_btn_back').setLabel('Back to Zone List').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+        ));
+    }
+    // ---------------------------------------------------
+    // PAGE 3: COLOR PICKER DROPDOWN MENU
+    // ---------------------------------------------------
+    else if (session.view === 'color_picker') {
+        embed.setTitle('🎨 Select Zone Color').setDescription('Choose a color from the list for this zone.');
+        
+        components.push(new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder().setCustomId('cz_do_color').setPlaceholder('Select a color...')
+            .addOptions(ZONE_COLORS)
+        ));
+
+        components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('cz_btn_back_zone').setLabel('Cancel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
         ));
     }
 
@@ -98,11 +136,8 @@ const customZoneHandler = async (interaction, client) => {
         const isOwner = interaction.guild?.ownerId === member.id;
         const isAdminPerm = member.permissions.has(PermissionsBitField.Flags.Administrator);
         const hasAdminRole = member.roles.cache.some(role => 
-            role.name.toLowerCase().includes('admin') || 
-            role.name.toLowerCase().includes('owner') ||
-            role.name.toLowerCase().includes('manager') ||
-            role.name.toLowerCase().includes('moderator') ||
-            role.name.toLowerCase().includes('mod')
+            role.name.toLowerCase().includes('admin') || role.name.toLowerCase().includes('owner') ||
+            role.name.toLowerCase().includes('manager') || role.name.toLowerCase().includes('mod')
         );
 
         if (!isOwner && !isAdminPerm && !hasAdminRole) {
@@ -128,6 +163,7 @@ const customZoneHandler = async (interaction, client) => {
             return await renderCZPanel(interaction);
         }
 
+        // --- MODAL SUBMISSIONS ---
         if (interaction.isModalSubmit() && customId === 'modal_cz_settings') {
             const newName = interaction.fields.getTextInputValue('cz_name').trim() || "New Zone";
             let radius = parseInt(interaction.fields.getTextInputValue('cz_radius'));
@@ -139,14 +175,24 @@ const customZoneHandler = async (interaction, client) => {
             return await renderCZPanel(interaction, `✅ Zone Name and Radius saved!`);
         }
 
-        if (interaction.isModalSubmit() && customId === 'modal_cz_color') {
-            const newColor = interaction.fields.getTextInputValue('cz_color').trim() || "#FF0000";
+        if (interaction.isModalSubmit() && customId === 'modal_cz_messages') {
+            const enterMsg = interaction.fields.getTextInputValue('cz_enter').trim();
+            const exitMsg = interaction.fields.getTextInputValue('cz_exit').trim();
             if (session.selectedZoneId) {
-                await PveZone.update({ color: newColor }, { where: { id: session.selectedZoneId } });
+                await PveZone.update({ enterMessage: enterMsg, exitMessage: exitMsg }, { where: { id: session.selectedZoneId } });
             }
-            return await renderCZPanel(interaction, `🎨 Zone Color saved!`);
+            return await renderCZPanel(interaction, `💬 Zone Messages saved!`);
         }
 
+        // --- DROPDOWN SELECTION ---
+        if (customId === 'cz_do_color' && interaction.isStringSelectMenu()) {
+            const color = interaction.values[0];
+            await PveZone.update({ color }, { where: { id: session.selectedZoneId } });
+            session.view = 'zone';
+            return await renderCZPanel(interaction, `🎨 Zone Color updated!`);
+        }
+
+        // --- BUTTONS ---
         if (interaction.isButton()) {
             if (customId === 'cz_create_new') {
                 const newZone = await PveZone.create({ guildId, name: 'New Zone', radius: '50', isEnabled: false });
@@ -167,6 +213,11 @@ const customZoneHandler = async (interaction, client) => {
                 return await renderCZPanel(interaction);
             }
 
+            if (customId === 'cz_btn_back_zone') {
+                session.view = 'zone';
+                return await renderCZPanel(interaction);
+            }
+
             if (customId === 'cz_btn_settings') {
                 const z = await PveZone.findByPk(session.selectedZoneId);
                 const modal = new ModalBuilder().setCustomId('modal_cz_settings').setTitle(`Edit Zone Settings`);
@@ -177,11 +228,17 @@ const customZoneHandler = async (interaction, client) => {
                 return await interaction.showModal(modal);
             }
 
-            if (customId === 'cz_btn_color') {
+            if (customId === 'cz_btn_color_menu') {
+                session.view = 'color_picker';
+                return await renderCZPanel(interaction);
+            }
+
+            if (customId === 'cz_btn_messages') {
                 const z = await PveZone.findByPk(session.selectedZoneId);
-                const modal = new ModalBuilder().setCustomId('modal_cz_color').setTitle(`Edit Zone Color`);
+                const modal = new ModalBuilder().setCustomId('modal_cz_messages').setTitle(`Enter & Exit Messages`);
                 modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_color').setLabel("Color Hex (e.g. #FF0000 or red)").setStyle(TextInputStyle.Short).setValue(z.color || '#FF0000').setRequired(true))
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_enter').setLabel("Enter Message (Leave blank for none)").setStyle(TextInputStyle.Paragraph).setValue(z.enterMessage || '').setRequired(false)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_exit').setLabel("Exit Message (Leave blank for none)").setStyle(TextInputStyle.Paragraph).setValue(z.exitMessage || '').setRequired(false))
                 );
                 return await interaction.showModal(modal);
             }
@@ -244,7 +301,6 @@ customZoneHandler.autoSaveLocation = async (guildId, x, y, z, zoneId) => {
     }, { where: { id: zoneId } });
 };
 
-// 🎯 THE ANCHOR - Forces the panel to stay inside the zone!
 customZoneHandler.refreshPanelViaInteraction = async (interaction, messageOverride, zoneId = null) => {
     try {
         const guildId = interaction.guild.id;
@@ -252,7 +308,7 @@ customZoneHandler.refreshPanelViaInteraction = async (interaction, messageOverri
             if (!czSessions.has(guildId)) czSessions.set(guildId, { selectedZoneId: zoneId, view: 'zone' });
             const session = czSessions.get(guildId);
             session.selectedZoneId = zoneId;
-            session.view = 'zone'; // 🔒 Anchor the view
+            session.view = 'zone';
             czSessions.set(guildId, session);
         }
 
