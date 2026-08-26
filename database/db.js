@@ -123,12 +123,12 @@ const BuddyPassReward = sequelize.define('BuddyPassReward', { guildId: { type: D
 const TicketCategory = sequelize.define('TicketCategory', { guildId: { type: DataTypes.STRING }, name: { type: DataTypes.STRING }, description: { type: DataTypes.STRING } });
 
 // ==========================================
-// 🗺️ NEW: CUSTOM ZONES BUILDER MODEL
+// 🗺️ CUSTOM ZONES BUILDER MODEL
 // ==========================================
 const PveZone = sequelize.define('PveZone', {
     guildId: { type: DataTypes.STRING, allowNull: false },
     name: { type: DataTypes.STRING },
-    radius: { type: DataTypes.INTEGER, defaultValue: 50 },
+    radius: { type: DataTypes.STRING, defaultValue: '50' }, // Changed to STRING to fix DB crash!
     posX: { type: DataTypes.STRING },
     posY: { type: DataTypes.STRING },
     posZ: { type: DataTypes.STRING },
@@ -148,7 +148,6 @@ const ClanInvite = sequelize.define('ClanInvite', { id: { type: DataTypes.INTEGE
 const ClanWar = sequelize.define('ClanWar', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, challengerClanId: { type: DataTypes.INTEGER, allowNull: false }, targetClanId: { type: DataTypes.INTEGER, allowNull: false }, status: { type: DataTypes.STRING, defaultValue: 'active' } });
 const ReactionRole = sequelize.define('ReactionRole', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, messageId: { type: DataTypes.STRING, allowNull: false }, emoji: { type: DataTypes.STRING, allowNull: false }, roleId: { type: DataTypes.STRING, allowNull: false }, isVerifyOnly: { type: DataTypes.BOOLEAN, defaultValue: false } });
 
-// Auto Events Models
 const AutoEvent = sequelize.define('AutoEvent', {
     id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
     guildId: { type: DataTypes.STRING, allowNull: false },
@@ -183,7 +182,6 @@ const CustomEmbed = sequelize.define('CustomEmbed', {
 
 async function initDb() { 
     await sequelize.authenticate(); 
-    // { alter: true } automatically detects new columns and injects them without deleting data!
     await sequelize.sync({ alter: true }); 
     console.log('[DATABASE] Tables synchronized successfully.'); 
 }
