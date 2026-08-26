@@ -4,24 +4,24 @@ const { queueAdminPos } = require('../utils/rconManager');
 
 const bindSessions = new Map();
 
-// Complete Rust Console Edition Quick Chat / Radial Wheel Options
+// Official Rust Console Edition Radial Quick-Chat Wheel Options
 const QUICK_CHAT_WHEEL_OPTIONS = [
-    { label: 'Help / Assistance', value: 'help', emoji: '🆘', description: 'Quick chat wheel: Help' },
-    { label: 'Friendly / Hello', value: 'hello', emoji: '👋', description: 'Quick chat wheel: Hello' },
-    { label: 'Danger / Enemy', value: 'danger', emoji: '⚠️', description: 'Quick chat wheel: Danger' },
-    { label: 'Base / Building', value: 'base', emoji: '🏠', description: 'Quick chat wheel: Base' },
-    { label: 'Loot / Cargo', value: 'loot', emoji: '🎁', description: 'Quick chat wheel: Loot' },
-    { label: 'Yes / Affirmative', value: 'yes', emoji: '✅', description: 'Quick chat wheel: Yes' },
-    { label: 'No / Negative', value: 'no', emoji: '❌', description: 'Quick chat wheel: No' },
-    { label: 'Wait / Hold', value: 'wait', emoji: '⏳', description: 'Quick chat wheel: Hold on' },
-    { label: 'Follow Me', value: 'follow', emoji: '👉', description: 'Quick chat wheel: Follow me' },
-    { label: 'Cover Me', value: 'cover', emoji: '🛡️', description: 'Quick chat wheel: Cover me' },
-    { label: 'Enemies Ahead', value: 'enemies', emoji: '🎯', description: 'Quick chat wheel: Enemies sighted' },
-    { label: 'Need Loot / Resources', value: 'needloot', emoji: '💎', description: 'Quick chat wheel: Need resources' },
-    { label: 'Sorry', value: 'sorry', emoji: '🙇', description: 'Quick chat wheel: Sorry' },
-    { label: 'Thanks', value: 'thanks', emoji: '🙏', description: 'Quick chat wheel: Thanks' },
-    { label: 'Nice Shot', value: 'niceshot', emoji: '🔥', description: 'Quick chat wheel: Nice shot' },
-    { label: 'Trap / Danger Ahead', value: 'trap', emoji: '⚡', description: 'Quick chat wheel: Trap' }
+    { label: 'Help!', value: 'help', emoji: '🆘', description: 'Quick chat: Help' },
+    { label: 'Hello', value: 'hello', emoji: '👋', description: 'Quick chat: Hello' },
+    { label: 'Yes / Affirmative', value: 'yes', emoji: '✅', description: 'Quick chat: Yes' },
+    { label: 'No / Negative', value: 'no', emoji: '❌', description: 'Quick chat: No' },
+    { label: 'Thanks', value: 'thanks', emoji: '🙏', description: 'Quick chat: Thanks' },
+    { label: 'Sorry', value: 'sorry', emoji: '🙇', description: 'Quick chat: Sorry' },
+    { label: 'Wait / Hold On', value: 'hold', emoji: '⏳', description: 'Quick chat: Hold on' },
+    { label: 'Follow Me', value: 'follow', emoji: '👉', description: 'Quick chat: Follow me' },
+    { label: 'Cover Me', value: 'cover', emoji: '🛡️', description: 'Quick chat: Cover me' },
+    { label: 'Enemies Sighted', value: 'enemies', emoji: '🎯', description: 'Quick chat: Enemies sighted' },
+    { label: 'Danger', value: 'danger', emoji: '⚠️', description: 'Quick chat: Danger' },
+    { label: 'Need Loot / Resources', value: 'resources', emoji: '💎', description: 'Quick chat: Need resources' },
+    { label: 'Base', value: 'base', emoji: '🏠', description: 'Quick chat: Base' },
+    { label: 'Loot', value: 'loot', emoji: '🎁', description: 'Quick chat: Loot' },
+    { label: 'Nice Shot', value: 'niceshot', emoji: '🔥', description: 'Quick chat: Nice shot' },
+    { label: 'Trap', value: 'trap', emoji: '⚡', description: 'Quick chat: Trap' }
 ];
 
 const buildPanelPayload = async (guildId, messageOverride = '') => {
@@ -197,7 +197,8 @@ const bindHandler = async (interaction, client) => {
 
         if (customId === 'bind_do_kit' && interaction.isStringSelectMenu()) {
             const kitName = interaction.values[0];
-            const command = `kit.give "{player}" "${kitName}"`;
+            // Standard server plugin kit grant command syntax
+            const command = `kit "{player}" "${kitName}"`;
             await CustomBind.update({ targetValue: kitName, command }, { where: { id: session.selectedBindId } });
             session.view = 'bind';
             return await renderBindPanel(interaction, `📦 Bound to kit: **${kitName}**!`);
@@ -269,7 +270,7 @@ const bindHandler = async (interaction, client) => {
             if (customId === 'bind_btn_getpos') {
                 const loadingPayload = await buildPanelPayload(guildId, '⏳ **Extracting your position from the server...**');
                 await interaction.update(loadingPayload);
-                await queueAdminPos(interaction, 'custom_bind', session.selectedBindId);
+                await queueAdminPos(interaction, 'custom_zone', session.selectedBindId);
                 return;
             }
 
