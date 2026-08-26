@@ -81,7 +81,6 @@ async function connectRcon(guildId, client) {
                 // ==========================================
                 if (adminPosQueue.size > 0) {
                     for (const [adminId, setupData] of adminPosQueue.entries()) {
-                        
                         let posX, posY, posZ;
                         let foundPos = false;
 
@@ -107,32 +106,7 @@ async function connectRcon(guildId, client) {
                         if (foundPos) {
                             if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
 
-                            if (setupData.type === 'auto_event') {
-                                const aeHandler = require('../handlers/autoEventsHandler');
-                                if (aeHandler && aeHandler.autoSaveLocation) {
-                                    await aeHandler.autoSaveLocation(guildId, posX, posY, posZ, setupData.targetId);
-                                    if (setupData.interaction) {
-                                        await aeHandler.refreshPanelViaInteraction(
-                                            setupData.interaction, 
-                                            `✅ **Position Captured Automatically!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``
-                                        );
-                                    }
-                                }
-                            } 
-                            else if (setupData.type === 'custom_zone') {
-                                const czHandler = require('../handlers/customZoneHandler');
-                                if (czHandler && czHandler.autoSaveLocation) {
-                                    await czHandler.autoSaveLocation(guildId, posX, posY, posZ, setupData.targetId);
-                                    if (setupData.interaction) {
-                                        await czHandler.refreshPanelViaInteraction(
-                                            setupData.interaction, 
-                                            `✅ **Zone Center Captured Automatically!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``,
-                                            setupData.targetId
-                                        );
-                                    }
-                                }
-                            } 
-                            else if (setupData.type === 'custom_bind') {
+                            if (setupData.type === 'custom_bind') {
                                 try {
                                     const bind = await CustomBind.findByPk(setupData.targetId);
                                     if (bind) {
@@ -172,12 +146,6 @@ async function connectRcon(guildId, client) {
                             if (chan) chan.send({ embeds: [new EmbedBuilder().setColor('#e67e22').setDescription(`🛠️ **Admin / System Action:**\n\`\`\`${msg}\`\`\``).setTimestamp()] }).catch(()=>{});
                         }
                     }
-                    if (/(Cargo Ship|Patrol Helicopter|Airdrop|Bradley APC|Locked Crate)/i.test(msg)) {
-                        if (currentConfig.logGameChannelId) {
-                            const chan = guild.channels.cache.get(currentConfig.logGameChannelId);
-                            if (chan) chan.send({ embeds: [new EmbedBuilder().setColor('#9b59b6').setDescription(`🌍 **World Event:**\n\`\`\`${msg}\`\`\``).setTimestamp()] }).catch(()=>{});
-                        }
-                    }
                 }
 
                 // ==========================================
@@ -185,17 +153,6 @@ async function connectRcon(guildId, client) {
                 // ==========================================
                 if ((msgLower.includes('killed') || msgLower.includes('murdered') || msgLower.includes('suicide') || msgLower.includes('died') || msgLower.includes('slain')) && !msg.includes('[Killfeed]')) {
                     await sendRconCommand(guildId, `say "[Killfeed] ${msg}"`, client);
-                    let embedColor = '#e74c3c';
-                    let killType = '⚔️ PvP Combat';
-
-                    if (msgLower.includes('scientist') || msgLower.includes('boar') || msgLower.includes('bear') || msgLower.includes('wolf') || msgLower.includes('fall') || msgLower.includes('drown') || msgLower.includes('fire') || msgLower.includes('radiation')) {
-                        embedColor = '#3498db';
-                        killType = '🐻 PvE / Environmental';
-                    } else if (msgLower.includes('suicide')) {
-                        embedColor = '#95a5a6';
-                        killType = '💀 Suicide';
-                    }
-
                     let killerDb = null;
                     let victimDb = null;
                     const playersList = await UserEconomy.findAll({ where: { guildId: guildId } });
@@ -203,83 +160,73 @@ async function connectRcon(guildId, client) {
                     for (const p of playersList) {
                         if (p.inGameName && msg.includes(p.inGameName)) {
                             if (msgLower.includes('killed') && msg.indexOf(p.inGameName) < msg.indexOf('killed')) {
-                                if (killType.includes('PvP')) {
-                                    await p.update({ pvpKills: (p.pvpKills || 0) + 1 });
-                                    killerDb = p; 
-                                } else {
-                                    await p.update({ pveKills: (p.pveKills || 0) + 1 });
-                                }
+                                await p.update({ pvpKills: (p.pvpKills || 0) + 1 });
+                                killerDb = p; 
                             } else if (msgLower.includes('killed') || msgLower.includes('murdered')) {
                                 await p.update({ deaths: (p.deaths || 0) + 1, currentKillstreak: 0 });
                                 victimDb = p; 
                             }
                         }
                     }
-
-                    if (currentConfig && currentConfig.killfeedChannelId && client) {
-                        const killfeedChannel = client.channels.cache.get(currentConfig.killfeedChannelId);
-                        if (killfeedChannel) {
-                            killfeedChannel.send({ embeds: [new EmbedBuilder().setTitle(killType).setDescription(`\`\`\`fix\n${msg}\`\`\``).setColor(embedColor).setTimestamp()] }).catch(() => {});
-                        }
-                    }
-
                     if (killerDb && victimDb && killerDb.userId !== victimDb.userId) {
                         await processBountyLogic(guildId, killerDb, victimDb, client, currentConfig);
                     }
                 }
 
                 // ==========================================
-                // 4. CLEAN & FOOLPROOF CHAT & QUICK-CHAT CATCHER
+                // 4. ABSOLUTE DIRECT MATCH QUICK-CHAT CATCHER
                 // ==========================================
-                // If it's a chat line (contains a colon and isn't a system log)
-                if (msg.includes(':') && !msgLower.includes('[killfeed]') && !msgLower.includes('rcon') && !msgLower.includes('server')) {
-                    
-                    const serverBinds = await CustomBind.findAll({ where: { guildId: guildId } });
-                    if (serverBinds.length === 0) return;
+                // Scans every incoming message for any registered player name AND the bind phrase simultaneously.
+                const serverBinds = await CustomBind.findAll({ where: { guildId: guildId } });
+                if (serverBinds.length === 0) return;
 
-                    const playersList = await UserEconomy.findAll({ where: { guildId: guildId } });
+                const registeredPlayers = await UserEconomy.findAll({ where: { guildId: guildId } });
 
-                    for (const bind of serverBinds) {
-                        if (!bind.targetValue) continue;
+                for (const bind of serverBinds) {
+                    if (!bind.targetValue) continue;
 
-                        // Check if the raw console message contains the quick-chat phrase (e.g. "Going for Wood")
-                        if (msgLower.includes(bind.targetValue.toLowerCase())) {
-                            
-                            // Now find which registered player's name is in this exact log line
-                            let matchedPlayer = null;
-                            for (const p of playersList) {
-                                if (p.inGameName && msg.toLowerCase().includes(p.inGameName.toLowerCase())) {
-                                    matchedPlayer = p;
-                                    break;
-                                }
+                    const phrase = bind.targetValue.toLowerCase();
+
+                    // Check if the log line contains the quick-chat phrase
+                    if (msgLower.includes(phrase)) {
+                        
+                        let matchedPlayer = null;
+                        for (const player of registeredPlayers) {
+                            if (player.inGameName && msgLower.includes(player.inGameName.toLowerCase())) {
+                                matchedPlayer = player;
+                                break;
+                            }
+                        }
+
+                        if (matchedPlayer) {
+                            console.log(`[ULTIMATE-CATCH] Player "${matchedPlayer.inGameName}" triggered bind phrase: "${phrase}"`);
+
+                            // Check scrap cost
+                            if (bind.cost > 0 && matchedPlayer.wallet < bind.cost) {
+                                await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, you need ${bind.cost} ${currentConfig?.economyCurrency || 'Scrap'} to use this!"`, client);
+                                return;
+                            }
+                            if (bind.cost > 0) {
+                                await matchedPlayer.update({ wallet: matchedPlayer.wallet - bind.cost });
                             }
 
-                            if (matchedPlayer) {
-                                console.log(`[CLEAN-CATCH] Triggered Bind ID ${bind.id} (${bind.actionType}) for player: ${matchedPlayer.inGameName}`);
-
-                                // Economy check
-                                if (bind.cost > 0 && matchedPlayer.wallet < bind.cost) {
-                                    await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, you need ${bind.cost} ${currentConfig?.economyCurrency || 'Scrap'} to use this!"`, client);
-                                    return;
+                            // Execute the teleport command directly targeting the player name
+                            const finalCommandString = bind.command.replace(/{player}/gi, matchedPlayer.inGameName);
+                            const commands = finalCommandString.split('\n');
+                            for (const cmd of commands) {
+                                if (cmd.trim() !== '') {
+                                    console.log(`[ULTIMATE-CATCH] Sending RCON: ${cmd.trim()}`);
+                                    await sendRconCommand(guildId, cmd.trim(), client);
                                 }
-                                if (bind.cost > 0) {
-                                    await matchedPlayer.update({ wallet: matchedPlayer.wallet - bind.cost });
-                                }
-
-                                // Execute command
-                                const finalCommandString = bind.command.replace(/{player}/gi, matchedPlayer.inGameName);
-                                const commands = finalCommandString.split('\n');
-                                for (const cmd of commands) {
-                                    if (cmd.trim() !== '') {
-                                        await sendRconCommand(guildId, cmd.trim(), client);
-                                    }
-                                }
-                                break; // Stop checking other binds for this message
                             }
+                            break; 
                         }
                     }
                 }
-            } catch (e) {}
+
+            } catch (e) {
+                console.error("[RCON MESSAGE ERROR]", e);
+            }
         });
     });
 }
@@ -307,30 +254,23 @@ async function queueAdminPos(interaction, type = 'custom_bind', targetId = null)
     const client = interaction.client;
 
     const userProfile = await UserEconomy.findOne({ where: { userId: adminId } });
-
     if (!userProfile || !userProfile.inGameName) {
-        const handler = type === 'custom_zone' ? require('../handlers/customZoneHandler') : require('../handlers/bindHandler');
+        const handler = require('../handlers/bindHandler');
         if (handler && handler.refreshPanelViaInteraction) {
-            await handler.refreshPanelViaInteraction(interaction, `❌ **Missing In-Game Name!**\nPlease use the \`/playerpanel\` to link your in-game name first!`, targetId);
+            await handler.refreshPanelViaInteraction(interaction, `❌ **Missing In-Game Name!** Link it via \`/playerpanel\` first!`, targetId);
         }
         return;
     }
 
     const inGameName = userProfile.inGameName;
-
-    if (adminPosQueue.has(adminId)) {
-        clearTimeout(adminPosQueue.get(adminId).timeoutTimer);
-    }
+    if (adminPosQueue.has(adminId)) clearTimeout(adminPosQueue.get(adminId).timeoutTimer);
 
     const timeoutTimer = setTimeout(async () => {
         if (adminPosQueue.has(adminId)) {
-            const data = adminPosQueue.get(adminId);
             adminPosQueue.delete(adminId);
-            if (data.interaction) {
-                const handler = data.type === 'custom_zone' ? require('../handlers/customZoneHandler') : require('../handlers/bindHandler');
-                if (handler && handler.refreshPanelViaInteraction) {
-                    await handler.refreshPanelViaInteraction(data.interaction, `⚠️ **Auto-Scan Failed.**\nPlease ensure your server is online, and that you are actively spawned into the game as \`${inGameName}\`.`, data.targetId);
-                }
+            const handler = require('../handlers/bindHandler');
+            if (handler && handler.refreshPanelViaInteraction) {
+                await handler.refreshPanelViaInteraction(interaction, `⚠️ **Auto-Scan Failed.** Make sure you are online as \`${inGameName}\`.`, targetId);
             }
         }
     }, 8000);
@@ -340,14 +280,7 @@ async function queueAdminPos(interaction, type = 'custom_bind', targetId = null)
     try {
         await sendRconCommand(guildId, `printpos "${inGameName}"`, client);
     } catch (err) {
-        const handler = type === 'custom_zone' ? require('../handlers/customZoneHandler') : require('../handlers/bindHandler');
-        if (handler && handler.refreshPanelViaInteraction) {
-            await handler.refreshPanelViaInteraction(interaction, `❌ **Failed to connect to RCON.**`, targetId);
-        }
-        if (adminPosQueue.has(adminId)) {
-            clearTimeout(adminPosQueue.get(adminId).timeoutTimer);
-            adminPosQueue.delete(adminId);
-        }
+        adminPosQueue.delete(adminId);
     }
 }
 
@@ -355,15 +288,7 @@ async function triggerCustomEvent(guildId, eventType, data = {}) {
     if (eventType === 'supply_drop') return await sendRconCommand(guildId, 'supply.drop');
     if (eventType === 'elite_crate') return await sendRconCommand(guildId, 'spawn codelockedhackablecrate');
     if (eventType === 'timed_crate') return await sendRconCommand(guildId, 'spawn hackablelockedcrate');
-    if (eventType === 'docked_cargo') {
-        const config = await GuildConfig.findOne({ where: { guildId } });
-        if (config && config.cargoDockX !== null && config.cargoDockY !== null && config.cargoDockZ !== null) {
-            const coords = `${config.cargoDockX},${config.cargoDockY},${config.cargoDockZ}`;
-            return await sendRconCommand(guildId, `spawn cargoshipdynamic1 ${coords}`);
-        }
-        return await sendRconCommand(guildId, 'cargoships.spawncargoship');
-    }
-    throw new Error('Unknown custom event type.');
+    return await sendRconCommand(guildId, 'cargoships.spawncargoship');
 }
 
 async function processBountyLogic(guildId, killerDb, victimDb, client, config) {
@@ -372,33 +297,20 @@ async function processBountyLogic(guildId, killerDb, victimDb, client, config) {
     const gameChannel = config.logGameChannelId ? guild?.channels.cache.get(config.logGameChannelId) : null;
 
     await killerDb.update({ currentKillstreak: (killerDb.currentKillstreak || 0) + 1 });
-
     if (killerDb.currentKillstreak >= (config.bountyKillsToActivate || 5)) {
         const cd = await BountyCooldown.findOne({ where: { guildId, userId: killerDb.userId } });
         const now = new Date();
-        
         if (!cd || cd.expiresAt < now) {
             const existingBounty = await ActiveBounty.findOne({ where: { guildId, userId: killerDb.userId } });
-            
             if (!existingBounty) {
                 await ActiveBounty.create({ guildId, userId: killerDb.userId, inGameName: killerDb.inGameName, reward: config.bountyRewardAmount || 500 });
                 const cdTime = new Date(now.getTime() + (config.bountyCooldownMinutes || 60) * 60000);
                 await BountyCooldown.upsert({ guildId, userId: killerDb.userId, expiresAt: cdTime });
-
                 if (gameChannel) {
-                    gameChannel.send({ embeds: [new EmbedBuilder().setTitle('🎯 BOUNTY PLACED!').setDescription(`**${killerDb.inGameName}** is unstoppable on a **${killerDb.currentKillstreak} killstreak**!\n\nA bounty of **${config.bountyRewardAmount || 500} ${currency}** has been placed on their head!`).setColor('#e74c3c')] }).catch(()=>{});
+                    gameChannel.send({ embeds: [new EmbedBuilder().setTitle('🎯 BOUNTY PLACED!').setDescription(`**${killerDb.inGameName}** has a **${killerDb.currentKillstreak} killstreak**! Bounty: **${config.bountyRewardAmount || 500} ${currency}**`).setColor('#e74c3c')] }).catch(()=>{});
                 }
             }
         }
-    }
-
-    const activeBounty = await ActiveBounty.findOne({ where: { guildId, userId: victimDb.userId } });
-    if (activeBounty) {
-        await killerDb.update({ wallet: killerDb.wallet + activeBounty.reward });
-        if (gameChannel) {
-            gameChannel.send({ embeds: [new EmbedBuilder().setTitle('🎯 BOUNTY CLAIMED!').setDescription(`**${killerDb.inGameName}** has killed **${victimDb.inGameName}** and claimed the bounty of **${activeBounty.reward} ${currency}**!`).setColor('#2ecc71')] }).catch(()=>{});
-        }
-        await activeBounty.destroy();
     }
 }
 
