@@ -260,9 +260,10 @@ const autoEventsHandler = async (interaction, client) => {
                 return await renderAEPanel(interaction, `⏪ Removed the last saved position.`);
             }
 
+            // Add Player Pos (Triggers RCON)
             if (customId === 'ae_btn_getpos') {
                 await queueAdminPos(interaction, 'auto_event');
-                return await interaction.reply({ content: '⏳ **Waiting for RCON...** Type `/players` or move in-game to trigger a position save!', flags: 64 });
+                return await interaction.reply({ content: '⏳ **Bot is listening for 20 seconds!**\nYour server hides positions from the player list. Tab into your game, open your Admin F1 Console, and type `printpos` to broadcast your coordinates!', flags: 64 });
             }
 
             if (customId === 'ae_btn_test') {
