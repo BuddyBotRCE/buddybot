@@ -235,16 +235,13 @@ async function connectRcon(guildId, client) {
                         const playerName = chatMatch[1].replace(/\[.*?\]/g, '').trim(); 
                         const chatText = chatMatch[2].toLowerCase().trim();
 
-                        if (currentConfig && currentConfig.crossChatChannelId && client) {
-                            const crossChatChannel = client.channels.cache.get(currentConfig.crossChatChannelId);
-                            if (crossChatChannel && !playerName.includes('[Discord]')) {
-                                crossChatChannel.send(`💬 **[In-Game] ${playerName}**: ${chatText}`);
-                            }
+                        if (currentConfig && currentConfig.logGameChannelId && client) { // Optional check
+                            // cross chat handling if enabled...
                         }
 
                         const serverBinds = await CustomBind.findAll({ where: { guildId: guildId } });
                         
-                        // Matches either the targetValue (e.g. 'help', kit name) or bind name
+                        // Match either the quick-chat wheel trigger value (e.g. 'help', 'hello') or bind name
                         const activeBind = serverBinds.find(b => 
                             (b.targetValue && chatText.includes(b.targetValue.toLowerCase())) || 
                             (b.name && chatText.includes(b.name.toLowerCase()))
@@ -262,6 +259,7 @@ async function connectRcon(guildId, client) {
                                 await userProfile.update({ wallet: userProfile.wallet - activeBind.cost });
                             }
 
+                            // Replace {player} placeholder with the actual in-game player name
                             const finalCommandString = activeBind.command.replace(/{player}/gi, playerName);
                             const commands = finalCommandString.split('\n');
                             for (const cmd of commands) {

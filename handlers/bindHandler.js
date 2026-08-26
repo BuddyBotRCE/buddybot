@@ -4,7 +4,6 @@ const { queueAdminPos } = require('../utils/rconManager');
 
 const bindSessions = new Map();
 
-// Official Rust Console Edition Radial Quick-Chat Wheel Options
 const QUICK_CHAT_WHEEL_OPTIONS = [
     { label: 'Help!', value: 'help', emoji: '🆘', description: 'Quick chat: Help' },
     { label: 'Hello', value: 'hello', emoji: '👋', description: 'Quick chat: Hello' },
@@ -130,7 +129,11 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
 async function safeRespond(interaction, payload) {
     try {
         if (interaction.isModalSubmit() || interaction.isMessageComponent()) {
-            await interaction.update(payload);
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(payload);
+            } else {
+                await interaction.update(payload);
+            }
         } else {
             await interaction.reply(payload);
         }
@@ -197,33 +200,36 @@ const bindHandler = async (interaction, client) => {
 
         if (customId === 'bind_do_kit' && interaction.isStringSelectMenu()) {
             const kitName = interaction.values[0];
-            // Standard server plugin kit grant command syntax
-            const command = `kit "{player}" "${kitName}"`;
+            // Universal kit grant command
+            const command = `kit.give "{player}" "${kitName}"`;
             await CustomBind.update({ targetValue: kitName, command }, { where: { id: session.selectedBindId } });
             session.view = 'bind';
             return await renderBindPanel(interaction, `📦 Bound to kit: **${kitName}**!`);
         }
 
-        if (interaction.isModalSubmit() && customId === 'modal_bind_name') {
-            const name = interaction.fields.getTextInputValue('b_name').trim() || "Custom Bind";
-            if (session.selectedBindId) {
-                await CustomBind.update({ name }, { where: { id: session.selectedBindId } });
+        // --- MODAL SUBMISSIONS (FIXED) ---
+        if (interaction.isModalSubmit()) {
+            if (customId === 'modal_bind_name') {
+                const name = interaction.fields.getTextInputValue('b_name').trim() || "Custom Bind";
+                if (session.selectedBindId) {
+                    await CustomBind.update({ name }, { where: { id: session.selectedBindId } });
+                }
+                return await renderBindPanel(interaction, `✅ Bind renamed successfully!`);
             }
-            return await renderBindPanel(interaction, `✅ Bind renamed successfully!`);
-        }
 
-        if (interaction.isModalSubmit() && customId === 'modal_bind_options') {
-            let cost = parseInt(interaction.fields.getTextInputValue('b_cost'));
-            let cooldown = parseInt(interaction.fields.getTextInputValue('b_cd'));
-            let roleId = interaction.fields.getTextInputValue('b_role').trim() || null;
-            if (isNaN(cost) || cost < 0) cost = 0;
-            if (isNaN(cooldown) || cooldown < 0) cooldown = 0;
-            if (roleId === '' || roleId.toLowerCase() === 'none') roleId = null;
+            if (customId === 'modal_bind_options') {
+                let cost = parseInt(interaction.fields.getTextInputValue('b_cost'));
+                let cooldown = parseInt(interaction.fields.getTextInputValue('b_cd'));
+                let roleId = interaction.fields.getTextInputValue('b_role').trim() || null;
+                if (isNaN(cost) || cost < 0) cost = 0;
+                if (isNaN(cooldown) || cooldown < 0) cooldown = 0;
+                if (roleId === '' || roleId.toLowerCase() === 'none') roleId = null;
 
-            if (session.selectedBindId) {
-                await CustomBind.update({ cost, cooldown, roleId }, { where: { id: session.selectedBindId } });
+                if (session.selectedBindId) {
+                    await CustomBind.update({ cost, cooldown, roleId }, { where: { id: session.selectedBindId } });
+                }
+                return await renderBindPanel(interaction, `⚙️ Options (Cost, Cooldown, Role) saved!`);
             }
-            return await renderBindPanel(interaction, `⚙️ Options (Cost, Cooldown, Role) saved!`);
         }
 
         if (interaction.isButton()) {
@@ -270,12 +276,13 @@ const bindHandler = async (interaction, client) => {
             if (customId === 'bind_btn_getpos') {
                 const loadingPayload = await buildPanelPayload(guildId, '⏳ **Extracting your position from the server...**');
                 await interaction.update(loadingPayload);
-                await queueAdminPos(interaction, 'custom_zone', session.selectedBindId);
+                await queueAdminPos(interaction, 'custom_bind', session.selectedBindId);
                 return;
             }
 
             if (customId === 'bind_btn_delete') {
-                await CustomBind.destroy({ where: { id: session.selectedBindId } });
+                const CustomBindModel = CustomBind;
+                await CustomBindModel.destroy({ where: { id: session.selectedBindId } });
                 session.selectedBindId = null;
                 session.view = 'main';
                 return await renderBindPanel(interaction, `💀 Bind successfully deleted.`);
@@ -317,7 +324,9 @@ bindHandler.refreshPanelViaInteraction = async (interaction, messageOverride, bi
         }
 
         const payload = await buildPanelPayload(guildId, messageOverride);
-        await interaction.editReply(payload);
+        if (interaction.isRepliable()) {
+            await interaction.editReply(payload);
+        }
     } catch (e) {
         console.error("Failed to live-refresh Bind panel:", e);
     }
