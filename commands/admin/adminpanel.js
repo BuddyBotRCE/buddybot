@@ -11,6 +11,20 @@ module.exports = {
             .setTitle('🛠️ Admin Panel & Dashboard')
             .setDescription('Configure bot modules, automated moderation, announcement builders, and community tools.')
             .setColor('#2b2d31');
+
+        const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+
+module.exports = {
+    data: new SlashCommandBuilder()
+        .setName('adminpanel')
+        .setDescription('Opens the Admin Dashboard')
+        // 👇 ADD THIS LINE RIGHT HERE 👇
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+    async execute(interaction) {
+        // Your existing admin panel code...
+    }
+};   
         
         const row1 = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder().setCustomId('admin_menu_select').setPlaceholder('Select a module to configure...')

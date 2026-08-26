@@ -1,4 +1,4 @@
-const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } = require('discord.js');
 const { AutoEvent, AutoEventLocation } = require('../database/db');
 const { sendRconCommand, queueAdminPos } = require('../utils/rconManager'); 
 
@@ -28,6 +28,27 @@ async function safeRespond(interaction, payload) {
 
 const autoEventsHandler = async (interaction, client) => {
     try {
+        // =======================================================
+        // 🛡️ SECURITY BARRIER: OWNERS, ADMINS, & MODERATORS ONLY
+        // =======================================================
+        const member = interaction.member;
+        const isOwner = interaction.guild?.ownerId === member.id;
+        const isAdminPerm = member.permissions.has(PermissionsBitField.Flags.Administrator);
+        const hasAdminRole = member.roles.cache.some(role => 
+            role.name.toLowerCase().includes('admin') || 
+            role.name.toLowerCase().includes('owner') ||
+            role.name.toLowerCase().includes('manager') ||
+            role.name.toLowerCase().includes('moderator') ||
+            role.name.toLowerCase().includes('mod')
+        );
+
+        if (!isOwner && !isAdminPerm && !hasAdminRole) {
+            if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
+                return await interaction.reply({ content: '❌ **Access Denied:** Only Owners, Admins, and Moderators can manage Auto Events.', flags: 64 });
+            }
+            return;
+        }
+
         const customId = interaction.customId || '';
         const guildId = interaction.guild.id;
 
@@ -160,7 +181,7 @@ const autoEventsHandler = async (interaction, client) => {
             if (isNaN(amount) || amount < 1) amount = 1;
 
             if (session.selectedEventId) {
-                await AutoEvent.update({ name: newName, amount }, { where: { id: session.selectedEventId } });
+                await AutoEvent.update({ name: newName, amount, interval: 60 }, { where: { id: session.selectedEventId } });
             }
             return await renderAEPanel(interaction, `✅ Event Name and Quantity saved!`);
         }
