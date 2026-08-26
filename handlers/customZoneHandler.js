@@ -1,6 +1,6 @@
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } = require('discord.js');
 const { PveZone } = require('../database/db'); 
-const { queueAdminPos } = require('../utils/rconManager'); 
+const { queueAdminPos, sendRconCommand } = require('../utils/rconManager'); 
 
 const czSessions = new Map();
 
@@ -265,23 +265,19 @@ const customZoneHandler = async (interaction, client) => {
                 await z.update({ visible: !z.visible });
                 return await renderCZPanel(interaction, `👁️ Map Visibility is now **${!z.visible ? 'VISIBLE' : 'HIDDEN'}**!`);
             }
-            
-if (customId === 'cz_btn_toggle') {
+
+            // ⚡ TOGGLE ZONE & FIRE RCON COMMAND TO SPAWN/REMOVE IN-GAME RING
+            if (customId === 'cz_btn_toggle') {
                 const z = await PveZone.findByPk(session.selectedZoneId);
                 const willBeEnabled = !z.isEnabled;
                 await z.update({ isEnabled: willBeEnabled });
 
-                // 🌐 FIRE RCON COMMAND TO SHOW/HIDE THE IN-GAME ZONE RING
                 try {
-                    const { sendRconCommand } = require('../utils/rconManager');
                     if (willBeEnabled && z.posX && z.posZ) {
-                        // Adjust this command string to match whatever plugin your Rust server uses (e.g., ZoneManager, PveMode, etc.)
-                        // Example command format: zone_add "Name" Radius X Y Z Color Shape
-                        const commandStr = `zone_add "${z.name}" ${z.radius} ${z.posX} ${z.posY || 0} ${z.posZ} ${z.color} ${z.shape}`;
-                        await sendRconCommand(guildId, commandStr, client);
+                        // Dispatches your server plugin command to render the colored ring
+                        await sendRconCommand(guildId, `zone_add "${z.name}" ${z.radius} ${z.posX} ${z.posY || 0} ${z.posZ} ${z.color} ${z.shape}`, client);
                     } else if (!willBeEnabled) {
-                        const removeStr = `zone_remove "${z.name}"`;
-                        await sendRconCommand(guildId, removeStr, client);
+                        await sendRconCommand(guildId, `zone_remove "${z.name}"`, client);
                     }
                 } catch (err) {
                     console.error("[RCON ZONE COMMAND ERROR]", err);
@@ -289,8 +285,12 @@ if (customId === 'cz_btn_toggle') {
 
                 return await renderCZPanel(interaction, `⚡ Zone is now **${willBeEnabled ? 'ENABLED & Ring Spawned' : 'DISABLED & Ring Removed'}**!`);
             }
+
             if (customId === 'cz_btn_delete') {
                 const z = await PveZone.findByPk(session.selectedZoneId);
+                try {
+                    await sendRconCommand(guildId, `zone_remove "${z.name}"`, client);
+                } catch(e) {}
                 await z.destroy();
                 session.selectedZoneId = null;
                 session.view = 'main';
