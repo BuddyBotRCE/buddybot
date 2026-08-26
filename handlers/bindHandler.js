@@ -135,6 +135,7 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
             new ButtonBuilder().setCustomId('bind_create_kit').setLabel('Kit Bind').setStyle(ButtonStyle.Primary).setEmoji('📦'),
             new ButtonBuilder().setCustomId('bind_create_teleport').setLabel('Teleport Bind').setStyle(ButtonStyle.Success).setEmoji('🌀'),
             new ButtonBuilder().setCustomId('bind_create_recycler').setLabel('Recycler Bind').setStyle(ButtonStyle.Secondary).setEmoji('♻️')
+            
         ));
 
         if (allBinds.length > 0) {
@@ -343,10 +344,18 @@ const bindHandler = async (interaction, client) => {
         }
 
         if (interaction.isButton()) {
+            
             if (customId.startsWith('bind_load_')) {
                 session.selectedBindId = parseInt(customId.replace('bind_load_', ''));
                 session.view = 'bind';
                 return await renderBindPanel(interaction);
+            }
+
+            if (customId === 'bind_clear_all') {
+                await CustomBind.destroy({ where: { guildId: guildId } });
+                session.selectedBindId = null;
+                session.view = 'main';
+                return await renderBindPanel(interaction, `🧹 **All custom binds have been successfully cleared!**`);
             }
 
             if (customId === 'bind_btn_back' || customId === 'bind_back_bind') {
