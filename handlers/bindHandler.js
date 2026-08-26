@@ -458,4 +458,17 @@ bindHandler.refreshPanelViaInteraction = async (interaction, messageOverride, bi
     }
 };
 
-module.exports = bindHandler;
+if (customId === 'bind_do_emote' && interaction.isStringSelectMenu()) {
+            const cat = session.selectedCategory || 'cat_combat';
+            const options = CHAT_OPTIONS_MAP[cat] || [];
+            const wheelOption = options.find(o => o.value === interaction.values[0]);
+            
+            const emote = wheelOption ? `${wheelOption.emoji} ${wheelOption.label}` : interaction.values[0];
+            
+            // 👈 FIX: Save the actual English phrase the game prints (e.g. "Going for Wood") instead of the internal code
+            const targetPhrase = wheelOption ? wheelOption.label : interaction.values[0];
+            
+            await CustomBind.update({ emote, targetValue: targetPhrase }, { where: { id: session.selectedBindId } });
+            session.view = 'bind';
+            return await renderBindPanel(interaction, `💬 Quick-chat wheel trigger updated!`);
+        }

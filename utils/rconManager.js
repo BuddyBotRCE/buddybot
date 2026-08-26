@@ -221,25 +221,27 @@ async function connectRcon(guildId, client) {
                         await processBountyLogic(guildId, killerDb, victimDb, client, currentConfig);
                     }
                 }
-
                 // ==========================================
                 // 4. CHAT PARSER & CUSTOM BINDS EXECUTION
                 // ==========================================
-                if (msgLower.includes('[chat]')) {
-                    const chatMatch = msg.match(/\[CHAT\] (.*?): (.*)/i);
+                // 👈 FIX: Listen for both Global [CHAT] and Team [TEAM] which radial wheel uses
+                if (msgLower.includes('[chat]') || msgLower.includes('[team chat]') || msgLower.includes('[team]')) {
+                    const chatMatch = msg.match(/\[(?:CHAT|TEAM CHAT|TEAM)\] (.*?): (.*)/i);
                     if (chatMatch) {
                         const playerName = chatMatch[1].replace(/\[.*?\]/g, '').trim(); 
                         const chatText = chatMatch[2].toLowerCase().trim();
 
                         if (currentConfig && currentConfig.crossChatChannelId && client) {
                             const crossChatChannel = client.channels.cache.get(currentConfig.crossChatChannelId);
-                            if (crossChatChannel && !playerName.includes('[Discord]')) {
+                            // Only cross-chat global [CHAT], not private team chats
+                            if (crossChatChannel && !playerName.includes('[Discord]') && msgLower.includes('[chat]')) {
                                 crossChatChannel.send(`💬 **[In-Game] ${playerName}**: ${chatText}`);
                             }
                         }
 
                         const serverBinds = await CustomBind.findAll({ where: { guildId: guildId } });
                         
+                        // Matches the exact English phrase outputted by the Quick-Chat wheel
                         const activeBind = serverBinds.find(b => 
                             (b.targetValue && chatText.includes(b.targetValue.toLowerCase())) || 
                             (b.name && chatText.includes(b.name.toLowerCase()))
