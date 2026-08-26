@@ -4,100 +4,113 @@ const { queueAdminPos } = require('../utils/rconManager');
 
 const bindSessions = new Map();
 
-// Complete Categorized Rust Console Edition Quick-Chat Wheel Options
-const RUST_CONSOLE_QUICK_CHAT_OPTIONS = [
-    // --- CATEGORY 1: COMBAT ---
-    { label: '[Combat] We\'re Under Attack', value: 'combat_under_attack', emoji: '⚔️', description: 'Combat category' },
-    { label: '[Combat] Retreat', value: 'combat_retreat', emoji: '🏃', description: 'Combat category' },
-    { label: '[Combat] Move Out', value: 'combat_move_out', emoji: '🚀', description: 'Combat category' },
-    { label: '[Combat] Don\'t Shoot', value: 'combat_dont_shoot', emoji: '🛑', description: 'Combat category' },
-    { label: '[Combat] Be Careful - Better Armed', value: 'combat_better_armed', emoji: '⚠️', description: 'Combat category' },
-    { label: '[Combat] I\'m Out of Ammo', value: 'combat_out_of_ammo', emoji: '🔴', description: 'Combat category' },
-    { label: '[Combat] I\'m Hurt', value: 'combat_hurt', emoji: '🩸', description: 'Combat category' },
-
-    // --- CATEGORY 2: BUILDING ---
-    { label: '[Building] Upgrade Walls', value: 'build_upgrade_walls', emoji: '🧱', description: 'Building category' },
-    { label: '[Building] We Need Beds', value: 'build_need_beds', emoji: '🛏️', description: 'Building category' },
-    { label: '[Building] I Need Building Auth', value: 'build_need_tc', emoji: '🔑', description: 'Building category' },
-    { label: '[Building] What\'s the Door Code?', value: 'build_door_code', emoji: '🔢', description: 'Building category' },
-    { label: '[Building] Can I Have a Key?', value: 'build_have_key', emoji: '🗝️', description: 'Building category' },
-    { label: '[Building] We Need a Better Door', value: 'build_better_door', emoji: '🚪', description: 'Building category' },
-    { label: '[Building] Upkeep Running Low', value: 'build_upkeep_low', emoji: '⏳', description: 'Building category' },
-    { label: '[Building] Which Chest is Free Game?', value: 'build_free_chest', emoji: '📦', description: 'Building category' },
-
-    // --- CATEGORY 3: ACTIVITIES ---
-    { label: '[Activity] Going for Stone', value: 'act_stone', emoji: '🪨', description: 'Activities category' },
-    { label: '[Activity] Going for Wood', value: 'act_wood', emoji: '🪵', description: 'Activities category' },
-    { label: '[Activity] Going for Metal', value: 'act_metal', emoji: '⛏️', description: 'Activities category' },
-    { label: '[Activity] Going for Food', value: 'act_food', emoji: '🍖', description: 'Activities category' },
-    { label: '[Activity] Going for Water', value: 'act_water', emoji: '💧', description: 'Activities category' },
-    { label: '[Activity] Going for Scrap', value: 'act_scrap', emoji: '⚙️', description: 'Activities category' },
-    { label: '[Activity] Going for Metal Frags', value: 'act_frags', emoji: '🔩', description: 'Activities category' },
-    { label: '[Activity] Going for Medicine', value: 'act_meds', emoji: '💉', description: 'Activities category' },
-
-    // --- CATEGORY 4: QUESTIONS ---
-    { label: '[Question] Are You Friendly?', value: 'q_friendly', emoji: '🤝', description: 'Questions category' },
-    { label: '[Question] Can I Build Around Here?', value: 'q_build_here', emoji: '🏗️', description: 'Questions category' },
-    { label: '[Question] Do You Want to Team Up?', value: 'q_team_up', emoji: '👥', description: 'Questions category' },
-    { label: '[Question] Do You Need Anything?', value: 'q_need_anything', emoji: '❓', description: 'Questions category' },
-    { label: '[Question] Could You Help Me?', value: 'q_help_me', emoji: '🆘', description: 'Questions category' },
-    { label: '[Question] Want to Trade?', value: 'q_trade', emoji: '🤝', description: 'Questions category' },
-    { label: '[Question] Who\'s There?', value: 'q_whos_there', emoji: '👀', description: 'Questions category' },
-    { label: '[Question] Can I Enter?', value: 'q_can_enter', emoji: '🚪', description: 'Questions category' },
-
-    // --- CATEGORY 5: RESPONSES ---
-    { label: '[Response] Yes', value: 'resp_yes', emoji: '✅', description: 'Responses category' },
-    { label: '[Response] No', value: 'resp_no', emoji: '❌', description: 'Responses category' },
-    { label: '[Response] OK', value: 'resp_ok', emoji: '👌', description: 'Responses category' },
-    { label: '[Response] Thank You', value: 'resp_thanks', emoji: '🙏', description: 'Responses category' },
-    { label: '[Response] No Problem', value: 'resp_no_problem', emoji: '😎', description: 'Responses category' },
-    { label: '[Response] Hello', value: 'resp_hello', emoji: '👋', description: 'Responses category' },
-    { label: '[Response] Goodbye', value: 'resp_goodbye', emoji: '🚶', description: 'Responses category' },
-    { label: '[Response] I\'m Sorry', value: 'resp_sorry', emoji: '🙇', description: 'Responses category' },
-
-    // --- CATEGORY 6: ORDERS ---
-    { label: '[Order] Follow Me', value: 'order_follow', emoji: '👉', description: 'Orders category' },
-    { label: '[Order] Go Away', value: 'order_go_away', emoji: '🚷', description: 'Orders category' },
-    { label: '[Order] Repair This', value: 'order_repair', emoji: '🔨', description: 'Orders category' },
-    { label: '[Order] Wait Here', value: 'order_wait', emoji: '✋', description: 'Orders category' },
-    { label: '[Order] Come In', value: 'order_come_in', emoji: '📥', description: 'Orders category' },
-    { label: '[Order] Let\'s Go', value: 'order_lets_go', emoji: '🏃‍♂️', description: 'Orders category' },
-    { label: '[Order] Here, Take This', value: 'order_take_this', emoji: '🎁', description: 'Orders category' },
-    { label: '[Order] Hurry Up', value: 'order_hurry', emoji: '⚡', description: 'Orders category' },
-
-    // --- CATEGORY 7: LOCATION ---
-    { label: '[Location] North', value: 'loc_north', emoji: '⬆️', description: 'Location category' },
-    { label: '[Location] North East', value: 'loc_northeast', emoji: '↗️', description: 'Location category' },
-    { label: '[Location] East', value: 'loc_east', emoji: '➡️', description: 'Location category' },
-    { label: '[Location] South East', value: 'loc_southeast', emoji: '↘️', description: 'Location category' },
-    { label: '[Location] South', value: 'loc_south', emoji: '⬇️', description: 'Location category' },
-    { label: '[Location] South West', value: 'loc_southwest', emoji: '↙️', description: 'Location category' },
-    { label: '[Location] West', value: 'loc_west', emoji: '⬅️', description: 'Location category' },
-    { label: '[Location] North West', value: 'loc_northwest', emoji: '↖️', description: 'Location category' },
-
-    // --- CATEGORY 8: I NEED ---
-    { label: '[Need] Scrap', value: 'need_scrap', emoji: '⚙️', description: 'I Need category' },
-    { label: '[Need] Low Grade Fuel', value: 'need_fuel', emoji: '⛽', description: 'I Need category' },
-    { label: '[Need] Food', value: 'need_food', emoji: '🍖', description: 'I Need category' },
-    { label: '[Need] Water', value: 'need_water', emoji: '💧', description: 'I Need category' },
-    { label: '[Need] Wood', value: 'need_wood', emoji: '🪵', description: 'I Need category' },
-    { label: '[Need] Stones', value: 'need_stones', emoji: '🪨', description: 'I Need category' },
-    { label: '[Need] Metal Fragments', value: 'need_frags', emoji: '🔩', description: 'I Need category' },
-    { label: '[Need] High Quality Metal', value: 'need_hqm', emoji: '🛡️', description: 'I Need category' },
-
-    // --- CATEGORY 9: I HAVE ---
-    { label: '[Have] Scrap', value: 'have_scrap', emoji: '⚙️', description: 'I Have category' },
-    { label: '[Have] Low Grade Fuel', value: 'have_fuel', emoji: '⛽', description: 'I Have category' },
-    { label: '[Have] Food', value: 'have_food', emoji: '🍖', description: 'I Have category' },
-    { label: '[Have] Water', value: 'have_water', emoji: '💧', description: 'I Have category' },
-    { label: '[Have] Hunting Bow', value: 'have_bow', emoji: '🏹', description: 'I Have category' },
-    { label: '[Have] Pickaxe', value: 'have_pickaxe', emoji: '⛏️', description: 'I Have category' },
-    { label: '[Have] Hatchet', value: 'have_hatchet', emoji: '🪓', description: 'I Have category' },
-    { label: '[Have] High Quality Metal', value: 'have_hqm', emoji: '🛡️', description: 'I Have category' }
+// 9 Categories for Rust Console Edition Quick-Chat Wheel Options
+const CHAT_CATEGORIES = [
+    { label: 'Combat', value: 'cat_combat', emoji: '⚔️', description: 'Under attack, retreat, move out, etc.' },
+    { label: 'Building', value: 'cat_building', emoji: '🧱', description: 'Walls, beds, door codes, upkeep' },
+    { label: 'Activities', value: 'cat_activities', emoji: '⛏️', description: 'Going for wood, stone, scrap, etc.' },
+    { label: 'Questions', value: 'cat_questions', emoji: '❓', description: 'Are you friendly, team up, trade' },
+    { label: 'Responses', value: 'cat_responses', emoji: '✅', description: 'Yes, no, ok, thank you' },
+    { label: 'Orders', value: 'cat_orders', emoji: '👉', description: 'Follow me, repair, wait here' },
+    { label: 'Location', value: 'cat_location', emoji: '🧭', description: 'North, south, east, west' },
+    { label: 'I Need', value: 'cat_need', emoji: '💎', description: 'I need scrap, fuel, food, wood' },
+    { label: 'I Have', value: 'cat_have', emoji: '🎒', description: 'I have scrap, bow, pickaxe' }
 ];
 
+const CHAT_OPTIONS_MAP = {
+    cat_combat: [
+        { label: 'We\'re Under Attack', value: 'combat_under_attack', emoji: '⚔️' },
+        { label: 'Retreat', value: 'combat_retreat', emoji: '🏃' },
+        { label: 'Move Out', value: 'combat_move_out', emoji: '🚀' },
+        { label: 'Don\'t Shoot', value: 'combat_dont_shoot', emoji: '🛑' },
+        { label: 'Be Careful - Better Armed', value: 'combat_better_armed', emoji: '⚠️' },
+        { label: 'I\'m Out of Ammo', value: 'combat_out_of_ammo', emoji: '🔴' },
+        { label: 'I\'m Hurt', value: 'combat_hurt', emoji: '🩸' }
+    ],
+    cat_building: [
+        { label: 'Upgrade Walls', value: 'build_upgrade_walls', emoji: '🧱' },
+        { label: 'We Need Beds', value: 'build_need_beds', emoji: '🛏️' },
+        { label: 'I Need Building Auth', value: 'build_need_tc', emoji: '🔑' },
+        { label: 'What\'s the Door Code?', value: 'build_door_code', emoji: '🔢' },
+        { label: 'Can I Have a Key?', value: 'build_have_key', emoji: '🗝️' },
+        { label: 'We Need a Better Door', value: 'build_better_door', emoji: '🚪' },
+        { label: 'Upkeep Running Low', value: 'build_upkeep_low', emoji: '⏳' },
+        { label: 'Which Chest is Free Game?', value: 'build_free_chest', emoji: '📦' }
+    ],
+    cat_activities: [
+        { label: 'Going for Stone', value: 'act_stone', emoji: '🪨' },
+        { label: 'Going for Wood', value: 'act_wood', emoji: '🪵' },
+        { label: 'Going for Metal', value: 'act_metal', emoji: '⛏️' },
+        { label: 'Going for Food', value: 'act_food', emoji: '🍖' },
+        { label: 'Going for Water', value: 'act_water', emoji: '💧' },
+        { label: 'Going for Scrap', value: 'act_scrap', emoji: '⚙️' },
+        { label: 'Going for Metal Frags', value: 'act_frags', emoji: '🔩' },
+        { label: 'Going for Medicine', value: 'act_meds', emoji: '💉' }
+    ],
+    cat_questions: [
+        { label: 'Are You Friendly?', value: 'q_friendly', emoji: '🤝' },
+        { label: 'Can I Build Around Here?', value: 'q_build_here', emoji: '🏗️' },
+        { label: 'Do You Want to Team Up?', value: 'q_team_up', emoji: '👥' },
+        { label: 'Do You Need Anything?', value: 'q_need_anything', emoji: '❓' },
+        { label: 'Could You Help Me?', value: 'q_help_me', emoji: '🆘' },
+        { label: 'Want to Trade?', value: 'q_trade', emoji: '🤝' },
+        { label: 'Who\'s There?', value: 'q_whos_there', emoji: '👀' },
+        { label: 'Can I Enter?', value: 'q_can_enter', emoji: '🚪' }
+    ],
+    cat_responses: [
+        { label: 'Yes', value: 'resp_yes', emoji: '✅' },
+        { label: 'No', value: 'resp_no', emoji: '❌' },
+        { label: 'OK', value: 'resp_ok', emoji: '👌' },
+        { label: 'Thank You', value: 'resp_thanks', emoji: '🙏' },
+        { label: 'No Problem', value: 'resp_no_problem', emoji: '😎' },
+        { label: 'Hello', value: 'resp_hello', emoji: '👋' },
+        { label: 'Goodbye', value: 'resp_goodbye', emoji: '🚶' },
+        { label: 'I\'m Sorry', value: 'resp_sorry', emoji: '🙇' }
+    ],
+    cat_orders: [
+        { label: 'Follow Me', value: 'order_follow', emoji: '👉' },
+        { label: 'Go Away', value: 'order_go_away', emoji: '🚷' },
+        { label: 'Repair This', value: 'order_repair', emoji: '🔨' },
+        { label: 'Wait Here', value: 'order_wait', emoji: '✋' },
+        { label: 'Come In', value: 'order_come_in', emoji: '📥' },
+        { label: 'Let\'s Go', value: 'order_lets_go', emoji: '🏃‍♂️' },
+        { label: 'Here, Take This', value: 'order_take_this', emoji: '🎁' },
+        { label: 'Hurry Up', value: 'order_hurry', emoji: '⚡' }
+    ],
+    cat_location: [
+        { label: 'North', value: 'loc_north', emoji: '⬆️' },
+        { label: 'North East', value: 'loc_northeast', emoji: '↗️' },
+        { label: 'East', value: 'loc_east', emoji: '➡️' },
+        { label: 'South East', value: 'loc_southeast', emoji: '↘️' },
+        { label: 'South', value: 'loc_south', emoji: '⬇️' },
+        { label: 'South West', value: 'loc_southwest', emoji: '↙️' },
+        { label: 'West', value: 'loc_west', emoji: '⬅️' },
+        { label: 'North West', value: 'loc_northwest', emoji: '↖️' }
+    ],
+    cat_need: [
+        { label: 'I Need Scrap', value: 'need_scrap', emoji: '⚙️' },
+        { label: 'I Need Low Grade Fuel', value: 'need_fuel', emoji: '⛽' },
+        { label: 'I Need Food', value: 'need_food', emoji: '🍖' },
+        { label: 'I Need Water', value: 'need_water', emoji: '💧' },
+        { label: 'I Need Wood', value: 'need_wood', emoji: '🪵' },
+        { label: 'I Need Stones', value: 'need_stones', emoji: '🪨' },
+        { label: 'I Need Metal Fragments', value: 'need_frags', emoji: '🔩' },
+        { label: 'I Need High Quality Metal', value: 'need_hqm', emoji: '🛡️' }
+    ],
+    cat_have: [
+        { label: 'I Have Scrap', value: 'have_scrap', emoji: '⚙️' },
+        { label: 'I Have Low Grade Fuel', value: 'have_fuel', emoji: '⛽' },
+        { label: 'I Have Food', value: 'have_food', emoji: '🍖' },
+        { label: 'I Have Water', value: 'have_water', emoji: '💧' },
+        { label: 'I Have Hunting Bow', value: 'have_bow', emoji: '🏹' },
+        { label: 'I Have Pickaxe', value: 'have_pickaxe', emoji: '⛏️' },
+        { label: 'I Have Hatchet', value: 'have_hatchet', emoji: '🪓' },
+        { label: 'I Have High Quality Metal', value: 'have_hqm', emoji: '🛡️' }
+    ]
+};
+
 const buildPanelPayload = async (guildId, messageOverride = '') => {
-    if (!bindSessions.has(guildId)) bindSessions.set(guildId, { selectedBindId: null, view: 'main' });
+    if (!bindSessions.has(guildId)) bindSessions.set(guildId, { selectedBindId: null, view: 'main', selectedCategory: null });
     const session = bindSessions.get(guildId);
     
     const allBinds = await CustomBind.findAll({ where: { guildId }, order: [['id', 'ASC']] });
@@ -169,17 +182,32 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
             new ButtonBuilder().setCustomId('bind_btn_back').setLabel('Back to List').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
         ));
     }
-    else if (session.view === 'emote_picker') {
-        embed.setTitle('💬 Select Console Quick-Chat Wheel Option').setDescription('Choose which authentic console wheel option triggers this command (Discord allows up to 25 choices per menu).');
+    // STEP 1: PICK CATEGORY
+    else if (session.view === 'emote_category') {
+        embed.setTitle('💬 Select Quick-Chat Category').setDescription('Choose a category to view its quick-chat wheel commands.');
         
-        // Discord Select Menus have a max of 25 options. We slice the first 25 so it loads safely!
         components.push(new ActionRowBuilder().addComponents(
-            new StringSelectMenuBuilder().setCustomId('bind_do_emote').setPlaceholder('Select radial wheel option...').addOptions(RUST_CONSOLE_QUICK_CHAT_OPTIONS.slice(0, 25))
+            new StringSelectMenuBuilder().setCustomId('bind_do_category').setPlaceholder('Select chat category...')
+                .addOptions(CHAT_CATEGORIES)
         ));
 
-        // If you have more than 25, we can include a second row if needed, but 25 covers a massive chunk cleanly.
         components.push(new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('bind_back_bind').setLabel('Cancel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+        ));
+    }
+    // STEP 2: PICK PHRASE FROM CATEGORY
+    else if (session.view === 'emote_picker') {
+        const cat = session.selectedCategory || 'cat_combat';
+        const options = CHAT_OPTIONS_MAP[cat] || CHAT_OPTIONS_MAP.cat_combat;
+
+        embed.setTitle('💬 Select Quick-Chat Phrase').setDescription('Choose the exact phrase that triggers this bind in-game.');
+        
+        components.push(new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder().setCustomId('bind_do_emote').setPlaceholder('Select phrase...').addOptions(options)
+        ));
+
+        components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('bind_back_category').setLabel('Back to Categories').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
         ));
     }
     else if (session.view === 'kit_picker') {
@@ -267,9 +295,20 @@ const bindHandler = async (interaction, client) => {
             return await renderBindPanel(interaction, `✨ Created new ${type} bind!`);
         }
 
+        // --- SELECT CATEGORY ---
+        if (customId === 'bind_do_category' && interaction.isStringSelectMenu()) {
+            session.selectedCategory = interaction.values[0];
+            session.view = 'emote_picker';
+            return await renderBindPanel(interaction);
+        }
+
+        // --- SELECT PHRASE ---
         if (customId === 'bind_do_emote' && interaction.isStringSelectMenu()) {
-            const wheelOption = RUST_CONSOLE_QUICK_CHAT_OPTIONS.find(o => o.value === interaction.values[0]);
+            const cat = session.selectedCategory || 'cat_combat';
+            const options = CHAT_OPTIONS_MAP[cat] || [];
+            const wheelOption = options.find(o => o.value === interaction.values[0]);
             const emote = wheelOption ? `${wheelOption.emoji} ${wheelOption.label}` : interaction.values[0];
+            
             await CustomBind.update({ emote, targetValue: interaction.values[0] }, { where: { id: session.selectedBindId } });
             session.view = 'bind';
             return await renderBindPanel(interaction, `💬 Quick-chat wheel trigger updated!`);
@@ -320,8 +359,13 @@ const bindHandler = async (interaction, client) => {
                 return await renderBindPanel(interaction);
             }
 
+            if (customId === 'bind_back_category') {
+                session.view = 'emote_category';
+                return await renderBindPanel(interaction);
+            }
+
             if (customId === 'bind_btn_emote') {
-                session.view = 'emote_picker';
+                session.view = 'emote_category';
                 return await renderBindPanel(interaction);
             }
 
@@ -349,9 +393,8 @@ const bindHandler = async (interaction, client) => {
             }
 
             if (customId === 'bind_btn_getpos') {
-                const loadingPayload = await buildPanelPayload(guildId, '⏳ **Extracting your position from the server...**');
-                await interaction.update(loadingPayload);
-                // Fix: Pointing to custom_bind instead of custom_zone
+                // Acknowledge immediately so Discord interaction token doesn't expire
+                await interaction.update({ embeds: [new EmbedBuilder().setColor('#e67e22').setTitle('⏳ Extracting Position...').setDescription('Stand in-game. Scanning your coordinates via RCON...')], components: [], flags: 64 });
                 await queueAdminPos(interaction, 'custom_bind', session.selectedBindId);
                 return;
             }
