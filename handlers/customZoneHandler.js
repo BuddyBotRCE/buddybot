@@ -4,7 +4,6 @@ const { queueAdminPos } = require('../utils/rconManager');
 
 const czSessions = new Map();
 
-// PREDEFINED COLOR LIST FOR THE DROPDOWN
 const ZONE_COLORS = [
     { label: 'Red (Hostile / PvP)', value: '#FF0000', emoji: '🔴' },
     { label: 'Green (Safe / PvE)', value: '#00FF00', emoji: '🟢' },
@@ -31,7 +30,7 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
         let inactiveList = '';
 
         for (const z of allZones) {
-            const display = `**${z.name || 'Unnamed Zone'}** (Radius: ${z.radius}m)\n`;
+            const display = `**${z.name || 'Unnamed Zone'}** (${z.shape === 'box' ? 'Box' : 'Sphere'}, ${z.radius}m)\n`;
             if (z.isEnabled) activeList += `🟢 ${display}`;
             else inactiveList += `🔴 ${display}`;
         }
@@ -39,7 +38,7 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
         embed.addFields(
             { name: '🟢 Active Zones', value: activeList || "*No active zones.*", inline: false },
             { name: '🔴 Disabled Zones', value: inactiveList || "*None.*", inline: false },
-            { name: '🛠️ Manage Zones', value: "👇 **Click a zone below to manage its flags and rules.**", inline: false }
+            { name: '🛠️ Manage Zones', value: "👇 **Click a zone below to manage its shape, flags, and rules.**", inline: false }
         );
 
         const row1 = new ActionRowBuilder();
@@ -64,26 +63,27 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
             : '*No center position saved. Click "Set Zone Center" below.*';
 
         const colorDisplay = ZONE_COLORS.find(c => c.value === activeZone.color)?.label || activeZone.color || 'Red';
+        const shapeDisplay = activeZone.shape === 'box' ? '📦 Box Zone' : '🟢 Sphere Zone';
 
         embed.addFields(
-            { name: `📊 Configuration`, value: `**Radius:** ${activeZone.radius || 0}m\n**Color:** ${colorDisplay}\n**Map Vis:** ${activeZone.visible ? '👁️ Visible' : '🙈 Hidden'}\n**Status:** ${activeZone.isEnabled ? '🟢 ENABLED' : '🔴 DISABLED'}`, inline: true },
+            { name: `📊 Configuration`, value: `**Shape:** ${shapeDisplay}\n**Radius / Size:** ${activeZone.radius || 0}m\n**Color:** ${colorDisplay}\n**Map Vis:** ${activeZone.visible ? '👁️ Visible' : '🙈 Hidden'}\n**Status:** ${activeZone.isEnabled ? '🟢 ENABLED' : '🔴 DISABLED'}`, inline: true },
             { name: `⚙️ Rule Flags`, value: `**PvP:** ${activeZone.pvp ? '🟢 ON' : '🔴 OFF'}\n**PvE:** ${activeZone.pve ? '🟢 ON' : '🔴 OFF'}\n**Build:** ${activeZone.build ? '🟢 ON' : '🔴 OFF'}`, inline: true },
             { name: `💬 In-Game Messages`, value: `**Enter:** ${activeZone.enterMessage || '*None*'}\n**Exit:** ${activeZone.exitMessage || '*None*'}`, inline: false },
             { name: `🎯 Center Coordinates`, value: posText, inline: false }
         );
 
-        // Row 1: Core Config
+        // Row 1: Core Config & Shape
         components.push(new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('cz_btn_settings').setLabel('Name & Radius').setStyle(ButtonStyle.Primary).setEmoji('📝'),
-            new ButtonBuilder().setCustomId('cz_btn_color_menu').setLabel('Select Color').setStyle(ButtonStyle.Primary).setEmoji('🎨'),
-            new ButtonBuilder().setCustomId('cz_btn_messages').setLabel('Set Messages').setStyle(ButtonStyle.Primary).setEmoji('💬')
+            new ButtonBuilder().setCustomId('cz_btn_settings').setLabel('Name & Size').setStyle(ButtonStyle.Primary).setEmoji('📝'),
+            new ButtonBuilder().setCustomId('cz_btn_shape').setLabel(`Shape: ${activeZone.shape === 'box' ? 'Box' : 'Sphere'}`).setStyle(ButtonStyle.Secondary).setEmoji('🔷'),
+            new ButtonBuilder().setCustomId('cz_btn_color_menu').setLabel('Select Color').setStyle(ButtonStyle.Primary).setEmoji('🎨')
         ));
 
-        // Row 2: Location & Toggles
+        // Row 2: Location & Messages
         components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('cz_btn_messages').setLabel('Set Messages').setStyle(ButtonStyle.Primary).setEmoji('💬'),
             new ButtonBuilder().setCustomId('cz_btn_getpos').setLabel('Set Zone Center').setStyle(ButtonStyle.Success).setEmoji('📍'),
-            new ButtonBuilder().setCustomId('cz_btn_visible').setLabel(activeZone.visible ? 'Map Visible' : 'Map Hidden').setStyle(activeZone.visible ? ButtonStyle.Success : ButtonStyle.Secondary).setEmoji('👁️'),
-            new ButtonBuilder().setCustomId('cz_btn_toggle').setLabel(activeZone.isEnabled ? 'Disable Zone' : 'Enable Zone').setStyle(activeZone.isEnabled ? ButtonStyle.Secondary : ButtonStyle.Success).setEmoji('⚡')
+            new ButtonBuilder().setCustomId('cz_btn_visible').setLabel(activeZone.visible ? 'Map Visible' : 'Map Hidden').setStyle(activeZone.visible ? ButtonStyle.Success : ButtonStyle.Secondary).setEmoji('👁️')
         ));
 
         // Row 3: Rule Flags
@@ -93,15 +93,13 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
             new ButtonBuilder().setCustomId('cz_btn_build').setLabel(`Build: ${activeZone.build ? 'ON' : 'OFF'}`).setStyle(activeZone.build ? ButtonStyle.Success : ButtonStyle.Danger).setEmoji('🔨')
         ));
 
-        // Row 4: Dangerous / Nav
+        // Row 4: Power & Nav
         components.push(new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('cz_btn_delete').setLabel('Delete Zone').setStyle(ButtonStyle.Danger).setEmoji('💀'),
-            new ButtonBuilder().setCustomId('cz_btn_back').setLabel('Back to Zone List').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+            new ButtonBuilder().setCustomId('cz_btn_toggle').setLabel(activeZone.isEnabled ? 'Disable Zone' : 'Enable Zone').setStyle(activeZone.isEnabled ? ButtonStyle.Secondary : ButtonStyle.Success).setEmoji('⚡'),
+            new ButtonBuilder().setCustomId('cz_btn_delete').setLabel('Delete').setStyle(ButtonStyle.Danger).setEmoji('💀'),
+            new ButtonBuilder().setCustomId('cz_btn_back').setLabel('Back').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
         ));
     }
-    // ---------------------------------------------------
-    // PAGE 3: COLOR PICKER DROPDOWN MENU
-    // ---------------------------------------------------
     else if (session.view === 'color_picker') {
         embed.setTitle('🎨 Select Zone Color').setDescription('Choose a color from the list for this zone.');
         
@@ -163,7 +161,6 @@ const customZoneHandler = async (interaction, client) => {
             return await renderCZPanel(interaction);
         }
 
-        // --- MODAL SUBMISSIONS ---
         if (interaction.isModalSubmit() && customId === 'modal_cz_settings') {
             const newName = interaction.fields.getTextInputValue('cz_name').trim() || "New Zone";
             let radius = parseInt(interaction.fields.getTextInputValue('cz_radius'));
@@ -172,7 +169,7 @@ const customZoneHandler = async (interaction, client) => {
             if (session.selectedZoneId) {
                 await PveZone.update({ name: newName, radius: radius.toString() }, { where: { id: session.selectedZoneId } });
             }
-            return await renderCZPanel(interaction, `✅ Zone Name and Radius saved!`);
+            return await renderCZPanel(interaction, `✅ Zone Name and Size saved!`);
         }
 
         if (interaction.isModalSubmit() && customId === 'modal_cz_messages') {
@@ -184,7 +181,6 @@ const customZoneHandler = async (interaction, client) => {
             return await renderCZPanel(interaction, `💬 Zone Messages saved!`);
         }
 
-        // --- DROPDOWN SELECTION ---
         if (customId === 'cz_do_color' && interaction.isStringSelectMenu()) {
             const color = interaction.values[0];
             await PveZone.update({ color }, { where: { id: session.selectedZoneId } });
@@ -192,10 +188,9 @@ const customZoneHandler = async (interaction, client) => {
             return await renderCZPanel(interaction, `🎨 Zone Color updated!`);
         }
 
-        // --- BUTTONS ---
         if (interaction.isButton()) {
             if (customId === 'cz_create_new') {
-                const newZone = await PveZone.create({ guildId, name: 'New Zone', radius: '50', isEnabled: false });
+                const newZone = await PveZone.create({ guildId, name: 'New Zone', radius: '50', shape: 'sphere', isEnabled: false });
                 session.selectedZoneId = newZone.id;
                 session.view = 'zone';
                 return await renderCZPanel(interaction, `✨ Created a new zone!`);
@@ -223,9 +218,16 @@ const customZoneHandler = async (interaction, client) => {
                 const modal = new ModalBuilder().setCustomId('modal_cz_settings').setTitle(`Edit Zone Settings`);
                 modal.addComponents(
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_name').setLabel("Zone Name").setStyle(TextInputStyle.Short).setValue(z.name || 'New Zone').setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_radius').setLabel("Radius (in meters)").setStyle(TextInputStyle.Short).setValue((z.radius || '50')).setRequired(true))
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_radius').setLabel("Radius / Size (meters)").setStyle(TextInputStyle.Short).setValue((z.radius || '50')).setRequired(true))
                 );
                 return await interaction.showModal(modal);
+            }
+
+            if (customId === 'cz_btn_shape') {
+                const z = await PveZone.findByPk(session.selectedZoneId);
+                const newShape = z.shape === 'box' ? 'sphere' : 'box';
+                await z.update({ shape: newShape });
+                return await renderCZPanel(interaction, `🔷 Zone shape changed to **${newShape.toUpperCase()}**!`);
             }
 
             if (customId === 'cz_btn_color_menu') {
@@ -270,7 +272,8 @@ const customZoneHandler = async (interaction, client) => {
             }
 
             if (customId === 'cz_btn_delete') {
-                await PveZone.destroy({ where: { id: session.selectedZoneId } });
+                const z = await PveZone.findByPk(session.selectedZoneId);
+                await z.destroy();
                 session.selectedZoneId = null;
                 session.view = 'main';
                 return await renderCZPanel(interaction, `💀 Zone completely deleted.`);

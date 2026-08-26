@@ -128,7 +128,8 @@ const TicketCategory = sequelize.define('TicketCategory', { guildId: { type: Dat
 const PveZone = sequelize.define('PveZone', {
     guildId: { type: DataTypes.STRING, allowNull: false },
     name: { type: DataTypes.STRING },
-    radius: { type: DataTypes.STRING, defaultValue: '50' }, // Changed to STRING to fix DB crash!
+    radius: { type: DataTypes.STRING, defaultValue: '50' }, 
+    shape: { type: DataTypes.STRING, defaultValue: 'sphere' }, // 👈 Added shape
     posX: { type: DataTypes.STRING },
     posY: { type: DataTypes.STRING },
     posZ: { type: DataTypes.STRING },
@@ -137,7 +138,9 @@ const PveZone = sequelize.define('PveZone', {
     pve: { type: DataTypes.BOOLEAN, defaultValue: true },
     build: { type: DataTypes.BOOLEAN, defaultValue: false },
     visible: { type: DataTypes.BOOLEAN, defaultValue: true },
-    isEnabled: { type: DataTypes.BOOLEAN, defaultValue: false }
+    isEnabled: { type: DataTypes.BOOLEAN, defaultValue: false },
+    enterMessage: { type: DataTypes.STRING, allowNull: true },
+    exitMessage: { type: DataTypes.STRING, allowNull: true }
 });
 
 const ActiveBounty = sequelize.define('ActiveBounty', { guildId: { type: DataTypes.STRING }, userId: { type: DataTypes.STRING }, inGameName: { type: DataTypes.STRING }, reward: { type: DataTypes.INTEGER } });
