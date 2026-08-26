@@ -52,7 +52,7 @@ const GuildConfig = sequelize.define('GuildConfig', {
     aiApiKey: { type: DataTypes.STRING, allowNull: true },
     aiBaseUrl: { type: DataTypes.STRING, defaultValue: 'https://api.openai.com/v1' },
     aiEnabled: { type: DataTypes.BOOLEAN, defaultValue: true },
-    aiPremadeResponses: { type: DataTypes.TEXT, defaultValue: '[]' }, // Stored as a JSON string array of { trigger: '', response: '' }
+    aiPremadeResponses: { type: DataTypes.TEXT, defaultValue: '[]' },
    
     // Logging Channels
     logAdminChannelId: { type: DataTypes.STRING, allowNull: true },
@@ -121,7 +121,25 @@ const PlayerOrpBase = sequelize.define('PlayerOrpBase', { guildId: { type: DataT
 const BuddyPassChallenge = sequelize.define('BuddyPassChallenge', { guildId: { type: DataTypes.STRING }, title: { type: DataTypes.STRING }, targetType: { type: DataTypes.STRING }, targetAmount: { type: DataTypes.INTEGER }, rewardXp: { type: DataTypes.INTEGER }, isPreloaded: { type: DataTypes.BOOLEAN, defaultValue: false } });
 const BuddyPassReward = sequelize.define('BuddyPassReward', { guildId: { type: DataTypes.STRING, primaryKey: true }, level: { type: DataTypes.INTEGER, primaryKey: true }, rewardType: { type: DataTypes.STRING }, rewardValue: { type: DataTypes.STRING } });
 const TicketCategory = sequelize.define('TicketCategory', { guildId: { type: DataTypes.STRING }, name: { type: DataTypes.STRING }, description: { type: DataTypes.STRING } });
-const PveZone = sequelize.define('PveZone', { guildId: { type: DataTypes.STRING }, zoneName: { type: DataTypes.STRING }, radius: { type: DataTypes.STRING, allowNull: true }, zoneColor: { type: DataTypes.STRING, defaultValue: 'green' }, posX: { type: DataTypes.STRING, allowNull: true }, posY: { type: DataTypes.STRING, allowNull: true }, posZ: { type: DataTypes.STRING, allowNull: true }, enterMessage: { type: DataTypes.STRING }, exitMessage: { type: DataTypes.STRING }, allowBuild: { type: DataTypes.BOOLEAN, defaultValue: false }, allowPvp: { type: DataTypes.BOOLEAN, defaultValue: false }, allowPve: { type: DataTypes.BOOLEAN, defaultValue: false }, shape: { type: DataTypes.STRING, defaultValue: 'sphere' }, x: { type: DataTypes.FLOAT }, y: { type: DataTypes.FLOAT }, z: { type: DataTypes.FLOAT }, size: { type: DataTypes.STRING }, color: { type: DataTypes.STRING, defaultValue: 'green' } });
+
+// ==========================================
+// 🗺️ NEW: CUSTOM ZONES BUILDER MODEL
+// ==========================================
+const PveZone = sequelize.define('PveZone', {
+    guildId: { type: DataTypes.STRING, allowNull: false },
+    name: { type: DataTypes.STRING },
+    radius: { type: DataTypes.INTEGER, defaultValue: 50 },
+    posX: { type: DataTypes.STRING },
+    posY: { type: DataTypes.STRING },
+    posZ: { type: DataTypes.STRING },
+    color: { type: DataTypes.STRING, defaultValue: '#FF0000' },
+    pvp: { type: DataTypes.BOOLEAN, defaultValue: false },
+    pve: { type: DataTypes.BOOLEAN, defaultValue: true },
+    build: { type: DataTypes.BOOLEAN, defaultValue: false },
+    visible: { type: DataTypes.BOOLEAN, defaultValue: true },
+    isEnabled: { type: DataTypes.BOOLEAN, defaultValue: false }
+});
+
 const ActiveBounty = sequelize.define('ActiveBounty', { guildId: { type: DataTypes.STRING }, userId: { type: DataTypes.STRING }, inGameName: { type: DataTypes.STRING }, reward: { type: DataTypes.INTEGER } });
 const BountyCooldown = sequelize.define('BountyCooldown', { guildId: { type: DataTypes.STRING, primaryKey: true }, userId: { type: DataTypes.STRING, primaryKey: true }, expiresAt: { type: DataTypes.DATE } });
 const Clan = sequelize.define('Clan', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, name: { type: DataTypes.STRING, allowNull: false }, tag: { type: DataTypes.STRING, allowNull: false }, leaderId: { type: DataTypes.STRING, allowNull: false }, bankBalance: { type: DataTypes.INTEGER, defaultValue: 0 }, taxRate: { type: DataTypes.INTEGER, defaultValue: 0 }, maxMembers: { type: DataTypes.INTEGER, defaultValue: 4 }, baseCodes: { type: DataTypes.STRING, allowNull: true }, discordRoleId: { type: DataTypes.STRING, allowNull: true }, discordTextChannelId: { type: DataTypes.STRING, allowNull: true }, discordVoiceChannelId: { type: DataTypes.STRING, allowNull: true } });
@@ -161,10 +179,11 @@ const CustomEmbed = sequelize.define('CustomEmbed', {
     thumbnailUrl: { type: DataTypes.STRING, allowNull: true },
     imageUrl: { type: DataTypes.STRING, allowNull: true },
     footerText: { type: DataTypes.STRING, allowNull: true }
-    });
+});
 
 async function initDb() { 
     await sequelize.authenticate(); 
+    // { alter: true } automatically detects new columns and injects them without deleting data!
     await sequelize.sync({ alter: true }); 
     console.log('[DATABASE] Tables synchronized successfully.'); 
 }
