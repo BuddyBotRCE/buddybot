@@ -437,7 +437,7 @@ bindHandler.refreshPanelViaInteraction = async (interaction, messageOverride, bi
             if (!bindSessions.has(guildId)) bindSessions.set(guildId, { selectedBindId: bindId, view: 'bind' });
             const session = bindSessions.get(guildId);
             session.selectedBindId = bindId;
-            session.view = 'bind'; // 🔒 Anchor view to the specific bind
+            session.view = 'bind';
             bindSessions.set(guildId, session);
         }
 

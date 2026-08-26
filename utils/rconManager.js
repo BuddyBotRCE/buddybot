@@ -140,7 +140,7 @@ async function connectRcon(guildId, client) {
                                 }
                             } 
                             // ROUTE 3: CUSTOM BINDS
-                            else {
+                            else if (setupData.type === 'custom_bind') {
                                 const bindHandler = require('../handlers/bindHandler');
                                 if (bindHandler && bindHandler.autoSavePosition) {
                                     await bindHandler.autoSavePosition(guildId, posX, posY, posZ, setupData.targetId);
