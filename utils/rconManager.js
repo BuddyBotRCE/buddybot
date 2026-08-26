@@ -12,21 +12,11 @@ function registerEventParser(rconMock, emit) {
         if (!msg || !msg.message) return;
         const line = msg.message.toLowerCase();
 
-        if (line.includes("cargo ship") && line.includes("docked")) {
-            emit("cargoDocked", { raw: msg.message, timestamp: Date.now() });
-        }
-        if (line.includes("supply_drop") || line.includes("supply drop")) {
-            emit("supplyDrop", { raw: msg.message, timestamp: Date.now() });
-        }
-        if (line.includes("locked crate") && line.includes("hack started")) {
-            emit("lockedCrateHackStart", { raw: msg.message, timestamp: Date.now() });
-        }
-        if (line.includes("locked crate") && line.includes("hack completed")) {
-            emit("lockedCrateHackFinish", { raw: msg.message, timestamp: Date.now() });
-        }
-        if (line.includes("spawned") && line.includes("crate_elite")) {
-            emit("eliteCrate", { raw: msg.message, timestamp: Date.now() });
-        }
+        if (line.includes("cargo ship") && line.includes("docked")) emit("cargoDocked", { raw: msg.message, timestamp: Date.now() });
+        if (line.includes("supply_drop") || line.includes("supply drop")) emit("supplyDrop", { raw: msg.message, timestamp: Date.now() });
+        if (line.includes("locked crate") && line.includes("hack started")) emit("lockedCrateHackStart", { raw: msg.message, timestamp: Date.now() });
+        if (line.includes("locked crate") && line.includes("hack completed")) emit("lockedCrateHackFinish", { raw: msg.message, timestamp: Date.now() });
+        if (line.includes("spawned") && line.includes("crate_elite")) emit("eliteCrate", { raw: msg.message, timestamp: Date.now() });
     });
 }
 
@@ -47,7 +37,6 @@ async function connectRcon(guildId, client) {
         ws.on('close', () => activeConnections.delete(guildId));
         ws.on('error', () => { clearTimeout(timeout); activeConnections.delete(guildId); });
 
-        // --- ATTACH PARSER TO WEBSOCKET STREAM ---
         const eventEmitterCallback = async (eventName, data) => {
             try {
                 const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
@@ -95,10 +84,10 @@ async function connectRcon(guildId, client) {
                 if (adminPosQueue.size > 0) {
                     for (const [adminId, setupData] of adminPosQueue.entries()) {
                         
-                        // Push log to memory in case it times out so we can see what the server said
-                        if (setupData.logs) setupData.logs.push(msg);
-
+                        // Check for numbers matching coordinate formats
                         const matches = msg.match(/-?\d+\.\d+/g);
+                        
+                        // We found 3 coordinates!
                         if (matches && matches.length >= 3) {
                             if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
                             const channel = client ? client.channels.cache.get(setupData.channelId) : null;
@@ -240,13 +229,13 @@ async function sendRconCommand(guildId, commandStr, client = null) {
         }
     }
     if (!ws || ws.readyState !== WebSocket.OPEN) {
-        throw new Error("Not connected to RCON. Please check credentials and server status.");
+        throw new Error("Not connected to RCON.");
     }
     ws.send(JSON.stringify({ Identifier: 1, Message: commandStr, Name: "BuddyBot" }));
     return true;
 }
 
-// === UPDATED QUEUE ADMIN POS WITH DIAGNOSTICS ===
+// === UPDATED QUEUE ADMIN POS ===
 async function queueAdminPos(interaction, type = 'custom_bind') {
     const guildId = interaction.guild.id;
     const adminId = interaction.user.id;
@@ -258,39 +247,18 @@ async function queueAdminPos(interaction, type = 'custom_bind') {
         if (old.timeoutTimer) clearTimeout(old.timeoutTimer);
     }
 
-    // Increased timeout to 12 seconds, and prints server response on failure!
+    // Give the admin 20 FULL SECONDS to type the command in-game
     const timeoutTimer = setTimeout(async () => {
         if (adminPosQueue.has(adminId)) {
-            const data = adminPosQueue.get(adminId);
             adminPosQueue.delete(adminId);
-            
             const channel = client.channels.cache.get(channelId);
             if (channel) {
-                let debugStr = data.logs && data.logs.length > 0 
-                    ? data.logs.join('\n').substring(0, 1000) 
-                    : "No response received from server. Make sure RCON is connected!";
-
-                channel.send({ content: `<@${adminId}> ⚠️ **Position request timed out.**\nHere is what the server responded with:\n\`\`\`text\n${debugStr}\n\`\`\`\n*(If your coordinates are in the text above, send this output to the developer so we can tune the scanner!)*` }).catch(()=>{});
+                channel.send({ content: `<@${adminId}> ⚠️ **Position capture timed out!** You must type \`printpos\` in your in-game console before the 20-second timer runs out.` }).catch(()=>{});
             }
         }
-    }, 12000);
+    }, 20000);
 
-    // Give it an empty logs array to store what the server says
-    adminPosQueue.set(adminId, { guildId, adminId, channelId, type, timeoutTimer, logs: [] });
-    
-    try {
-        await sendRconCommand(guildId, `players`, client);
-    } catch (err) {
-        console.error("[QUEUE POS ERROR]", err);
-        const channel = client.channels.cache.get(channelId);
-        if (channel) {
-            channel.send({ content: `❌ **Failed to connect to RCON.** Please ensure your server IP, Port, and Password are correct in the Admin Panel.` }).catch(()=>{});
-        }
-        if (adminPosQueue.has(adminId)) {
-            clearTimeout(adminPosQueue.get(adminId).timeoutTimer);
-            adminPosQueue.delete(adminId);
-        }
-    }
+    adminPosQueue.set(adminId, { guildId, adminId, channelId, type, timeoutTimer });
 }
 
 async function triggerCustomEvent(guildId, eventType, data = {}) {
