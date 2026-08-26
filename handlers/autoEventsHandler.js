@@ -13,6 +13,103 @@ const TYPE_INFO = {
     cargo: { name: 'Docked Cargo', emoji: '🚢', prefab: 'cargoshipdynamic1' }
 };
 
+// =======================================================
+// LAYOUT BUILDER (Decoupled so RCON can refresh it!)
+// =======================================================
+const buildPanelPayload = async (guildId, messageOverride = '') => {
+    if (!aeSessions.has(guildId)) aeSessions.set(guildId, { selectedEventId: null, view: 'main' });
+    const session = aeSessions.get(guildId);
+    const allEvents = await AutoEvent.findAll({ where: { guildId } });
+    let components = [];
+    
+    const embed = new EmbedBuilder().setColor('#3498db').setTitle('⚙️ Auto Events Manager');
+    if (messageOverride) embed.setDescription(`**${messageOverride}**\n\n`);
+
+    if (session.view === 'main') {
+        let activeList = '';
+        let inactiveList = '';
+
+        for (const key of Object.keys(TYPE_INFO)) {
+            const ev = allEvents.find(e => e.eventType === key);
+            if (ev && ev.isEnabled) activeList += `🟢 **${ev.name}**\n`;
+            else if (ev && !ev.isEnabled) inactiveList += `🔴 **${ev.name}** (Disabled)\n`;
+            else inactiveList += `⚫ **${TYPE_INFO[key].name}** (*Not Setup*)\n`;
+        }
+
+        embed.addFields(
+            { name: '🟢 Active Events', value: activeList || "*No events active.*", inline: false },
+            { name: '🔴 Inactive / Unconfigured', value: inactiveList || "*All set up!*", inline: false },
+            { name: '🛠️ Manage', value: "👇 **Click an event below to open its positions and settings.**", inline: false }
+        );
+
+        const row1 = new ActionRowBuilder();
+        const row2 = new ActionRowBuilder();
+        const keys = Object.keys(TYPE_INFO);
+        
+        for (let i = 0; i < 3; i++) {
+            row1.addComponents(new ButtonBuilder().setCustomId(`ae_load_${keys[i]}`).setLabel(TYPE_INFO[keys[i]].name).setEmoji(TYPE_INFO[keys[i]].emoji).setStyle(ButtonStyle.Secondary));
+        }
+        for (let i = 3; i < keys.length; i++) {
+            row2.addComponents(new ButtonBuilder().setCustomId(`ae_load_${keys[i]}`).setLabel(TYPE_INFO[keys[i]].name).setEmoji(TYPE_INFO[keys[i]].emoji).setStyle(ButtonStyle.Secondary));
+        }
+
+        const row3 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('ae_btn_disable_mode').setLabel('Disable / Enable Event').setStyle(ButtonStyle.Secondary).setEmoji('⚡'),
+            new ButtonBuilder().setCustomId('ae_btn_delete_mode').setLabel('Delete Event').setStyle(ButtonStyle.Danger).setEmoji('💀')
+        );
+        
+        components.push(row1, row2, row3);
+    } 
+    else if (session.view === 'select_disable' || session.view === 'select_delete') {
+        const isDisable = session.view === 'select_disable';
+        embed.addFields({ name: 'Action Required', value: isDisable ? "⚡ Select which event you want to Enable/Disable:" : "💀 Select which event you want to completely clear and delete:" });
+
+        const row1 = new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+                .setCustomId(isDisable ? 'ae_do_disable' : 'ae_do_delete')
+                .setPlaceholder(isDisable ? '⚡ Select an event to toggle...' : '💀 Select an event to delete...')
+                .addOptions(Object.keys(TYPE_INFO).map(k => ({ label: TYPE_INFO[k].name, value: k, emoji: TYPE_INFO[k].emoji })))
+        );
+        const row2 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('ae_btn_cancel').setLabel('Cancel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+        );
+        components.push(row1, row2);
+    } 
+    else if (session.view === 'event') {
+        const activeEvent = await AutoEvent.findByPk(session.selectedEventId);
+        if (!activeEvent) {
+            session.view = 'main';
+            return await buildPanelPayload(guildId, '❌ Event not found.');
+        }
+
+        const eventLocs = await AutoEventLocation.findAll({ where: { eventId: activeEvent.id }, order: [['slot', 'ASC']] });
+
+        embed.setTitle(`${TYPE_INFO[activeEvent.eventType].emoji} Managing: ${activeEvent.name}`);
+        
+        let locList = eventLocs.length > 0 
+            ? eventLocs.map((l, i) => `**${i + 1}.** \`${l.posX}, ${l.posY}, ${l.posZ}\``).join('\n') 
+            : '*No positions saved. Click "Add Player Pos" below.*';
+
+        embed.addFields(
+            { name: `📊 Event Details`, value: `**Quantity:** Spawns ${activeEvent.amount}\n**Status:** ${activeEvent.isEnabled ? '🟢 ENABLED' : '🔴 DISABLED'}` },
+            { name: `📍 Saved Spawn Locations`, value: locList }
+        );
+
+        components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('ae_btn_settings').setLabel('Name & Qty').setStyle(ButtonStyle.Primary).setEmoji('📝'),
+            new ButtonBuilder().setCustomId('ae_btn_getpos').setLabel('Add Player Pos').setStyle(ButtonStyle.Success).setEmoji('📍'),
+            new ButtonBuilder().setCustomId('ae_btn_undopos').setLabel('Clear Last Pos').setStyle(ButtonStyle.Secondary).setEmoji('⏪').setDisabled(eventLocs.length === 0),
+            new ButtonBuilder().setCustomId('ae_btn_test').setLabel('Test Event').setStyle(ButtonStyle.Primary).setEmoji('🚀').setDisabled(eventLocs.length === 0)
+        ));
+
+        components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('ae_btn_back').setLabel('Back to Main Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+        ));
+    }
+
+    return { embeds: [embed], components, flags: 64 };
+};
+
 async function safeRespond(interaction, payload) {
     try {
         if (interaction.isModalSubmit() || interaction.isMessageComponent()) {
@@ -52,102 +149,9 @@ const autoEventsHandler = async (interaction, client) => {
         if (!aeSessions.has(guildId)) aeSessions.set(guildId, { selectedEventId: null, view: 'main' });
         const session = aeSessions.get(guildId);
 
-        // =======================================================
-        // THE TWO-PAGE PANEL RENDERER
-        // =======================================================
         const renderAEPanel = async (inter, messageOverride = '') => {
-            const allEvents = await AutoEvent.findAll({ where: { guildId } });
-            let components = [];
-            
-            const embed = new EmbedBuilder().setColor('#3498db').setTitle('⚙️ Auto Events Manager');
-            if (messageOverride) embed.setDescription(`**${messageOverride}**\n\n`);
-
-            // PAGE 1: MAIN PANEL
-            if (session.view === 'main') {
-                let activeList = '';
-                let inactiveList = '';
-
-                for (const key of Object.keys(TYPE_INFO)) {
-                    const ev = allEvents.find(e => e.eventType === key);
-                    if (ev && ev.isEnabled) activeList += `🟢 **${ev.name}**\n`;
-                    else if (ev && !ev.isEnabled) inactiveList += `🔴 **${ev.name}** (Disabled)\n`;
-                    else inactiveList += `⚫ **${TYPE_INFO[key].name}** (*Not Setup*)\n`;
-                }
-
-                embed.addFields(
-                    { name: '🟢 Active Events', value: activeList || "*No events active.*", inline: false },
-                    { name: '🔴 Inactive / Unconfigured', value: inactiveList || "*All set up!*", inline: false },
-                    { name: '🛠️ Manage', value: "👇 **Click an event below to open its positions and settings.**", inline: false }
-                );
-
-                const row1 = new ActionRowBuilder();
-                const row2 = new ActionRowBuilder();
-                const keys = Object.keys(TYPE_INFO);
-                
-                for (let i = 0; i < 3; i++) {
-                    row1.addComponents(new ButtonBuilder().setCustomId(`ae_load_${keys[i]}`).setLabel(TYPE_INFO[keys[i]].name).setEmoji(TYPE_INFO[keys[i]].emoji).setStyle(ButtonStyle.Secondary));
-                }
-                for (let i = 3; i < keys.length; i++) {
-                    row2.addComponents(new ButtonBuilder().setCustomId(`ae_load_${keys[i]}`).setLabel(TYPE_INFO[keys[i]].name).setEmoji(TYPE_INFO[keys[i]].emoji).setStyle(ButtonStyle.Secondary));
-                }
-
-                const row3 = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('ae_btn_disable_mode').setLabel('Disable / Enable Event').setStyle(ButtonStyle.Secondary).setEmoji('⚡'),
-                    new ButtonBuilder().setCustomId('ae_btn_delete_mode').setLabel('Delete Event').setStyle(ButtonStyle.Danger).setEmoji('💀')
-                );
-                
-                components.push(row1, row2, row3);
-            }
-            // PAGE 1.5: SELECT EVENT TO DISABLE OR DELETE
-            else if (session.view === 'select_disable' || session.view === 'select_delete') {
-                const isDisable = session.view === 'select_disable';
-                embed.addFields({ name: 'Action Required', value: isDisable ? "⚡ Select which event you want to Enable/Disable:" : "💀 Select which event you want to completely clear and delete:" });
-
-                const row1 = new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder()
-                        .setCustomId(isDisable ? 'ae_do_disable' : 'ae_do_delete')
-                        .setPlaceholder(isDisable ? '⚡ Select an event to toggle...' : '💀 Select an event to delete...')
-                        .addOptions(Object.keys(TYPE_INFO).map(k => ({ label: TYPE_INFO[k].name, value: k, emoji: TYPE_INFO[k].emoji })))
-                );
-                const row2 = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('ae_btn_cancel').setLabel('Cancel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
-                );
-                components.push(row1, row2);
-            }
-            // PAGE 2: INSIDE THE EVENT (Positions & Config)
-            else if (session.view === 'event') {
-                const activeEvent = await AutoEvent.findByPk(session.selectedEventId);
-                if (!activeEvent) {
-                    session.view = 'main';
-                    return await renderAEPanel(inter, '❌ Event not found.');
-                }
-
-                const eventLocs = await AutoEventLocation.findAll({ where: { eventId: activeEvent.id }, order: [['slot', 'ASC']] });
-
-                embed.setTitle(`${TYPE_INFO[activeEvent.eventType].emoji} Managing: ${activeEvent.name}`);
-                
-                let locList = eventLocs.length > 0 
-                    ? eventLocs.map((l, i) => `**${i + 1}.** \`${l.posX}, ${l.posY}, ${l.posZ}\``).join('\n') 
-                    : '*No positions saved. Click "Add Player Pos" below.*';
-
-                embed.addFields(
-                    { name: `📊 Event Details`, value: `**Quantity:** Spawns ${activeEvent.amount}\n**Status:** ${activeEvent.isEnabled ? '🟢 ENABLED' : '🔴 DISABLED'}` },
-                    { name: `📍 Saved Spawn Locations`, value: locList }
-                );
-
-                components.push(new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('ae_btn_settings').setLabel('Name & Qty').setStyle(ButtonStyle.Primary).setEmoji('📝'),
-                    new ButtonBuilder().setCustomId('ae_btn_getpos').setLabel('Add Player Pos').setStyle(ButtonStyle.Success).setEmoji('📍'),
-                    new ButtonBuilder().setCustomId('ae_btn_undopos').setLabel('Clear Last Pos').setStyle(ButtonStyle.Secondary).setEmoji('⏪').setDisabled(eventLocs.length === 0),
-                    new ButtonBuilder().setCustomId('ae_btn_test').setLabel('Test Event').setStyle(ButtonStyle.Primary).setEmoji('🚀').setDisabled(eventLocs.length === 0)
-                ));
-
-                components.push(new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('ae_btn_back').setLabel('Back to Main Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
-                ));
-            }
-
-            await safeRespond(inter, { embeds: [embed], components, flags: 64 });
+            const payload = await buildPanelPayload(guildId, messageOverride);
+            await safeRespond(inter, payload);
         };
 
         // =======================================================
@@ -237,10 +241,15 @@ const autoEventsHandler = async (interaction, client) => {
                 return await renderAEPanel(interaction, `⏪ Removed the last saved position.`);
             }
 
-            // 🎯 HERE WE STAPLE THE EVENT ID TO THE RCON REQUEST!
+            // 🎯 HERE IS THE MAGIC LIVE-LINK
             if (customId === 'ae_btn_getpos') {
+                // 1. Visually update the panel IMMEDIATELY to show it is loading
+                const loadingPayload = await buildPanelPayload(guildId, '⏳ **Extracting your position from the server...**');
+                await interaction.update(loadingPayload);
+                
+                // 2. Hand the interaction object over to the RCON scanner
                 await queueAdminPos(interaction, 'auto_event', session.selectedEventId);
-                return await interaction.reply({ content: '⏳ **Extracting your position from the server...**', flags: 64 });
+                return;
             }
 
             if (customId === 'ae_btn_test') {
@@ -270,7 +279,6 @@ const autoEventsHandler = async (interaction, client) => {
 // ==========================================
 // RCON AUTO-SAVE RECEIVER
 // ==========================================
-// We explicitly accept the eventId from the RCON file now!
 autoEventsHandler.autoSaveLocation = async (guildId, x, y, z, eventId) => {
     if (!eventId) return;
 
@@ -285,6 +293,16 @@ autoEventsHandler.autoSaveLocation = async (guildId, x, y, z, eventId) => {
         posY: y.toString(),
         posZ: z.toString()
     });
+};
+
+// LIVE UPDATE HOOK FOR RCON MANAGER
+autoEventsHandler.refreshPanelViaInteraction = async (interaction, messageOverride) => {
+    try {
+        const payload = await buildPanelPayload(interaction.guild.id, messageOverride);
+        await interaction.editReply(payload);
+    } catch (e) {
+        console.error("Failed to live-refresh panel:", e);
+    }
 };
 
 module.exports = autoEventsHandler;

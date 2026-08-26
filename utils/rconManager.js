@@ -111,21 +111,25 @@ async function connectRcon(guildId, client) {
                         // WE GOT THE COORDINATES!
                         if (foundPos) {
                             if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
-                            const channel = client ? client.channels.cache.get(setupData.channelId) : null;
 
                             if (setupData.type === 'auto_event') {
                                 const aeHandler = require('../handlers/autoEventsHandler');
                                 if (aeHandler && aeHandler.autoSaveLocation) {
-                                    // Pass the TARGET ID safely to the saver
+                                    // 1. Save it to the database
                                     await aeHandler.autoSaveLocation(guildId, posX, posY, posZ, setupData.targetId);
+                                    
+                                    // 2. TRIGGER THE DISCORD PANEL TO VISUALLY REFRESH LIVE!
+                                    if (setupData.interaction) {
+                                        await aeHandler.refreshPanelViaInteraction(
+                                            setupData.interaction, 
+                                            `✅ **Position Captured Automatically!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``
+                                        );
+                                    }
                                 }
                             } else {
                                 await bindHandler.autoSavePosition(guildId, posX, posY, posZ);
                             }
 
-                            if (channel) {
-                                channel.send({ content: `✅ <@${setupData.adminId}> **Position Captured & Saved!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\`\n*Click your event button on the panel again to refresh the page and see it!*` }).catch(()=>{});
-                            }
                             adminPosQueue.delete(adminId);
                             break;
                         }
@@ -252,18 +256,20 @@ async function sendRconCommand(guildId, commandStr, client = null) {
     return true;
 }
 
-// === NO-TYPING AUTO POS QUEUE (NOW ACCEPTS TARGET ID) ===
+// === LIVE UPDATING NO-TYPING AUTO POS QUEUE ===
 async function queueAdminPos(interaction, type = 'custom_bind', targetId = null) {
     const guildId = interaction.guild.id;
     const adminId = interaction.user.id;
-    const channelId = interaction.channelId;
     const client = interaction.client;
 
     const userProfile = await UserEconomy.findOne({ where: { userId: adminId } });
-    const channel = client.channels.cache.get(channelId);
 
     if (!userProfile || !userProfile.inGameName) {
-        if (channel) channel.send({ content: `❌ <@${adminId}> **Missing In-Game Name!**\nPlease use the \`/playerpanel\` to link your in-game name first!` }).catch(()=>{});
+        // Since we already "updated" the panel to a loading state, we have to editReply to show the error
+        const aeHandler = require('../handlers/autoEventsHandler');
+        if (aeHandler && aeHandler.refreshPanelViaInteraction) {
+            await aeHandler.refreshPanelViaInteraction(interaction, `❌ **Missing In-Game Name!**\nPlease use the \`/playerpanel\` to link your in-game name first!`);
+        }
         return;
     }
 
@@ -275,20 +281,27 @@ async function queueAdminPos(interaction, type = 'custom_bind', targetId = null)
 
     const timeoutTimer = setTimeout(async () => {
         if (adminPosQueue.has(adminId)) {
+            const data = adminPosQueue.get(adminId);
             adminPosQueue.delete(adminId);
-            if (channel) {
-                channel.send({ content: `<@${adminId}> ⚠️ **Auto-Scan Failed.**\nPlease ensure your server is online, and that you are actively spawned into the game as \`${inGameName}\`.` }).catch(()=>{});
+            if (data.interaction) {
+                const aeHandler = require('../handlers/autoEventsHandler');
+                if (aeHandler && aeHandler.refreshPanelViaInteraction) {
+                    await aeHandler.refreshPanelViaInteraction(data.interaction, `⚠️ **Auto-Scan Failed.**\nPlease ensure your server is online, and that you are actively spawned into the game as \`${inGameName}\`.`);
+                }
             }
         }
     }, 8000);
 
-    // Save the targetId (Event ID) straight to the queue!
-    adminPosQueue.set(adminId, { guildId, adminId, channelId, type, timeoutTimer, inGameName, targetId });
+    // Save the interaction object so we can visually update the panel!
+    adminPosQueue.set(adminId, { guildId, adminId, type, timeoutTimer, inGameName, targetId, interaction });
     
     try {
         await sendRconCommand(guildId, `printpos "${inGameName}"`, client);
     } catch (err) {
-        if (channel) channel.send({ content: `❌ **Failed to connect to RCON.**` }).catch(()=>{});
+        const aeHandler = require('../handlers/autoEventsHandler');
+        if (aeHandler && aeHandler.refreshPanelViaInteraction) {
+            await aeHandler.refreshPanelViaInteraction(interaction, `❌ **Failed to connect to RCON.**`);
+        }
         if (adminPosQueue.has(adminId)) {
             clearTimeout(adminPosQueue.get(adminId).timeoutTimer);
             adminPosQueue.delete(adminId);
