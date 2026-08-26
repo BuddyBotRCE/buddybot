@@ -79,22 +79,55 @@ async function connectRcon(guildId, client) {
                 const guild = client ? client.guilds.cache.get(guildId) : null;
 
                 // ==========================================
-                // 1. RUST CONSOLE POSITION INTERCEPTOR
+                // 1. ADVANCED POSITION INTERCEPTOR (NO IN-GAME TYPING)
                 // ==========================================
                 if (adminPosQueue.size > 0) {
                     for (const [adminId, setupData] of adminPosQueue.entries()) {
-                        
-                        // Check for numbers matching coordinate formats
-                        const matches = msg.match(/-?\d+\.\d+/g);
-                        
-                        // We found 3 coordinates!
-                        if (matches && matches.length >= 3) {
+                        let posX, posY, posZ;
+                        let foundPos = false;
+
+                        // TACTIC 1: Parse standard JSON playerlist output
+                        try {
+                            const jsonOutput = JSON.parse(msg);
+                            if (Array.isArray(jsonOutput)) {
+                                const player = jsonOutput.find(p => p.DisplayName && p.DisplayName.toLowerCase() === setupData.inGameName.toLowerCase());
+                                if (player && player.Position) {
+                                    // Sometimes position is a string "(x, y, z)", sometimes it's an object
+                                    if (typeof player.Position === 'string') {
+                                        const matches = player.Position.match(/-?\d+(\.\d+)?/g);
+                                        if (matches && matches.length >= 3) {
+                                            posX = parseFloat(matches[0]).toFixed(2);
+                                            posY = parseFloat(matches[1]).toFixed(2);
+                                            posZ = parseFloat(matches[2]).toFixed(2);
+                                            foundPos = true;
+                                        }
+                                    } else if (player.Position.x !== undefined) {
+                                        posX = parseFloat(player.Position.x).toFixed(2);
+                                        posY = parseFloat(player.Position.y).toFixed(2);
+                                        posZ = parseFloat(player.Position.z).toFixed(2);
+                                        foundPos = true;
+                                    }
+                                }
+                            }
+                        } catch (e) {} // Not a JSON string, ignore and try fallback
+
+                        // TACTIC 2: Fallback silent teleport echo interceptor
+                        if (!foundPos && msgLower.includes(setupData.inGameName.toLowerCase()) && msgLower.includes('teleport')) {
+                            const matches = msg.match(/-?\d+(\.\d+)?/g);
+                            if (matches && matches.length >= 3) {
+                                // Grab the last 3 numbers in the string which are guaranteed to be the coordinates
+                                const len = matches.length;
+                                posX = parseFloat(matches[len-3]).toFixed(2);
+                                posY = parseFloat(matches[len-2]).toFixed(2);
+                                posZ = parseFloat(matches[len-1]).toFixed(2);
+                                foundPos = true;
+                            }
+                        }
+
+                        // WE GOT THE COORDINATES!
+                        if (foundPos) {
                             if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
                             const channel = client ? client.channels.cache.get(setupData.channelId) : null;
-
-                            let posX = parseFloat(matches[0]).toFixed(2);
-                            let posY = parseFloat(matches[1]).toFixed(2);
-                            let posZ = parseFloat(matches[2]).toFixed(2);
 
                             if (setupData.type === 'auto_event') {
                                 const aeHandler = require('../handlers/autoEventsHandler');
@@ -106,7 +139,7 @@ async function connectRcon(guildId, client) {
                             }
 
                             if (channel) {
-                                channel.send({ content: `✅ <@${setupData.adminId}> **Position Captured Successfully!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\`\n*Return to your Discord panel to test or save.*` }).catch(()=>{});
+                                channel.send({ content: `✅ <@${setupData.adminId}> **Position Captured Automatically!**\nTargeting: \`${setupData.inGameName}\`\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\`\n*Return to your Discord panel to test or save.*` }).catch(()=>{});
                             }
                             adminPosQueue.delete(adminId);
                             break;
@@ -217,7 +250,6 @@ async function connectRcon(guildId, client) {
     });
 }
 
-// Updated to guarantee client is passed so it can reconnect safely
 async function sendRconCommand(guildId, commandStr, client = null) {
     let ws = activeConnections.get(guildId);
     if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -235,30 +267,55 @@ async function sendRconCommand(guildId, commandStr, client = null) {
     return true;
 }
 
-// === UPDATED QUEUE ADMIN POS ===
+// === NO-TYPING AUTO POS QUEUE ===
 async function queueAdminPos(interaction, type = 'custom_bind') {
     const guildId = interaction.guild.id;
     const adminId = interaction.user.id;
     const channelId = interaction.channelId;
     const client = interaction.client;
 
-    if (adminPosQueue.has(adminId)) {
-        const old = adminPosQueue.get(adminId);
-        if (old.timeoutTimer) clearTimeout(old.timeoutTimer);
+    // 1. We look up the admin's Discord ID in the economy database to find their linked in-game name
+    const userProfile = await UserEconomy.findOne({ where: { userId: adminId } });
+    const channel = client.channels.cache.get(channelId);
+
+    // If they haven't linked their account, we can't find them!
+    if (!userProfile || !userProfile.inGameName) {
+        if (channel) channel.send({ content: `❌ <@${adminId}> **Missing In-Game Name!**\nBecause you don't want to type in-game, the bot must know who to target. Please use the \`/playerpanel\` to link your in-game name to your Discord account first!` }).catch(()=>{});
+        return;
     }
 
-    // Give the admin 20 FULL SECONDS to type the command in-game
+    const inGameName = userProfile.inGameName;
+
+    if (adminPosQueue.has(adminId)) {
+        clearTimeout(adminPosQueue.get(adminId).timeoutTimer);
+    }
+
+    // 12 second timer for the automatic scan to run
     const timeoutTimer = setTimeout(async () => {
         if (adminPosQueue.has(adminId)) {
             adminPosQueue.delete(adminId);
-            const channel = client.channels.cache.get(channelId);
             if (channel) {
-                channel.send({ content: `<@${adminId}> ⚠️ **Position capture timed out!** You must type \`printpos\` in your in-game console before the 20-second timer runs out.` }).catch(()=>{});
+                channel.send({ content: `<@${adminId}> ⚠️ **Automatic position scan failed.**\nEnsure your server is online, and that you are actively spawned into the game as \`${inGameName}\`.` }).catch(()=>{});
             }
         }
-    }, 20000);
+    }, 12000);
 
-    adminPosQueue.set(adminId, { guildId, adminId, channelId, type, timeoutTimer });
+    // Store their specific in-game name so the interceptor knows exactly who to look for!
+    adminPosQueue.set(adminId, { guildId, adminId, channelId, type, timeoutTimer, inGameName });
+    
+    try {
+        // Tactic 1: Request the full rich JSON playerlist
+        await sendRconCommand(guildId, `playerlist`, client);
+        // Tactic 2: Execute a silent teleport to force the server to echo their exact position to the console
+        await sendRconCommand(guildId, `teleport "${inGameName}" "${inGameName}"`, client);
+    } catch (err) {
+        console.error("[QUEUE POS ERROR]", err);
+        if (channel) channel.send({ content: `❌ **Failed to connect to RCON.** Check your credentials.` }).catch(()=>{});
+        if (adminPosQueue.has(adminId)) {
+            clearTimeout(adminPosQueue.get(adminId).timeoutTimer);
+            adminPosQueue.delete(adminId);
+        }
+    }
 }
 
 async function triggerCustomEvent(guildId, eventType, data = {}) {
