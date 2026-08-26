@@ -265,12 +265,30 @@ const customZoneHandler = async (interaction, client) => {
                 await z.update({ visible: !z.visible });
                 return await renderCZPanel(interaction, `👁️ Map Visibility is now **${!z.visible ? 'VISIBLE' : 'HIDDEN'}**!`);
             }
-            if (customId === 'cz_btn_toggle') {
+            
+if (customId === 'cz_btn_toggle') {
                 const z = await PveZone.findByPk(session.selectedZoneId);
-                await z.update({ isEnabled: !z.isEnabled });
-                return await renderCZPanel(interaction, `⚡ Zone status toggled!`);
-            }
+                const willBeEnabled = !z.isEnabled;
+                await z.update({ isEnabled: willBeEnabled });
 
+                // 🌐 FIRE RCON COMMAND TO SHOW/HIDE THE IN-GAME ZONE RING
+                try {
+                    const { sendRconCommand } = require('../utils/rconManager');
+                    if (willBeEnabled && z.posX && z.posZ) {
+                        // Adjust this command string to match whatever plugin your Rust server uses (e.g., ZoneManager, PveMode, etc.)
+                        // Example command format: zone_add "Name" Radius X Y Z Color Shape
+                        const commandStr = `zone_add "${z.name}" ${z.radius} ${z.posX} ${z.posY || 0} ${z.posZ} ${z.color} ${z.shape}`;
+                        await sendRconCommand(guildId, commandStr, client);
+                    } else if (!willBeEnabled) {
+                        const removeStr = `zone_remove "${z.name}"`;
+                        await sendRconCommand(guildId, removeStr, client);
+                    }
+                } catch (err) {
+                    console.error("[RCON ZONE COMMAND ERROR]", err);
+                }
+
+                return await renderCZPanel(interaction, `⚡ Zone is now **${willBeEnabled ? 'ENABLED & Ring Spawned' : 'DISABLED & Ring Removed'}**!`);
+            }
             if (customId === 'cz_btn_delete') {
                 const z = await PveZone.findByPk(session.selectedZoneId);
                 await z.destroy();
