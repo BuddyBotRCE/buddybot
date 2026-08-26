@@ -44,6 +44,7 @@ async function connectRcon(guildId, client) {
             activeConnections.set(guildId, ws);
             resolve("Connection established!");
         });
+        
         ws.on('close', () => activeConnections.delete(guildId));
         ws.on('error', () => { clearTimeout(timeout); activeConnections.delete(guildId); });
 
@@ -51,27 +52,18 @@ async function connectRcon(guildId, client) {
         const eventEmitterCallback = async (eventName, data) => {
             try {
                 const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
+                if (!client) return; // Failsafe
                 const guild = client.guilds.cache.get(guildId);
                 if (!currentConfig || !currentConfig.logGameChannelId || !guild) return;
 
                 const channel = guild.channels.cache.get(currentConfig.logGameChannelId);
                 if (!channel) return;
 
-                if (eventName === "cargoDocked") {
-                    await channel.send("🚢 **Cargo Ship has docked!**").catch(() => {});
-                }
-                if (eventName === "supplyDrop") {
-                    await channel.send("📦 **Supply Drop detected!**").catch(() => {});
-                }
-                if (eventName === "lockedCrateHackStart") {
-                    await channel.send("🔓 **Locked Crate hack has started!**").catch(() => {});
-                }
-                if (eventName === "lockedCrateHackFinish") {
-                    await channel.send("✅ **Locked Crate hack completed!**").catch(() => {});
-                }
-                if (eventName === "eliteCrate") {
-                    await channel.send("💎 **Elite Crate spawned!**").catch(() => {});
-                }
+                if (eventName === "cargoDocked") await channel.send("🚢 **Cargo Ship has docked!**").catch(() => {});
+                if (eventName === "supplyDrop") await channel.send("📦 **Supply Drop detected!**").catch(() => {});
+                if (eventName === "lockedCrateHackStart") await channel.send("🔓 **Locked Crate hack has started!**").catch(() => {});
+                if (eventName === "lockedCrateHackFinish") await channel.send("✅ **Locked Crate hack completed!**").catch(() => {});
+                if (eventName === "eliteCrate") await channel.send("💎 **Elite Crate spawned!**").catch(() => {});
             } catch (err) {}
         };
 
@@ -96,7 +88,7 @@ async function connectRcon(guildId, client) {
                 const msgLower = msg.toLowerCase();
 
                 const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
-                const guild = client.guilds.cache.get(guildId);
+                const guild = client ? client.guilds.cache.get(guildId) : null;
 
                 // ==========================================
                 // 1. RUST CONSOLE POSITION INTERCEPTOR
@@ -106,13 +98,12 @@ async function connectRcon(guildId, client) {
                     if (matches && matches.length >= 3) {
                         for (const [adminId, setupData] of adminPosQueue.entries()) {
                             if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
-                            const channel = client.channels.cache.get(setupData.channelId);
+                            const channel = client ? client.channels.cache.get(setupData.channelId) : null;
 
                             let posX = parseFloat(matches[0]).toFixed(2);
                             let posY = parseFloat(matches[1]).toFixed(2);
                             let posZ = parseFloat(matches[2]).toFixed(2);
 
-                            // Route correctly based on what button was clicked
                             if (setupData.type === 'auto_event') {
                                 const aeHandler = require('../handlers/autoEventsHandler');
                                 if (aeHandler && aeHandler.autoSaveLocation) {
@@ -123,7 +114,7 @@ async function connectRcon(guildId, client) {
                             }
 
                             if (channel) {
-                                channel.send({ content: `✅ <@${setupData.adminId}> **Position Captured Successfully!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\`\n*Return to your Discord panel to finish.*` }).catch(()=>{});
+                                channel.send({ content: `✅ <@${setupData.adminId}> **Position Captured Successfully!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\`\n*Return to your Discord panel to test or save.*` }).catch(()=>{});
                             }
                             adminPosQueue.delete(adminId);
                             break;
@@ -153,7 +144,7 @@ async function connectRcon(guildId, client) {
                 // 3. KILLFEED & BOUNTIES
                 // ==========================================
                 if ((msgLower.includes('killed') || msgLower.includes('murdered') || msgLower.includes('suicide') || msgLower.includes('died') || msgLower.includes('slain')) && !msg.includes('[Killfeed]')) {
-                    await sendRconCommand(guildId, `say "[Killfeed] ${msg}"`);
+                    await sendRconCommand(guildId, `say "[Killfeed] ${msg}"`, client);
                     let embedColor = '#e74c3c';
                     let killType = '⚔️ PvP Combat';
 
@@ -185,7 +176,7 @@ async function connectRcon(guildId, client) {
                         }
                     }
 
-                    if (currentConfig && currentConfig.killfeedChannelId) {
+                    if (currentConfig && currentConfig.killfeedChannelId && client) {
                         const killfeedChannel = client.channels.cache.get(currentConfig.killfeedChannelId);
                         if (killfeedChannel) {
                             killfeedChannel.send({ embeds: [new EmbedBuilder().setTitle(killType).setDescription(`\`\`\`fix\n${msg}\`\`\``).setColor(embedColor).setTimestamp()] }).catch(() => {});
@@ -206,7 +197,7 @@ async function connectRcon(guildId, client) {
                         const playerName = chatMatch[1].replace(/\[.*?\]/g, '').trim(); 
                         const chatText = chatMatch[2].toLowerCase();
 
-                        if (currentConfig && currentConfig.crossChatChannelId) {
+                        if (currentConfig && currentConfig.crossChatChannelId && client) {
                             const crossChatChannel = client.channels.cache.get(currentConfig.crossChatChannelId);
                             if (crossChatChannel && !playerName.includes('[Discord]')) {
                                 crossChatChannel.send(`💬 **[In-Game] ${playerName}**: ${chatText}`);
@@ -224,7 +215,7 @@ async function connectRcon(guildId, client) {
                             const finalCommandString = activeBind.command.replace(/{player}/gi, `"${playerName}"`);
                             const commands = finalCommandString.split('\n');
                             for (const cmd of commands) {
-                                if (cmd.trim() !== '') await sendRconCommand(guildId, cmd.trim());
+                                if (cmd.trim() !== '') await sendRconCommand(guildId, cmd.trim(), client);
                             }
                         }
                     }
@@ -234,23 +225,25 @@ async function connectRcon(guildId, client) {
     });
 }
 
-async function sendRconCommand(guildId, commandStr) {
+// Updated to guarantee client is passed so it can reconnect safely
+async function sendRconCommand(guildId, commandStr, client = null) {
     let ws = activeConnections.get(guildId);
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         try {
-            await connectRcon(guildId, global.discordClient); 
+            await connectRcon(guildId, client || global.discordClient); 
             ws = activeConnections.get(guildId);
-        } catch (e) {}
+        } catch (e) {
+            console.error("[RCON CONNECTION FAILED]", e.message);
+        }
     }
     if (!ws || ws.readyState !== WebSocket.OPEN) {
-        throw new Error("Not connected to RCON.");
+        throw new Error("Not connected to RCON. Please check credentials and server status.");
     }
     ws.send(JSON.stringify({ Identifier: 1, Message: commandStr, Name: "BuddyBot" }));
     return true;
 }
 
 // === UPDATED QUEUE ADMIN POS ===
-// Cleanly handles interaction directly from Auto Events and Binds
 async function queueAdminPos(interaction, type = 'custom_bind') {
     const guildId = interaction.guild.id;
     const adminId = interaction.user.id;
@@ -262,18 +255,33 @@ async function queueAdminPos(interaction, type = 'custom_bind') {
         if (old.timeoutTimer) clearTimeout(old.timeoutTimer);
     }
 
+    // Increased timeout to 8 seconds to give RCON more time to reply
     const timeoutTimer = setTimeout(async () => {
         if (adminPosQueue.has(adminId)) {
             adminPosQueue.delete(adminId);
             const channel = client.channels.cache.get(channelId);
             if (channel) {
-                channel.send({ content: `<@${adminId}> ⚠️ Position request timed out. Make sure you are online in-game!` }).catch(()=>{});
+                channel.send({ content: `<@${adminId}> ⚠️ **Position request timed out.** Ensure your server is online, credentials are set in the Admin Panel, and you are actively in-game.` }).catch(()=>{});
             }
         }
-    }, 5000);
+    }, 8000);
 
     adminPosQueue.set(adminId, { guildId, adminId, channelId, type, timeoutTimer });
-    sendRconCommand(guildId, `players`).catch(() => {});
+    
+    // Explicitly pass client so connection handles correctly
+    try {
+        await sendRconCommand(guildId, `players`, client);
+    } catch (err) {
+        console.error("[QUEUE POS ERROR]", err);
+        const channel = client.channels.cache.get(channelId);
+        if (channel) {
+            channel.send({ content: `❌ **Failed to connect to RCON.** Please ensure your server IP, Port, and Password are correct in the Admin Panel.` }).catch(()=>{});
+        }
+        if (adminPosQueue.has(adminId)) {
+            clearTimeout(adminPosQueue.get(adminId).timeoutTimer);
+            adminPosQueue.delete(adminId);
+        }
+    }
 }
 
 async function triggerCustomEvent(guildId, eventType, data = {}) {
