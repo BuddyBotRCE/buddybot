@@ -474,20 +474,6 @@ const bindHandler = async (interaction, client) => {
     }
 };
 
-bindHandler.autoSavePosition = async (guildId, x, y, z, bindId) => {
-    if (!bindId) return;
-    const bind = await CustomBind.findByPk(bindId);
-    if (!bind) return;
-
-    let command = '';
-    if (bind.actionType === 'teleport') {
-        command = `teleportpos "{player}" ${x} ${y} ${z}`;
-    } else if (bind.actionType === 'recycler') {
-        command = `spawn recycler_static ${x} ${y} ${z}`;
-    }
-
-    await CustomBind.update({ posX: x, posY: y, posZ: z, command }, { where: { id: bindId } });
-};
 
 bindHandler.refreshPanelViaInteraction = async (interaction, messageOverride, bindId = null) => {
     try {
