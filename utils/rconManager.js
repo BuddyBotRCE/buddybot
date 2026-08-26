@@ -134,14 +134,24 @@ async function connectRcon(guildId, client) {
                                         await czHandler.refreshPanelViaInteraction(
                                             setupData.interaction, 
                                             `✅ **Zone Center Captured Automatically!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``,
-                                            setupData.targetId // 👈 WE NOW PASS THE ZONE ID HERE SO IT DOESN'T GO TO MAIN MENU
+                                            setupData.targetId
                                         );
                                     }
                                 }
-                            }
-                            // ROUTE 3: CUSTOM BINDS (Fallback)
+                            } 
+                            // ROUTE 3: CUSTOM BINDS
                             else {
-                                await bindHandler.autoSavePosition(guildId, posX, posY, posZ);
+                                const bindHandler = require('../handlers/bindHandler');
+                                if (bindHandler && bindHandler.autoSavePosition) {
+                                    await bindHandler.autoSavePosition(guildId, posX, posY, posZ, setupData.targetId);
+                                    if (setupData.interaction) {
+                                        await bindHandler.refreshPanelViaInteraction(
+                                            setupData.interaction, 
+                                            `✅ **Position Captured & Command Generated!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``,
+                                            setupData.targetId
+                                        );
+                                    }
+                                }
                             }
 
                             adminPosQueue.delete(adminId);
@@ -217,13 +227,13 @@ async function connectRcon(guildId, client) {
                 }
 
                 // ==========================================
-                // 4. CHAT PARSER & CUSTOM BINDS
+                // 4. CHAT PARSER & CUSTOM BINDS EXECUTION
                 // ==========================================
                 if (msgLower.includes('[chat]')) {
                     const chatMatch = msg.match(/\[CHAT\] (.*?): (.*)/i);
                     if (chatMatch) {
                         const playerName = chatMatch[1].replace(/\[.*?\]/g, '').trim(); 
-                        const chatText = chatMatch[2].toLowerCase();
+                        const chatText = chatMatch[2].toLowerCase().trim();
 
                         if (currentConfig && currentConfig.crossChatChannelId && client) {
                             const crossChatChannel = client.channels.cache.get(currentConfig.crossChatChannelId);
@@ -233,17 +243,31 @@ async function connectRcon(guildId, client) {
                         }
 
                         const serverBinds = await CustomBind.findAll({ where: { guildId: guildId } });
-                        const activeBind = serverBinds.find(b => b.emote.toLowerCase() === chatText || b.name.toLowerCase() === chatText || b.targetValue?.toLowerCase() === chatText);
+                        
+                        // Matches either the targetValue (e.g. 'help', kit name) or bind name
+                        const activeBind = serverBinds.find(b => 
+                            (b.targetValue && chatText.includes(b.targetValue.toLowerCase())) || 
+                            (b.name && chatText.includes(b.name.toLowerCase()))
+                        );
                         
                         if (activeBind) {
                             const userProfile = await UserEconomy.findOne({ where: { guildId: guildId, inGameName: playerName } });
-                            if (activeBind.cost > 0 && (!userProfile || userProfile.wallet < activeBind.cost)) return;
-                            if (activeBind.cost > 0) await userProfile.update({ wallet: userProfile.wallet - activeBind.cost });
+                            
+                            if (activeBind.cost > 0 && (!userProfile || userProfile.wallet < activeBind.cost)) {
+                                await sendRconCommand(guildId, `say "${playerName}, you need ${activeBind.cost} ${currentConfig?.economyCurrency || 'Scrap'} to use this!"`, client);
+                                return;
+                            }
+                            
+                            if (activeBind.cost > 0 && userProfile) {
+                                await userProfile.update({ wallet: userProfile.wallet - activeBind.cost });
+                            }
 
-                            const finalCommandString = activeBind.command.replace(/{player}/gi, `"${playerName}"`);
+                            const finalCommandString = activeBind.command.replace(/{player}/gi, playerName);
                             const commands = finalCommandString.split('\n');
                             for (const cmd of commands) {
-                                if (cmd.trim() !== '') await sendRconCommand(guildId, cmd.trim(), client);
+                                if (cmd.trim() !== '') {
+                                    await sendRconCommand(guildId, cmd.trim(), client);
+                                }
                             }
                         }
                     }
@@ -279,10 +303,9 @@ async function queueAdminPos(interaction, type = 'custom_bind', targetId = null)
     const userProfile = await UserEconomy.findOne({ where: { userId: adminId } });
 
     if (!userProfile || !userProfile.inGameName) {
-        // Since we already "updated" the panel to a loading state, we have to editReply to show the error
-        const aeHandler = require('../handlers/autoEventsHandler');
-        if (aeHandler && aeHandler.refreshPanelViaInteraction) {
-            await aeHandler.refreshPanelViaInteraction(interaction, `❌ **Missing In-Game Name!**\nPlease use the \`/playerpanel\` to link your in-game name first!`);
+        const handler = type === 'custom_zone' ? require('../handlers/customZoneHandler') : require('../handlers/bindHandler');
+        if (handler && handler.refreshPanelViaInteraction) {
+            await handler.refreshPanelViaInteraction(interaction, `❌ **Missing In-Game Name!**\nPlease use the \`/playerpanel\` to link your in-game name first!`, targetId);
         }
         return;
     }
@@ -298,23 +321,22 @@ async function queueAdminPos(interaction, type = 'custom_bind', targetId = null)
             const data = adminPosQueue.get(adminId);
             adminPosQueue.delete(adminId);
             if (data.interaction) {
-                const aeHandler = require('../handlers/autoEventsHandler');
-                if (aeHandler && aeHandler.refreshPanelViaInteraction) {
-                    await aeHandler.refreshPanelViaInteraction(data.interaction, `⚠️ **Auto-Scan Failed.**\nPlease ensure your server is online, and that you are actively spawned into the game as \`${inGameName}\`.`);
+                const handler = data.type === 'custom_zone' ? require('../handlers/customZoneHandler') : require('../handlers/bindHandler');
+                if (handler && handler.refreshPanelViaInteraction) {
+                    await handler.refreshPanelViaInteraction(data.interaction, `⚠️ **Auto-Scan Failed.**\nPlease ensure your server is online, and that you are actively spawned into the game as \`${inGameName}\`.`, data.targetId);
                 }
             }
         }
     }, 8000);
 
-    // Save the interaction object so we can visually update the panel!
     adminPosQueue.set(adminId, { guildId, adminId, type, timeoutTimer, inGameName, targetId, interaction });
     
     try {
         await sendRconCommand(guildId, `printpos "${inGameName}"`, client);
     } catch (err) {
-        const aeHandler = require('../handlers/autoEventsHandler');
-        if (aeHandler && aeHandler.refreshPanelViaInteraction) {
-            await aeHandler.refreshPanelViaInteraction(interaction, `❌ **Failed to connect to RCON.**`);
+        const handler = type === 'custom_zone' ? require('../handlers/customZoneHandler') : require('../handlers/bindHandler');
+        if (handler && handler.refreshPanelViaInteraction) {
+            await handler.refreshPanelViaInteraction(interaction, `❌ **Failed to connect to RCON.**`, targetId);
         }
         if (adminPosQueue.has(adminId)) {
             clearTimeout(adminPosQueue.get(adminId).timeoutTimer);
@@ -339,7 +361,39 @@ async function triggerCustomEvent(guildId, eventType, data = {}) {
 }
 
 async function processBountyLogic(guildId, killerDb, victimDb, client, config) {
-    // Bounty Logic Remains the Same...
+    const currency = config.economyCurrency || 'Scrap';
+    const guild = client.guilds.cache.get(guildId);
+    const gameChannel = config.logGameChannelId ? guild?.channels.cache.get(config.logGameChannelId) : null;
+
+    await killerDb.update({ currentKillstreak: (killerDb.currentKillstreak || 0) + 1 });
+
+    if (killerDb.currentKillstreak >= (config.bountyKillsToActivate || 5)) {
+        const cd = await BountyCooldown.findOne({ where: { guildId, userId: killerDb.userId } });
+        const now = new Date();
+        
+        if (!cd || cd.expiresAt < now) {
+            const existingBounty = await ActiveBounty.findOne({ where: { guildId, userId: killerDb.userId } });
+            
+            if (!existingBounty) {
+                await ActiveBounty.create({ guildId, userId: killerDb.userId, inGameName: killerDb.inGameName, reward: config.bountyRewardAmount || 500 });
+                const cdTime = new Date(now.getTime() + (config.bountyCooldownMinutes || 60) * 60000);
+                await BountyCooldown.upsert({ guildId, userId: killerDb.userId, expiresAt: cdTime });
+
+                if (gameChannel) {
+                    gameChannel.send({ embeds: [new EmbedBuilder().setTitle('🎯 BOUNTY PLACED!').setDescription(`**${killerDb.inGameName}** is unstoppable on a **${killerDb.currentKillstreak} killstreak**!\n\nA bounty of **${config.bountyRewardAmount || 500} ${currency}** has been placed on their head!`).setColor('#e74c3c')] }).catch(()=>{});
+                }
+            }
+        }
+    }
+
+    const activeBounty = await ActiveBounty.findOne({ where: { guildId, userId: victimDb.userId } });
+    if (activeBounty) {
+        await killerDb.update({ wallet: killerDb.wallet + activeBounty.reward });
+        if (gameChannel) {
+            gameChannel.send({ embeds: [new EmbedBuilder().setTitle('🎯 BOUNTY CLAIMED!').setDescription(`**${killerDb.inGameName}** has killed **${victimDb.inGameName}** and claimed the bounty of **${activeBounty.reward} ${currency}**!`).setColor('#2ecc71')] }).catch(()=>{});
+        }
+        await activeBounty.destroy();
+    }
 }
 
 module.exports = { connectRcon, sendRconCommand, triggerCustomEvent, activeConnections, adminPosQueue, queueAdminPos };

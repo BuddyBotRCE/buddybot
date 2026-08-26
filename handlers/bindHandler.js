@@ -4,7 +4,7 @@ const { queueAdminPos } = require('../utils/rconManager');
 
 const bindSessions = new Map();
 
-// Rust In-Game Quick Chat Wheel Options
+// Complete Rust Console Edition Quick Chat / Radial Wheel Options
 const QUICK_CHAT_WHEEL_OPTIONS = [
     { label: 'Help / Assistance', value: 'help', emoji: '🆘', description: 'Quick chat wheel: Help' },
     { label: 'Friendly / Hello', value: 'hello', emoji: '👋', description: 'Quick chat wheel: Hello' },
@@ -13,7 +13,15 @@ const QUICK_CHAT_WHEEL_OPTIONS = [
     { label: 'Loot / Cargo', value: 'loot', emoji: '🎁', description: 'Quick chat wheel: Loot' },
     { label: 'Yes / Affirmative', value: 'yes', emoji: '✅', description: 'Quick chat wheel: Yes' },
     { label: 'No / Negative', value: 'no', emoji: '❌', description: 'Quick chat wheel: No' },
-    { label: 'Wait / Hold', value: 'wait', emoji: '⏳', description: 'Quick chat wheel: Hold on' }
+    { label: 'Wait / Hold', value: 'wait', emoji: '⏳', description: 'Quick chat wheel: Hold on' },
+    { label: 'Follow Me', value: 'follow', emoji: '👉', description: 'Quick chat wheel: Follow me' },
+    { label: 'Cover Me', value: 'cover', emoji: '🛡️', description: 'Quick chat wheel: Cover me' },
+    { label: 'Enemies Ahead', value: 'enemies', emoji: '🎯', description: 'Quick chat wheel: Enemies sighted' },
+    { label: 'Need Loot / Resources', value: 'needloot', emoji: '💎', description: 'Quick chat wheel: Need resources' },
+    { label: 'Sorry', value: 'sorry', emoji: '🙇', description: 'Quick chat wheel: Sorry' },
+    { label: 'Thanks', value: 'thanks', emoji: '🙏', description: 'Quick chat wheel: Thanks' },
+    { label: 'Nice Shot', value: 'niceshot', emoji: '🔥', description: 'Quick chat wheel: Nice shot' },
+    { label: 'Trap / Danger Ahead', value: 'trap', emoji: '⚡', description: 'Quick chat wheel: Trap' }
 ];
 
 const buildPanelPayload = async (guildId, messageOverride = '') => {
@@ -26,9 +34,6 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
     const embed = new EmbedBuilder().setColor('#3498db').setTitle('🗣️ Custom Binds & Quick Chat Wheel Manager');
     if (messageOverride) embed.setDescription(`**${messageOverride}**\n\n`);
 
-    // ---------------------------------------------------
-    // PAGE 1: MAIN MENU (LIST + TYPE BUTTONS)
-    // ---------------------------------------------------
     if (session.view === 'main') {
         let bindList = '';
         for (const b of allBinds) {
@@ -41,14 +46,12 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
             { name: '🛠️ Create New Bind', value: "👇 **Click a button below to choose your bind type:**", inline: false }
         );
 
-        // Action Type Buttons
         components.push(new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('bind_create_kit').setLabel('Kit Bind').setStyle(ButtonStyle.Primary).setEmoji('📦'),
             new ButtonBuilder().setCustomId('bind_create_teleport').setLabel('Teleport Bind').setStyle(ButtonStyle.Success).setEmoji('🌀'),
             new ButtonBuilder().setCustomId('bind_create_recycler').setLabel('Recycler Bind').setStyle(ButtonStyle.Secondary).setEmoji('♻️')
         ));
 
-        // Existing Binds Management Buttons (Max 4)
         if (allBinds.length > 0) {
             const row2 = new ActionRowBuilder();
             for (const b of allBinds.slice(0, 4)) {
@@ -57,9 +60,6 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
             components.push(row2);
         }
     } 
-    // ---------------------------------------------------
-    // PAGE 2: CONFIGURING INDIVIDUAL BIND
-    // ---------------------------------------------------
     else if (session.view === 'bind') {
         const activeBind = await CustomBind.findByPk(session.selectedBindId);
         if (!activeBind) {
@@ -76,14 +76,12 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
             { name: `🛡️ Economy & Security`, value: `**Cost:** ${activeBind.cost || 0} Scrap\n**Cooldown:** ${activeBind.cooldown || 0}s\n**Required Role ID:** \`${activeBind.roleId || 'None'}\``, inline: true }
         );
 
-        // Row 1: Configurations
         components.push(new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('bind_btn_name').setLabel('Rename').setStyle(ButtonStyle.Primary).setEmoji('📝'),
             new ButtonBuilder().setCustomId('bind_btn_emote').setLabel('Quick Chat Wheel').setStyle(ButtonStyle.Secondary).setEmoji('💬'),
             new ButtonBuilder().setCustomId('bind_btn_options').setLabel('Cost, CD & Role').setStyle(ButtonStyle.Primary).setEmoji('⚙️')
         ));
 
-        // Row 2: Type Specific Actions (Kit selection or Position setting)
         if (activeBind.actionType === 'kit') {
             components.push(new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('bind_btn_kitselect').setLabel('Select In-Game Kit').setStyle(ButtonStyle.Success).setEmoji('📦')
@@ -94,15 +92,11 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
             ));
         }
 
-        // Row 3: Delete & Back
         components.push(new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('bind_btn_delete').setLabel('Delete Bind').setStyle(ButtonStyle.Danger).setEmoji('💀'),
             new ButtonBuilder().setCustomId('bind_btn_back').setLabel('Back to List').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
         ));
     }
-    // ---------------------------------------------------
-    // PAGE 3: QUICK CHAT WHEEL EMOTE SELECTOR
-    // ---------------------------------------------------
     else if (session.view === 'emote_picker') {
         embed.setTitle('💬 Select In-Game Quick Chat Wheel Option').setDescription('Choose which quick-chat wheel phrase triggers this command in-game.');
         components.push(new ActionRowBuilder().addComponents(
@@ -112,9 +106,6 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
             new ButtonBuilder().setCustomId('bind_back_bind').setLabel('Cancel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
         ));
     }
-    // ---------------------------------------------------
-    // PAGE 4: KIT SELECTOR
-    // ---------------------------------------------------
     else if (session.view === 'kit_picker') {
         embed.setTitle('📦 Select In-Game Kit').setDescription('Choose which kit this bind will grant to players.');
         const serverKits = await ServerKit.findAll({ where: { guildId } });
@@ -181,7 +172,6 @@ const bindHandler = async (interaction, client) => {
             return await renderBindPanel(interaction);
         }
 
-        // --- BUTTON: CREATE BIND TYPES ---
         if (customId.startsWith('bind_create_')) {
             const type = customId.replace('bind_create_', '');
             const newBind = await CustomBind.create({ 
@@ -197,7 +187,6 @@ const bindHandler = async (interaction, client) => {
             return await renderBindPanel(interaction, `✨ Created new ${type} bind!`);
         }
 
-        // --- DROPDOWN: QUICK CHAT WHEEL SELECTION ---
         if (customId === 'bind_do_emote' && interaction.isStringSelectMenu()) {
             const wheelOption = QUICK_CHAT_WHEEL_OPTIONS.find(o => o.value === interaction.values[0]);
             const emote = wheelOption ? `${wheelOption.emoji} ${wheelOption.label}` : interaction.values[0];
@@ -206,7 +195,6 @@ const bindHandler = async (interaction, client) => {
             return await renderBindPanel(interaction, `💬 Quick chat wheel trigger updated!`);
         }
 
-        // --- DROPDOWN: KIT SELECTION ---
         if (customId === 'bind_do_kit' && interaction.isStringSelectMenu()) {
             const kitName = interaction.values[0];
             const command = `kit.give "{player}" "${kitName}"`;
@@ -215,7 +203,6 @@ const bindHandler = async (interaction, client) => {
             return await renderBindPanel(interaction, `📦 Bound to kit: **${kitName}**!`);
         }
 
-        // --- MODALS ---
         if (interaction.isModalSubmit() && customId === 'modal_bind_name') {
             const name = interaction.fields.getTextInputValue('b_name').trim() || "Custom Bind";
             if (session.selectedBindId) {
@@ -238,7 +225,6 @@ const bindHandler = async (interaction, client) => {
             return await renderBindPanel(interaction, `⚙️ Options (Cost, Cooldown, Role) saved!`);
         }
 
-        // --- BUTTONS ---
         if (interaction.isButton()) {
             if (customId.startsWith('bind_load_')) {
                 session.selectedBindId = parseInt(customId.replace('bind_load_', ''));
@@ -280,7 +266,6 @@ const bindHandler = async (interaction, client) => {
                 return await interaction.showModal(modal);
             }
 
-            // 🎯 POSITION CAPTURE FOR TELEPORT & RECYCLER
             if (customId === 'bind_btn_getpos') {
                 const loadingPayload = await buildPanelPayload(guildId, '⏳ **Extracting your position from the server...**');
                 await interaction.update(loadingPayload);
@@ -304,9 +289,6 @@ const bindHandler = async (interaction, client) => {
     }
 };
 
-// ==========================================
-// RCON AUTO-SAVE RECEIVER FOR POSITION BINDS
-// ==========================================
 bindHandler.autoSavePosition = async (guildId, x, y, z, bindId) => {
     if (!bindId) return;
     const bind = await CustomBind.findByPk(bindId);
@@ -322,7 +304,6 @@ bindHandler.autoSavePosition = async (guildId, x, y, z, bindId) => {
     await CustomBind.update({ posX: x, posY: y, posZ: z, command }, { where: { id: bindId } });
 };
 
-// LIVE UPDATE HOOK FOR RCON MANAGER
 bindHandler.refreshPanelViaInteraction = async (interaction, messageOverride, bindId = null) => {
     try {
         const guildId = interaction.guild.id;
