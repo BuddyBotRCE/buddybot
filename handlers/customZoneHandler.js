@@ -266,7 +266,7 @@ const customZoneHandler = async (interaction, client) => {
                 return await renderCZPanel(interaction, `👁️ Map Visibility is now **${!z.visible ? 'VISIBLE' : 'HIDDEN'}**!`);
             }
 
-            // ⚡ TOGGLE ZONE & FIRE RCON COMMAND TO SPAWN/REMOVE IN-GAME RING
+            // ⚡ TOGGLE ZONE & FIRE NATIVE RUST CONSOLE EDITION COMMANDS
             if (customId === 'cz_btn_toggle') {
                 const z = await PveZone.findByPk(session.selectedZoneId);
                 const willBeEnabled = !z.isEnabled;
@@ -274,16 +274,49 @@ const customZoneHandler = async (interaction, client) => {
 
                 try {
                     if (willBeEnabled && z.posX && z.posZ) {
-                        // Dispatches your server plugin command to render the colored ring
-                        await sendRconCommand(guildId, `zone_add "${z.name}" ${z.radius} ${z.posX} ${z.posY || 0} ${z.posZ} ${z.color} ${z.shape}`, client);
+                        // 1. Format color string for RCE e.g. (255,0,0) from hex
+                        let rgbColor = "(255,0,0)";
+                        if (z.color && z.color.startsWith('#')) {
+                            const hex = z.color.replace('#', '');
+                            const r = parseInt(hex.substring(0, 2), 16) || 255;
+                            const g = parseInt(hex.substring(2, 4), 16) || 0;
+                            const b = parseInt(hex.substring(4, 6), 16) || 0;
+                            rgbColor = `(${r},${g},${b})`;
+                        }
+
+                        const shapeType = z.shape === 'box' ? 'Box' : 'Sphere';
+                        // For sphere, size is just radius. For box, it uses radius for width/height/depth
+                        const sizeParam = z.shape === 'box' ? `(${z.radius},${z.radius},${z.radius})` : `${z.radius}`;
+                        const pvpVal = z.pvp ? 1 : 0;
+                        const pveVal = z.pve ? 1 : 0;
+                        const buildDmgVal = 0; 
+                        const buildVal = z.build ? 1 : 0;
+                        const showAreaVal = z.visible ? 1 : 0;
+
+                        // 2. Execute Native RCE Creation Command
+                        // Format: zones.createcustomzone "Name" (x,y,z) rotation Shape Size PvP? NpcDmg? Radiation BuildDmg? Build?
+                        const createCmd = `zones.createcustomzone "${z.name}" (${z.posX},${z.posY || 35},${z.posZ}) 0 ${shapeType} ${sizeParam} ${pvpVal} ${pveVal} 0 ${buildDmgVal} ${buildVal}`;
+                        await sendRconCommand(guildId, createCmd, client);
+
+                        // 3. Apply Visual Area Ring & Color & Messages via editcustomzone
+                        await sendRconCommand(guildId, `zones.editcustomzone "${z.name}" "showarea" "${showAreaVal}"`, client);
+                        await sendRconCommand(guildId, `zones.editcustomzone "${z.name}" "color" "${rgbColor}"`, client);
+
+                        if (z.enterMessage) {
+                            await sendRconCommand(guildId, `zones.editcustomzone "${z.name}" "entermessage" "${z.enterMessage}"`, client);
+                        }
+                        if (z.exitMessage) {
+                            await sendRconCommand(guildId, `zones.editcustomzone "${z.name}" "leavemessage" "${z.exitMessage}"`, client);
+                        }
                     } else if (!willBeEnabled) {
-                        await sendRconCommand(guildId, `zone_remove "${z.name}"`, client);
+                        // Remove native RCE zone
+                        await sendRconCommand(guildId, `zones.deletecustomzone "${z.name}"`, client);
                     }
                 } catch (err) {
-                    console.error("[RCON ZONE COMMAND ERROR]", err);
+                    console.error("[RCON NATIVE ZONE ERROR]", err);
                 }
 
-                return await renderCZPanel(interaction, `⚡ Zone is now **${willBeEnabled ? 'ENABLED & Ring Spawned' : 'DISABLED & Ring Removed'}**!`);
+                return await renderCZPanel(interaction, `⚡ Zone is now **${willBeEnabled ? 'ENABLED & Ring Spawned' : 'DISABLED & Deleted'}** on the server!`);
             }
 
             if (customId === 'cz_btn_delete') {
