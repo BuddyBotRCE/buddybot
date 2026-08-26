@@ -5,7 +5,6 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('
 const activeConnections = new Map();
 const adminPosQueue = new Map(); 
 
-// --- EMBEDDED RUST EVENT PARSER ---
 function registerEventParser(rconMock, emit) {
     rconMock.on('message', (msg) => {
         if (!msg || !msg.message) return;
@@ -134,28 +133,33 @@ async function connectRcon(guildId, client) {
                                 }
                             } 
                             else if (setupData.type === 'custom_bind') {
-                                // Direct database save to bypass circular dependency blocks!
-                                const { CustomBind } = require('../database/db');
-                                const bind = await CustomBind.findByPk(setupData.targetId);
-                                
-                                if (bind) {
-                                    let command = '';
-                                    if (bind.actionType === 'teleport') {
-                                        command = `teleportpos "{player}" ${posX} ${posY} ${posZ}`;
-                                    } else if (bind.actionType === 'recycler') {
-                                        command = `spawn recycler_static ${posX} ${posY} ${posZ}`;
+                                try {
+                                    console.log(`[DEBUG-BINDS] Saving Coords to Bind ID ${setupData.targetId}: X:${posX}, Y:${posY}, Z:${posZ}`);
+                                    const bind = await CustomBind.findByPk(setupData.targetId);
+                                    
+                                    if (bind) {
+                                        let command = '';
+                                        if (bind.actionType === 'teleport') {
+                                            command = `teleportpos "{player}" ${posX} ${posY} ${posZ}`;
+                                        } else if (bind.actionType === 'recycler') {
+                                            command = `spawn recycler_static ${posX} ${posY} ${posZ}`;
+                                        }
+                                        await bind.update({ posX, posY, posZ, command });
+                                        console.log(`[DEBUG-BINDS] Successfully updated DB Command: ${command}`);
+                                    } else {
+                                        console.error(`[DEBUG-BINDS] Could not find Bind ID ${setupData.targetId} in DB!`);
                                     }
-                                    // Save it instantly to the database
-                                    await bind.update({ posX, posY, posZ, command });
-                                }
 
-                                const bindHandler = require('../handlers/bindHandler');
-                                if (bindHandler && bindHandler.refreshPanelViaInteraction) {
-                                    await bindHandler.refreshPanelViaInteraction(
-                                        setupData.interaction, 
-                                        `✅ **Position Captured Automatically!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``,
-                                        setupData.targetId
-                                    );
+                                    const bindHandler = require('../handlers/bindHandler');
+                                    if (bindHandler && bindHandler.refreshPanelViaInteraction) {
+                                        await bindHandler.refreshPanelViaInteraction(
+                                            setupData.interaction, 
+                                            `✅ **Position Captured Automatically!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``,
+                                            setupData.targetId
+                                        );
+                                    }
+                                } catch (error) {
+                                    console.error("[DEBUG-BINDS] Error saving bind position:", error);
                                 }
                             }
 
@@ -234,7 +238,6 @@ async function connectRcon(guildId, client) {
                 // ==========================================
                 // 4. CHAT PARSER & CUSTOM BINDS EXECUTION
                 // ==========================================
-                // 👈 FIX: Universal Chat Catcher for [Team], [Local], [Server], [Chat]
                 const chatMatch = msg.match(/\[(.*?)\]\s*(.*?)\s*:\s*(.*)/i);
                 
                 if (chatMatch) {
@@ -260,6 +263,7 @@ async function connectRcon(guildId, client) {
                         );
                         
                         if (activeBind) {
+                            console.log(`[DEBUG-BINDS] Matched Chat: "${chatText}" to Bind ID ${activeBind.id}`);
                             const userProfile = await UserEconomy.findOne({ where: { guildId: guildId, inGameName: playerName } });
                             
                             if (activeBind.cost > 0 && (!userProfile || userProfile.wallet < activeBind.cost)) {
@@ -275,6 +279,7 @@ async function connectRcon(guildId, client) {
                             const commands = finalCommandString.split('\n');
                             for (const cmd of commands) {
                                 if (cmd.trim() !== '') {
+                                    console.log(`[DEBUG-BINDS] Executing Command: ${cmd.trim()}`);
                                     await sendRconCommand(guildId, cmd.trim(), client);
                                 }
                             }
@@ -399,7 +404,6 @@ async function processBountyLogic(guildId, killerDb, victimDb, client, config) {
     if (activeBounty) {
         await killerDb.update({ wallet: killerDb.wallet + activeBounty.reward });
         if (gameChannel) {
-            // 👈 FIX: Typo from before is fixed here (EmbedBuilder)
             gameChannel.send({ embeds: [new EmbedBuilder().setTitle('🎯 BOUNTY CLAIMED!').setDescription(`**${killerDb.inGameName}** has killed **${victimDb.inGameName}** and claimed the bounty of **${activeBounty.reward} ${currency}**!`).setColor('#2ecc71')] }).catch(()=>{});
         }
         await activeBounty.destroy();
