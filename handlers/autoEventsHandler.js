@@ -91,7 +91,10 @@ const autoEventsHandler = async (interaction, client) => {
         };
 
         // --- 🚦 1. MODAL SUBMISSIONS (Handled first) ---
+        
         if (interaction.isModalSubmit() && customId === 'modal_ae_settings') {
+            await interaction.deferUpdate().catch(() => {});
+
             const newName = interaction.fields.getTextInputValue('ev_name').trim();
             const amount = parseInt(interaction.fields.getTextInputValue('amount')) || 1;
             const interval = parseInt(interaction.fields.getTextInputValue('interval')) || 60;
