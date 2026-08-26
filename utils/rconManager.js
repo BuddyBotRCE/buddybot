@@ -140,7 +140,6 @@ async function connectRcon(guildId, client) {
                                     if (bind) {
                                         let command = '';
                                         if (bind.actionType === 'teleport') {
-                                            // 👈 Corrected back to RCE standard 'teleportpos'
                                             command = `teleportpos "{player}" ${posX} ${posY} ${posZ}`;
                                         } else if (bind.actionType === 'recycler') {
                                             command = `spawn recycler_static ${posX} ${posY} ${posZ}`;
@@ -237,25 +236,17 @@ async function connectRcon(guildId, client) {
                 }
 
                 // ==========================================
-                // 4. CHAT PARSER & CUSTOM BINDS EXECUTION (BULLETPROOF RCE)
+                // 4. CHAT PARSER (RCE FORMAT: PlayerName (Channel): Message)
                 // ==========================================
-                // Looks for any log with a colon that isn't a killfeed or system message
                 if (msg.includes(':') && !msgLower.includes('[killfeed]') && !msgLower.includes('rcon')) {
                     const parts = msg.split(':');
-                    const leftSide = parts[0]; 
+                    const leftSide = parts[0].trim(); // e.g. "PlayerName (Server)" or "PlayerName (Local)"
                     const chatText = parts.slice(1).join(':').toLowerCase().trim();
 
-                    // Handle Cross-Chat if it's explicitly global chat
-                    if (msgLower.includes('[chat]') && currentConfig && currentConfig.crossChatChannelId && client) {
-                        const crossChatChannel = client.channels.cache.get(currentConfig.crossChatChannelId);
-                        const chatMatch = msg.match(/\[(.*?)\]\s*(.*?)\s*:\s*(.*)/i);
-                        if (chatMatch && crossChatChannel && !chatMatch[2].includes('[Discord]')) {
-                            const pName = chatMatch[2].replace(/\[.*?\]/g, '').trim(); 
-                            crossChatChannel.send(`💬 **[In-Game] ${pName}**: ${chatText}`);
-                        }
-                    }
+                    // Clean up left side to isolate just the player name (remove parentheses and channel name)
+                    let rawPlayerName = leftSide.replace(/\s*\(.*?\)\s*/g, '').trim();
 
-                    // Check if chat matches a Bind
+                    // Check if chat matches a configured Custom Bind
                     const serverBinds = await CustomBind.findAll({ where: { guildId: guildId } });
                     const activeBind = serverBinds.find(b => 
                         (b.targetValue && chatText.includes(b.targetValue.toLowerCase())) || 
@@ -263,13 +254,11 @@ async function connectRcon(guildId, client) {
                     );
                     
                     if (activeBind) {
-                        // Bind matches! Now, did a registered player say it?
                         const playersList = await UserEconomy.findAll({ where: { guildId: guildId } });
                         let matchedPlayer = null;
                         
                         for (const p of playersList) {
-                            // Check if the left side of the colon contains their in-game name
-                            if (p.inGameName && leftSide.toLowerCase().includes(p.inGameName.toLowerCase())) {
+                            if (p.inGameName && rawPlayerName.toLowerCase().includes(p.inGameName.toLowerCase())) {
                                 matchedPlayer = p;
                                 break;
                             }
