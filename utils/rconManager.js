@@ -140,11 +140,11 @@ async function connectRcon(guildId, client) {
                                     if (bind) {
                                         let command = '';
                                         if (bind.actionType === 'teleport') {
-                                            command = `teleportpos "{player}" ${posX} ${posY} ${posZ}`;
+                                            command = `teleport2pos "{player}" ${posX} ${posY} ${posZ}`;
                                         } else if (bind.actionType === 'recycler') {
                                             command = `spawn recycler_static ${posX} ${posY} ${posZ}`;
                                         }
-                                        await bind.update({ posX, posY, posZ, command });
+                                        await bind.update({ command });
                                         console.log(`[DEBUG-BINDS] Successfully updated DB Command: ${command}`);
                                     } else {
                                         console.error(`[DEBUG-BINDS] Could not find Bind ID ${setupData.targetId} in DB!`);
@@ -308,7 +308,6 @@ async function sendRconCommand(guildId, commandStr, client = null) {
     return true;
 }
 
-// === LIVE UPDATING NO-TYPING AUTO POS QUEUE ===
 async function queueAdminPos(interaction, type = 'custom_bind', targetId = null) {
     const guildId = interaction.guild.id;
     const adminId = interaction.user.id;

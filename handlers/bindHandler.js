@@ -153,7 +153,6 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
             return await buildPanelPayload(guildId, '❌ Bind not found.');
         }
 
-        // --- THE FIX: EXTRACT COORDINATES DIRECTLY FROM THE SAVED COMMAND ---
         let posText = '*Not Set*';
         if (activeBind.command && (activeBind.actionType === 'teleport' || activeBind.actionType === 'recycler')) {
             const matches = activeBind.command.match(/-?\d+(\.\d+)?/g);
@@ -445,7 +444,6 @@ const bindHandler = async (interaction, client) => {
                 return;
             }
 
-            // --- THE FIX: PLACE ON GROUND EXTRACTS COORDS DIRECTLY FROM COMMAND ---
             if (customId === 'bind_btn_ground') {
                 const bind = await CustomBind.findByPk(session.selectedBindId);
                 
@@ -467,7 +465,7 @@ const bindHandler = async (interaction, client) => {
                 
                 let newCommand = '';
                 if (bind.actionType === 'teleport') {
-                    newCommand = `teleportpos "{player}" ${cX} ${loweredY} ${cZ}`;
+                    newCommand = `teleport2pos "{player}" ${cX} ${loweredY} ${cZ}`;
                 } else if (bind.actionType === 'recycler') {
                     newCommand = `spawn recycler_static ${cX} ${loweredY} ${cZ}`;
                 }
