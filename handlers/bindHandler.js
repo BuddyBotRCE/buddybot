@@ -153,7 +153,16 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
             return await buildPanelPayload(guildId, '❌ Bind not found.');
         }
 
-        const posText = (activeBind.posX && activeBind.posZ) ? `\`X: ${activeBind.posX}, Y: ${activeBind.posY || '0'}, Z: ${activeBind.posZ}\`` : '*Not Set*';
+        // --- THE FIX: EXTRACT COORDINATES DIRECTLY FROM THE SAVED COMMAND ---
+        let posText = '*Not Set*';
+        if (activeBind.command && (activeBind.actionType === 'teleport' || activeBind.actionType === 'recycler')) {
+            const matches = activeBind.command.match(/-?\d+(\.\d+)?/g);
+            if (matches && matches.length >= 3) {
+                const len = matches.length;
+                posText = `\`X: ${matches[len-3]}, Y: ${matches[len-2]}, Z: ${matches[len-1]}\``;
+            }
+        }
+
         const roleDisplay = activeBind.roleId ? `<@&${activeBind.roleId}>` : '`None`';
 
         embed.setTitle(`🗣️ Managing Bind: ${activeBind.name} (${activeBind.actionType.toUpperCase()})`);
@@ -436,24 +445,36 @@ const bindHandler = async (interaction, client) => {
                 return;
             }
 
+            // --- THE FIX: PLACE ON GROUND EXTRACTS COORDS DIRECTLY FROM COMMAND ---
             if (customId === 'bind_btn_ground') {
                 const bind = await CustomBind.findByPk(session.selectedBindId);
-                if (!bind || bind.posY === null || bind.posY === undefined) {
+                
+                if (!bind || !bind.command) {
                     return await renderBindPanel(interaction, `❌ **Please click 'Set Position' first!**`);
                 }
-                
-                const loweredY = (parseFloat(bind.posY) - 0.5).toFixed(2);
+
+                const matches = bind.command.match(/-?\d+(\.\d+)?/g);
+                if (!matches || matches.length < 3) {
+                    return await renderBindPanel(interaction, `❌ **Could not read coordinates from saved command! Please Set Position again.**`);
+                }
+
+                const len = matches.length;
+                const cX = matches[len-3];
+                const cY = parseFloat(matches[len-2]);
+                const cZ = matches[len-1];
+
+                const loweredY = (cY - 0.5).toFixed(2);
                 
                 let newCommand = '';
                 if (bind.actionType === 'teleport') {
-                    newCommand = `teleportpos "{player}" ${bind.posX} ${loweredY} ${bind.posZ}`;
+                    newCommand = `teleportpos "{player}" ${cX} ${loweredY} ${cZ}`;
                 } else if (bind.actionType === 'recycler') {
-                    newCommand = `spawn recycler_static ${bind.posX} ${loweredY} ${bind.posZ}`;
+                    newCommand = `spawn recycler_static ${cX} ${loweredY} ${cZ}`;
                 }
                 
-                await CustomBind.update({ posY: loweredY, command: newCommand }, { where: { id: session.selectedBindId } });
+                await CustomBind.update({ command: newCommand }, { where: { id: session.selectedBindId } });
                 session.view = 'bind';
-                return await renderBindPanel(interaction, `⬇️ **Placed on Ground!** (Lowered Y-axis to ${loweredY})`);
+                return await renderBindPanel(interaction, `⬇️ **Placed on Ground!** (Lowered Y-axis from ${cY} to ${loweredY})`);
             }
 
             if (customId === 'bind_btn_delete') {
