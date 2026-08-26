@@ -134,8 +134,8 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
         components.push(new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('bind_create_kit').setLabel('Kit Bind').setStyle(ButtonStyle.Primary).setEmoji('📦'),
             new ButtonBuilder().setCustomId('bind_create_teleport').setLabel('Teleport Bind').setStyle(ButtonStyle.Success).setEmoji('🌀'),
-            new ButtonBuilder().setCustomId('bind_create_recycler').setLabel('Recycler Bind').setStyle(ButtonStyle.Secondary).setEmoji('♻️')
-            
+            new ButtonBuilder().setCustomId('bind_create_recycler').setLabel('Recycler Bind').setStyle(ButtonStyle.Secondary).setEmoji('♻️'),
+            new ButtonBuilder().setCustomId('bind_clear_all').setLabel('Clear Binds').setStyle(ButtonStyle.Danger).setEmoji('🧹')
         ));
 
         if (allBinds.length > 0) {
@@ -304,9 +304,12 @@ const bindHandler = async (interaction, client) => {
             const cat = session.selectedCategory || 'cat_combat';
             const options = CHAT_OPTIONS_MAP[cat] || [];
             const wheelOption = options.find(o => o.value === interaction.values[0]);
-            const emote = wheelOption ? `${wheelOption.emoji} ${wheelOption.label}` : interaction.values[0];
             
-            await CustomBind.update({ emote, targetValue: interaction.values[0] }, { where: { id: session.selectedBindId } });
+            const emote = wheelOption ? `${wheelOption.emoji} ${wheelOption.label}` : interaction.values[0];
+            // FIX: Saving the actual game phrase to targetValue
+            const targetPhrase = wheelOption ? wheelOption.label : interaction.values[0];
+            
+            await CustomBind.update({ emote, targetValue: targetPhrase }, { where: { id: session.selectedBindId } });
             session.view = 'bind';
             return await renderBindPanel(interaction, `💬 Quick-chat wheel trigger updated!`);
         }
@@ -400,7 +403,6 @@ const bindHandler = async (interaction, client) => {
             if (customId === 'bind_btn_getpos') {
                 const loadingPayload = await buildPanelPayload(guildId, '⏳ **Extracting your position from the server...**');
                 await interaction.update(loadingPayload);
-                // 👈 FIX: THIS IS NOW SET TO 'custom_bind' (WAS 'custom_zone')
                 await queueAdminPos(interaction, 'custom_bind', session.selectedBindId);
                 return;
             }
@@ -428,11 +430,9 @@ bindHandler.autoSavePosition = async (guildId, x, y, z, bindId) => {
 
     let command = '';
     if (bind.actionType === 'teleport') {
-        // Rust expects spaces between X Y Z, no commas or quotes around the numbers
-        command = `teleportpos "{player}" ${x} ${y} ${z}`;
+        command = `global.teleportpos "{player}" ${x} ${y} ${z}`;
     } else if (bind.actionType === 'recycler') {
-        // Spawn also expects spaces
-        command = `spawn recycler_static ${x} ${y} ${z}`;
+        command = `global.spawn recycler_static ${x} ${y} ${z}`;
     }
 
     await CustomBind.update({ posX: x, posY: y, posZ: z, command }, { where: { id: bindId } });
@@ -458,17 +458,4 @@ bindHandler.refreshPanelViaInteraction = async (interaction, messageOverride, bi
     }
 };
 
-if (customId === 'bind_do_emote' && interaction.isStringSelectMenu()) {
-            const cat = session.selectedCategory || 'cat_combat';
-            const options = CHAT_OPTIONS_MAP[cat] || [];
-            const wheelOption = options.find(o => o.value === interaction.values[0]);
-            
-            const emote = wheelOption ? `${wheelOption.emoji} ${wheelOption.label}` : interaction.values[0];
-            
-            // 👈 FIX: Save the actual English phrase the game prints (e.g. "Going for Wood") instead of the internal code
-            const targetPhrase = wheelOption ? wheelOption.label : interaction.values[0];
-            
-            await CustomBind.update({ emote, targetValue: targetPhrase }, { where: { id: session.selectedBindId } });
-            session.view = 'bind';
-            return await renderBindPanel(interaction, `💬 Quick-chat wheel trigger updated!`);
-        }
+module.exports = bindHandler;

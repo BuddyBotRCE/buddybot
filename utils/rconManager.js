@@ -2,8 +2,6 @@ const WebSocket = require('ws');
 const { GuildConfig, UserEconomy, CustomBind, BindCooldown, ActiveBounty, BountyCooldown } = require('../database/db');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 
-// FIX: Removed the top-level bindHandler require to fix the Circular Dependency
-
 const activeConnections = new Map();
 const adminPosQueue = new Map(); 
 
@@ -135,7 +133,6 @@ async function connectRcon(guildId, client) {
                                     }
                                 }
                             } 
-                            // 👈 ROUTE 3: CUSTOM BINDS (FIXED DYNAMIC LOAD)
                             else if (setupData.type === 'custom_bind') {
                                 const bindHandler = require('../handlers/bindHandler');
                                 if (bindHandler && bindHandler.autoSavePosition) {
@@ -221,10 +218,10 @@ async function connectRcon(guildId, client) {
                         await processBountyLogic(guildId, killerDb, victimDb, client, currentConfig);
                     }
                 }
+
                 // ==========================================
                 // 4. CHAT PARSER & CUSTOM BINDS EXECUTION
                 // ==========================================
-                // 👈 FIX: Listen for both Global [CHAT] and Team [TEAM] which radial wheel uses
                 if (msgLower.includes('[chat]') || msgLower.includes('[team chat]') || msgLower.includes('[team]')) {
                     const chatMatch = msg.match(/\[(?:CHAT|TEAM CHAT|TEAM)\] (.*?): (.*)/i);
                     if (chatMatch) {
@@ -233,7 +230,6 @@ async function connectRcon(guildId, client) {
 
                         if (currentConfig && currentConfig.crossChatChannelId && client) {
                             const crossChatChannel = client.channels.cache.get(currentConfig.crossChatChannelId);
-                            // Only cross-chat global [CHAT], not private team chats
                             if (crossChatChannel && !playerName.includes('[Discord]') && msgLower.includes('[chat]')) {
                                 crossChatChannel.send(`💬 **[In-Game] ${playerName}**: ${chatText}`);
                             }
@@ -241,7 +237,6 @@ async function connectRcon(guildId, client) {
 
                         const serverBinds = await CustomBind.findAll({ where: { guildId: guildId } });
                         
-                        // Matches the exact English phrase outputted by the Quick-Chat wheel
                         const activeBind = serverBinds.find(b => 
                             (b.targetValue && chatText.includes(b.targetValue.toLowerCase())) || 
                             (b.name && chatText.includes(b.name.toLowerCase()))
