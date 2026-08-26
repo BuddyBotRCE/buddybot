@@ -24,7 +24,7 @@ const autoEventsHandler = async (interaction, client) => {
         }
         const session = aeSessions.get(guildId);
 
-        // --- BULLETPROOF PANEL RENDERER ---
+        // --- HELPER TO RENDER PANEL ---
         const renderAEPanel = async (inter, messageOverride = '') => {
             const allEvents = await AutoEvent.findAll({ where: { guildId }, order: [['id', 'ASC']] });
             
@@ -42,11 +42,11 @@ const autoEventsHandler = async (interaction, client) => {
                 .setDescription(`${messageOverride ? `**${messageOverride}**\n\n` : ''}Follow the steps below to setup custom automated events.\n\n**Live Status Board:**\n${statusBoard}`)
                 .setColor('#3498db');
 
-            let locList = '*No positions saved yet. Click "Get Admin Pos" in-game to auto-add one!*';
             if (activeEvent) {
-                if (eventLocs.length > 0) {
-                    locList = eventLocs.map((l, i) => `**${i + 1}.** \`${l.posX}, ${l.posY}, ${l.posZ}\``).join('\n');
-                }
+                let locList = eventLocs.length > 0 
+                    ? eventLocs.map((l, i) => `**${i + 1}.** \`${l.posX}, ${l.posY}, ${l.posZ}\``).join('\n') 
+                    : '*No positions saved yet. Click "Get Admin Pos" in-game to auto-add one!*';
+
                 embed.addFields({ 
                     name: `📝 Editing Profile: ${activeEvent.name}`, 
                     value: `• **Event Type:** ${TYPE_INFO[activeEvent.eventType].emoji} ${TYPE_INFO[activeEvent.eventType].name}\n• **Quantity:** Spawns ${activeEvent.amount} at a time\n• **Timer:** Every ${activeEvent.interval} minutes\n\n**📍 Saved Spawn Locations:**\n${locList}` 
@@ -83,32 +83,49 @@ const autoEventsHandler = async (interaction, client) => {
                     new ButtonBuilder().setCustomId('btn_ae_toggle').setLabel(activeEvent.isEnabled ? 'Disable Event' : 'Enable Event').setStyle(activeEvent.isEnabled ? ButtonStyle.Danger : ButtonStyle.Success).setEmoji('⚡'),
                     new ButtonBuilder().setCustomId('btn_ae_delete_event').setLabel('Delete Event').setStyle(ButtonStyle.Danger).setEmoji('💀')
                 );
-                payload.components = [row1Event, row2Type, row3Setup, row4Pos, row5Toggle];
+                
+                payload.components.push(row2Type, row3Setup, row4Pos, row5Toggle);
             }
 
-            // 🔥 State-Aware Response Handler (Never Fails)
-            if (inter.deferred || inter.replied) {
-                return await inter.editReply(payload).catch(console.error);
-            } else if (inter.isMessageComponent() || inter.isModalSubmit()) {
-                return await inter.update(payload).catch(console.error);
-            } else {
-                return await inter.reply(payload).catch(console.error);
+            // GUARANTEED SAFE RESPONSE DISPATCHER
+            try {
+                if (inter.isRepliable() && !inter.replied && !inter.deferred) {
+                    if (inter.isMessageComponent() || inter.isModalSubmit()) {
+                        await inter.update(payload);
+                    } else {
+                        await inter.reply(payload);
+                    }
+                } else {
+                    await inter.editReply(payload);
+                }
+            } catch (err) {
+                console.error("Panel update failed:", err);
             }
         };
 
-        // --- 🚦 1. MODAL SUBMISSIONS (Handled instantly) ---
+        // --- 🚦 1. MODAL SUBMISSIONS (Handled explicitly and safely) ---
         if (interaction.isModalSubmit() && customId === 'modal_ae_settings') {
-            // Instantly tell Discord we received it so it doesn't freeze the panel
-            await interaction.deferUpdate().catch(() => {});
-
-            const newName = interaction.fields.getTextInputValue('ev_name').trim();
-            const amount = parseInt(interaction.fields.getTextInputValue('amount')) || 1;
-            const interval = parseInt(interaction.fields.getTextInputValue('interval')) || 60;
-            
-            if (session.selectedEventId) {
-                await AutoEvent.update({ name: newName, amount, interval }, { where: { id: session.selectedEventId } });
+            try {
+                const rawName = interaction.fields.getTextInputValue('ev_name').trim();
+                const newName = rawName.length > 0 ? rawName : "Custom Event";
+                
+                let amount = parseInt(interaction.fields.getTextInputValue('amount'));
+                if (isNaN(amount) || amount < 1) amount = 1; // Safely force number
+                
+                let interval = parseInt(interaction.fields.getTextInputValue('interval'));
+                if (isNaN(interval) || interval < 1) interval = 60; // Safely force number
+                
+                if (session.selectedEventId) {
+                    await AutoEvent.update({ name: newName, amount, interval }, { where: { id: session.selectedEventId } });
+                }
+                
+                return await renderAEPanel(interaction, `✅ Event details successfully saved!`);
+            } catch (err) {
+                console.error("[MODAL ERROR]", err);
+                if (interaction.isRepliable() && !interaction.replied) {
+                    return await interaction.reply({ content: '❌ Database error saving modal.', flags: 64 }).catch(()=>{});
+                }
             }
-            return await renderAEPanel(interaction, `✅ Event details updated!`);
         }
 
         // --- ENTRY ROUTER ---
@@ -119,7 +136,6 @@ const autoEventsHandler = async (interaction, client) => {
         // --- DROPDOWN HANDLERS ---
         if (interaction.isStringSelectMenu()) {
             if (customId === 'ae_event_select') {
-                await interaction.deferUpdate().catch(() => {});
                 if (selectedValue === 'ae_create_new') {
                     const newEvent = await AutoEvent.create({ guildId, name: 'New Custom Event' });
                     session.selectedEventId = newEvent.id;
@@ -133,7 +149,6 @@ const autoEventsHandler = async (interaction, client) => {
             }
 
             if (customId === 'ae_type_select') {
-                await interaction.deferUpdate().catch(() => {});
                 const newType = selectedValue.replace('set_type_', '');
                 await AutoEvent.update({ eventType: newType }, { where: { id: session.selectedEventId } });
                 return await renderAEPanel(interaction, `✅ Event type updated to **${TYPE_INFO[newType].name}**!`);
@@ -142,15 +157,28 @@ const autoEventsHandler = async (interaction, client) => {
 
         // --- BUTTON HANDLERS ---
         if (interaction.isButton()) {
+            
             if (customId === 'btn_ae_edit_settings') {
-                const ev = await AutoEvent.findByPk(session.selectedEventId);
-                const modal = new ModalBuilder().setCustomId('modal_ae_settings').setTitle(`Configure Event Profile`);
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ev_name').setLabel("Event Name").setStyle(TextInputStyle.Short).setValue(ev.name).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel("Quantity to Spawn").setStyle(TextInputStyle.Short).setValue(ev.amount.toString()).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('interval').setLabel("Timer Interval (Minutes)").setStyle(TextInputStyle.Short).setValue(ev.interval.toString()).setRequired(true))
-                );
-                return await interaction.showModal(modal);
+                try {
+                    const ev = await AutoEvent.findByPk(session.selectedEventId);
+                    if (!ev) return await interaction.reply({ content: "❌ Event not found. Try reselecting it.", flags: 64 });
+                    
+                    const modal = new ModalBuilder().setCustomId('modal_ae_settings').setTitle(`Configure Event Profile`);
+                    
+                    // Fallbacks used here ensure .toString() never crashes if DB returned null
+                    const safeName = ev.name || "Custom Event";
+                    const safeAmount = ev.amount ? ev.amount.toString() : "1";
+                    const safeInterval = ev.interval ? ev.interval.toString() : "60";
+
+                    modal.addComponents(
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ev_name').setLabel("Event Name").setStyle(TextInputStyle.Short).setValue(safeName).setRequired(true)),
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel("Quantity to Spawn").setStyle(TextInputStyle.Short).setValue(safeAmount).setRequired(true)),
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('interval').setLabel("Timer Interval (Minutes)").setStyle(TextInputStyle.Short).setValue(safeInterval).setRequired(true))
+                    );
+                    return await interaction.showModal(modal);
+                } catch (e) {
+                    console.error("[MODAL OPEN ERROR]", e);
+                }
             }
 
             if (customId === 'btn_ae_getpos') {
@@ -161,20 +189,17 @@ const autoEventsHandler = async (interaction, client) => {
             }
 
             if (customId === 'btn_ae_undopos') {
-                await interaction.deferUpdate().catch(() => {});
                 const highestSlot = await AutoEventLocation.findOne({ where: { eventId: session.selectedEventId }, order: [['slot', 'DESC']] });
                 if (highestSlot) await highestSlot.destroy();
                 return await renderAEPanel(interaction, `⏪ Removed the last saved location.`);
             }
 
             if (customId === 'btn_ae_clearpos') {
-                await interaction.deferUpdate().catch(() => {});
                 await AutoEventLocation.destroy({ where: { eventId: session.selectedEventId } });
                 return await renderAEPanel(interaction, `🧹 All locations cleared.`);
             }
 
             if (customId === 'btn_ae_test') {
-                await interaction.deferUpdate().catch(() => {});
                 const ev = await AutoEvent.findByPk(session.selectedEventId);
                 const locs = await AutoEventLocation.findAll({ where: { eventId: ev.id } });
                 const prefab = TYPE_INFO[ev.eventType].prefab;
@@ -184,20 +209,20 @@ const autoEventsHandler = async (interaction, client) => {
                     try {
                         await sendRconCommand(guildId, `spawn ${prefab} "${loc.posX},${loc.posY},${loc.posZ}"`);
                         fired++;
-                    } catch (e) { console.error("Test spawn failed:", e); }
+                    } catch (e) {
+                        console.error("Test spawn failed:", e);
+                    }
                 }
                 return await renderAEPanel(interaction, `🚀 Sent **${fired}** spawn commands to the server for testing!`);
             }
 
             if (customId === 'btn_ae_toggle') {
-                await interaction.deferUpdate().catch(() => {});
                 const ev = await AutoEvent.findByPk(session.selectedEventId);
                 await ev.update({ isEnabled: !ev.isEnabled });
                 return await renderAEPanel(interaction, `⚡ Event is now ${!ev.isEnabled ? '🟢 ENABLED' : '🔴 DISABLED'}!`);
             }
 
             if (customId === 'btn_ae_delete_event') {
-                await interaction.deferUpdate().catch(() => {});
                 await AutoEventLocation.destroy({ where: { eventId: session.selectedEventId } }); 
                 await AutoEvent.destroy({ where: { id: session.selectedEventId } }); 
                 session.selectedEventId = null;
