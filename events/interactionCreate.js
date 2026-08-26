@@ -49,9 +49,11 @@ module.exports = async (interaction, client) => {
         // 🚦 0. UNIVERSAL MODAL SUBMISSION ROUTER (Catch modals first)
         // ====================================================================
         if (interaction.isModalSubmit()) {
+
             if (customId === 'modal_ae_settings' || customId.startsWith('modal_ae_')) {
                 return await autoEventsHandler(interaction, client);
             }
+            // ... (rest of your modal checks)
             if (customId.startsWith('modal_emb_') || customId === 'modal_admin_embed') {
                 return await postEmbedHandler(interaction, client);
             }

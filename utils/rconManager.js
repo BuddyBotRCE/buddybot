@@ -95,8 +95,6 @@ async function connectRcon(guildId, client) {
                 const msg = parsed.Message;
                 const msgLower = msg.toLowerCase();
 
-                console.log('[RCON CONSOLE OUTPUT]', msg);
-
                 const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
                 const guild = client.guilds.cache.get(guildId);
 
@@ -106,19 +104,28 @@ async function connectRcon(guildId, client) {
                 if (adminPosQueue.size > 0) {
                     const matches = msg.match(/-?\d+\.\d+/g);
                     if (matches && matches.length >= 3) {
-                        for (const [adminName, setupData] of adminPosQueue.entries()) {
+                        for (const [adminId, setupData] of adminPosQueue.entries()) {
                             if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
                             const channel = client.channels.cache.get(setupData.channelId);
 
-                            let posX = parseFloat(matches[0]);
-                            let posY = parseFloat(matches[1]);
-                            let posZ = parseFloat(matches[2]);
+                            let posX = parseFloat(matches[0]).toFixed(2);
+                            let posY = parseFloat(matches[1]).toFixed(2);
+                            let posZ = parseFloat(matches[2]).toFixed(2);
+
+                            // Route correctly based on what button was clicked
+                            if (setupData.type === 'auto_event') {
+                                const aeHandler = require('../handlers/autoEventsHandler');
+                                if (aeHandler && aeHandler.autoSaveLocation) {
+                                    await aeHandler.autoSaveLocation(guildId, posX, posY, posZ);
+                                }
+                            } else {
+                                await bindHandler.autoSavePosition(guildId, posX, posY, posZ);
+                            }
 
                             if (channel) {
-                                await bindHandler.autoSavePosition(guildId, posX.toFixed(2), posY.toFixed(2), posZ.toFixed(2));
-                                channel.send({ content: `✅ <@${setupData.adminId}> **Position Captured Successfully!**\nCoordinates: \`X: ${posX.toFixed(2)}, Y: ${posY.toFixed(2)}, Z: ${posZ.toFixed(2)}\`\n*Return to your Discord panel to finish.*` }).catch(()=>{});
+                                channel.send({ content: `✅ <@${setupData.adminId}> **Position Captured Successfully!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\`\n*Return to your Discord panel to finish.*` }).catch(()=>{});
                             }
-                            adminPosQueue.delete(adminName);
+                            adminPosQueue.delete(adminId);
                             break;
                         }
                     }
@@ -242,15 +249,22 @@ async function sendRconCommand(guildId, commandStr) {
     return true;
 }
 
-async function queueAdminPos(adminName, guildId, adminId, channelId, type = 'custom_bind', client) {
-    if (adminPosQueue.has(adminName)) {
-        const old = adminPosQueue.get(adminName);
+// === UPDATED QUEUE ADMIN POS ===
+// Cleanly handles interaction directly from Auto Events and Binds
+async function queueAdminPos(interaction, type = 'custom_bind') {
+    const guildId = interaction.guild.id;
+    const adminId = interaction.user.id;
+    const channelId = interaction.channelId;
+    const client = interaction.client;
+
+    if (adminPosQueue.has(adminId)) {
+        const old = adminPosQueue.get(adminId);
         if (old.timeoutTimer) clearTimeout(old.timeoutTimer);
     }
 
     const timeoutTimer = setTimeout(async () => {
-        if (adminPosQueue.has(adminName)) {
-            adminPosQueue.delete(adminName);
+        if (adminPosQueue.has(adminId)) {
+            adminPosQueue.delete(adminId);
             const channel = client.channels.cache.get(channelId);
             if (channel) {
                 channel.send({ content: `<@${adminId}> ⚠️ Position request timed out. Make sure you are online in-game!` }).catch(()=>{});
@@ -258,7 +272,7 @@ async function queueAdminPos(adminName, guildId, adminId, channelId, type = 'cus
         }
     }, 5000);
 
-    adminPosQueue.set(adminName, { guildId, adminId, channelId, type, timeoutTimer });
+    adminPosQueue.set(adminId, { guildId, adminId, channelId, type, timeoutTimer });
     sendRconCommand(guildId, `players`).catch(() => {});
 }
 
