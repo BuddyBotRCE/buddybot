@@ -393,8 +393,8 @@ const bindHandler = async (interaction, client) => {
             }
 
             if (customId === 'bind_btn_getpos') {
-                // Acknowledge immediately so Discord interaction token doesn't expire
-                await interaction.update({ embeds: [new EmbedBuilder().setColor('#e67e22').setTitle('⏳ Extracting Position...').setDescription('Stand in-game. Scanning your coordinates via RCON...')], components: [], flags: 64 });
+                const loadingPayload = await buildPanelPayload(guildId, '⏳ **Extracting your position from the server...**');
+                await interaction.update(loadingPayload);
                 await queueAdminPos(interaction, 'custom_bind', session.selectedBindId);
                 return;
             }
@@ -437,14 +437,12 @@ bindHandler.refreshPanelViaInteraction = async (interaction, messageOverride, bi
             if (!bindSessions.has(guildId)) bindSessions.set(guildId, { selectedBindId: bindId, view: 'bind' });
             const session = bindSessions.get(guildId);
             session.selectedBindId = bindId;
-            session.view = 'bind';
+            session.view = 'bind'; // 🔒 Anchor view to the specific bind
             bindSessions.set(guildId, session);
         }
 
         const payload = await buildPanelPayload(guildId, messageOverride);
-        if (interaction.isRepliable()) {
-            await interaction.editReply(payload);
-        }
+        await interaction.editReply(payload);
     } catch (e) {
         console.error("Failed to live-refresh Bind panel:", e);
     }

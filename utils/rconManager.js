@@ -147,7 +147,7 @@ async function connectRcon(guildId, client) {
                                     if (setupData.interaction) {
                                         await bindHandler.refreshPanelViaInteraction(
                                             setupData.interaction, 
-                                            `✅ **Position Captured & Command Generated!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``,
+                                            `✅ **Position Captured Automatically!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``,
                                             setupData.targetId
                                         );
                                     }
