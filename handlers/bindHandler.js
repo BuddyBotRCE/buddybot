@@ -465,8 +465,8 @@ const bindHandler = async (interaction, client) => {
                 
                 let newCommand = '';
                 if (bind.actionType === 'teleport') {
-                    // 👇 NO MORE QUOTES! 👇
-                    newCommand = `global.teleports {player} ${cX},${loweredY},${cZ}`;
+                    // 👇 THE FINAL EXACT WORKING FORMAT 👇
+                    newCommand = `global.teleportpos {player} ${cX},${loweredY},${cZ}`;
                 } else if (bind.actionType === 'recycler') {
                     newCommand = `global.spawn recycler_static ${cX},${loweredY},${cZ}`;
                 }
