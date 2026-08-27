@@ -155,15 +155,13 @@ module.exports = async (interaction, client) => {
             if (server) {
                 const serverName = server.serverName;
                 await server.destroy();
-                return interaction.update({ content: `✅ Successfully removed game server **${serverName}** from the database.`, components: [], embeds: [] }).catch(() => {
-                    return interaction.reply({ content: `✅ Successfully removed game server **${serverName}** from the database.`, flags: 64 });
-                });
+                return interaction.reply({ content: `✅ Successfully removed game server **${serverName}** from the database.`, flags: 64 });
             }
             return interaction.update({ content: `❌ Server not found or already deleted.`, components: [], embeds: [] }).catch(() => {
                 return interaction.reply({ content: `❌ Server not found or already deleted.`, flags: 64 });
             });
         }
-        
+
         if (selectedValue === 'setup_embed') {
             const modal = new ModalBuilder().setCustomId('modal_admin_embed').setTitle('Create Custom Embed');
             modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('channel_id').setLabel("Target Channel ID").setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel("Embed Title").setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('description').setLabel("Description (supports \\n)").setStyle(TextInputStyle.Paragraph).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('color').setLabel("Hex Color (e.g. #3498db)").setStyle(TextInputStyle.Short).setValue('#2b2d31').setRequired(false)));
