@@ -181,7 +181,8 @@ module.exports = async (interaction, client) => {
             customId === 'btn_admin_give' || 
             customId === 'btn_admin_take' || 
             customId === 'select_admin_give_target' || 
-            customId === 'select_admin_take_target'
+            customId === 'select_admin_take_target' ||
+            interaction.isUserSelectMenu() && (customId.includes('admin_give') || customId.includes('admin_take') || customId.includes('econ'))
         ) {
             return await economyHandler(interaction, client);
         }
