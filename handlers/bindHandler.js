@@ -338,7 +338,7 @@ const bindHandler = async (interaction, client) => {
 
         if (customId === 'bind_do_kit' && interaction.isStringSelectMenu()) {
             const kitName = interaction.values[0];
-            const command = `kit "{player}" "${kitName}"`;
+            const command = `kit {player} "${kitName}"`;
             await CustomBind.update({ targetValue: kitName, command }, { where: { id: session.selectedBindId } });
             session.view = 'bind';
             return await renderBindPanel(interaction, `📦 Bound to kit: **${kitName}**!`);
@@ -465,8 +465,8 @@ const bindHandler = async (interaction, client) => {
                 
                 let newCommand = '';
                 if (bind.actionType === 'teleport') {
-                    // 👇 FORMATTED EXACTLY HOW YOUR CONSOLE LIKES IT 👇
-                    newCommand = `global.teleports "{player}" ${cX},${loweredY},${cZ}`;
+                    // 👇 NO MORE QUOTES! 👇
+                    newCommand = `global.teleports {player} ${cX},${loweredY},${cZ}`;
                 } else if (bind.actionType === 'recycler') {
                     newCommand = `global.spawn recycler_static ${cX},${loweredY},${cZ}`;
                 }
