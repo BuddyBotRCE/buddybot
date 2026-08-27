@@ -9,11 +9,12 @@ const { activeConnections } = require('../utils/rconManager');
 
 const giveKitSessions = new Map();
 
+// RCE Native Kit List Scraper
 async function fetchRceLiveKits(guildId) {
     return new Promise((resolve) => {
         const ws = activeConnections.get(guildId);
         if (!ws || ws.readyState !== WebSocket.OPEN) {
-            return resolve(['test']); // Fallback to your test kit if connection is closed
+            return resolve(['Test1']);
         }
 
         let kitsFound = [];
@@ -43,11 +44,12 @@ async function fetchRceLiveKits(guildId) {
         };
 
         ws.on('message', listener);
-        ws.send(JSON.stringify({ Identifier: 9999, Message: "kit.list", Name: "AdminWizard" }));
+        // Natively supported RCE command to list kits into console log output
+        ws.send(JSON.stringify({ Identifier: 9999, Message: "kit list", Name: "AdminWizard" }));
 
         setTimeout(() => {
             ws.off('message', listener);
-            if (kitsFound.length === 0) kitsFound = ['test']; // Guaranteed to include your test kit
+            if (kitsFound.length === 0) kitsFound = ['Test1']; // Fallback to your known kit if packet stream is silent
             resolve(kitsFound);
         }, 1500);
     });
@@ -339,7 +341,7 @@ module.exports = async (interaction, client) => {
             return interaction.update({ content: '👤 **Select Target Player:**', components: [row], embeds: [] });
         }
 
-        // 👇 SAFELY SCRAPES LIVERCON KITS AND LOADS DROPDOWN DIRECTLY WITHOUT MODALS 👇
+        // 👇 LIVE RCON KIT SCRAPE TRIGGER FOR RCE SERVER (`kit list`) 👇
         if (customId === 'ak_panel_kit') {
             await interaction.deferUpdate();
             let liveKits = await fetchRceLiveKits(interaction.guild.id);
@@ -481,7 +483,7 @@ module.exports = async (interaction, client) => {
             let [config] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
             const newState = config.aiEnabled === false ? true : false;
             await config.update({ aiEnabled: newState });
-            return interaction.reply({ content: `✅ Auto-moderation has been turned **${newState ? 'ON 🟢' : 'OFF 🔴'}**!`, flags: 64 });
+            return interaction.reply({ content: `✅ AI assistant has been turned **${newState ? 'ON 🟢' : 'OFF 🔴'}**!`, flags: 64 });
         }
         if (customId === 'btn_ai_premade') {
             const modal = new ModalBuilder().setCustomId('modal_ai_add_premade').setTitle('Add Premade AI Response');
@@ -491,13 +493,6 @@ module.exports = async (interaction, client) => {
     }
 
     if (interaction.isModalSubmit()) {
-        if (customId === 'ak_modal_kit_input') {
-            if (!giveKitSessions.has(userId)) giveKitSessions.set(userId, { targetUserId: null, kitName: null });
-            const session = giveKitSessions.get(userId);
-            session.kitName = interaction.fields.getTextInputValue('kit_name').trim();
-            return await renderGiveKitPanel(interaction, session, `📦 Kit name "**${session.kitName}**" saved to session!`);
-        }
-
         if (customId.startsWith('modal_admin_say_')) {
             const hexColor = '#' + customId.replace('modal_admin_say_', '');
             const msg = interaction.fields.getTextInputValue('say_msg').replace(/"/g, "'"); 
@@ -531,7 +526,7 @@ module.exports = async (interaction, client) => {
             return interaction.reply({ content: `✅ Auto-Mod settings updated!\n• Punishment: \`${action}\`\n• Caps Limit: \`${caps}%\``, flags: 64 });
         }
         if (customId === 'modal_ai_add_premade') {
-            const trigger = interaction.fields.getTextInputValue('trigger_word').trim();
+            const trigger = interaction.fields.getTextInputValue('trigger_word'].trim();
             const responseText = interaction.fields.getTextInputValue('response_text').trim();
             let [config] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
             let list = []; try { list = JSON.parse(config.aiPremadeResponses || '[]'); } catch(e){}
