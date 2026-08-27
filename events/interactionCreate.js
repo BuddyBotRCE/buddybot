@@ -197,9 +197,9 @@ module.exports = async (interaction, client) => {
             return await kitHandler(interaction, client);
         }
 
-        if (customId.startsWith('bind_') || customId.startsWith('btn_bind_') || customId.includes('bind')) {
+        if (customId.startsWith('bind_') || customId.startsWith('btn_bind_') || customId === 'bind_do_kit' || customId.includes('bind')) {
             return await bindHandler(interaction, client);
-        }
+        } 
 
         // Fallback for uncaught buttons
         return await adminHandler(interaction, client);

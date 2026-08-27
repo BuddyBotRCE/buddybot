@@ -1,5 +1,5 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelSelectMenuBuilder, UserSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType } = require('discord.js');
-const { GuildConfig, GameServer, UserEconomy } = require('../database/db');
+const { GuildConfig, GameServer, UserEconomy, ServerKit } = require('../database/db');
 const { connectRcon, sendRconCommand } = require('../utils/rconManager');
 const { RUST_CATEGORIES } = require('../utils/rustCatalog');
 const postEmbedHandler = require('./postEmbedHandler');
@@ -130,6 +130,15 @@ module.exports = async (interaction, client) => {
             return interaction.showModal(modal);
         }
 
+        // 👇 STEP 2 OF GIVE KIT: KIT SELECTED, NOW CHOOSE TARGET PLAYER 👇
+        if (customId === 'admin_admin_kit_select') {
+            const kitName = selectedValue;
+            const row = new ActionRowBuilder().addComponents(
+                new UserSelectMenuBuilder().setCustomId(`admin_kit_target_user_${kitName}`).setPlaceholder('Step 2: Select the player to receive this kit...')
+            );
+            return interaction.update({ content: `📦 **Admin Kit Wizard:** Kit selected: **${kitName}**. Now choose the target player:`, components: [row] });
+        }
+
         if (customId === 'log_action_select') {
             if (selectedValue === 'log_admin') return interaction.reply({ content: '🛡️ Select channel for **Admin Logs**:', components: [new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_log_admin_channel').setPlaceholder('Select Admin Logs Channel...').addChannelTypes(ChannelType.GuildText))], flags: 64 });
             if (selectedValue === 'log_game') return interaction.reply({ content: '🎮 Select channel for **Game Feeds**:', components: [new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_log_game_channel').setPlaceholder('Select Game Feeds Channel...').addChannelTypes(ChannelType.GuildText))], flags: 64 });
@@ -213,16 +222,22 @@ module.exports = async (interaction, client) => {
     }
 
     if (interaction.isUserSelectMenu()) {
-        if (customId === 'admin_kit_target_select') {
+        // 👇 STEP 3 OF GIVE KIT: TARGET PLAYER CHOSEN, EXECUTES RCON COMMAND 👇
+        if (customId.startsWith('admin_kit_target_user_')) {
+            const kitName = customId.replace('admin_kit_target_user_', '');
             const targetUserId = interaction.values[0];
             const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
-            if (!targetUser || !targetUser.inGameName) return interaction.reply({ content: `❌ This user has not linked their Rust account yet!`, flags: 64 });
             
-            const modal = new ModalBuilder().setCustomId(`modal_givekit_exec_${targetUserId}`).setTitle(`Give Kit to ${targetUser.inGameName.substring(0, 20)}`);
-            modal.addComponents(new ActionRowBuilder().addComponents(
-                new TextInputBuilder().setCustomId('kit_name').setLabel("Exact Kit Name (e.g. vip, starter)").setStyle(TextInputStyle.Short).setRequired(true)
-            ));
-            return interaction.showModal(modal);
+            if (!targetUser || !targetUser.inGameName) {
+                return interaction.reply({ content: `❌ This user has not linked an in-game Rust name yet!`, flags: 64 });
+            }
+
+            try {
+                await sendRconCommand(interaction.guild.id, `kit givetoplayer "${kitName}" "${targetUser.inGameName}"`);
+                return interaction.update({ content: `✅ Successfully gave kit **${kitName}** to **${targetUser.inGameName}** (<@${targetUserId}>)!`, components: [] });
+            } catch (e) {
+                return interaction.update({ content: `❌ RCON Error giving kit: \`${e.message}\``, components: [] });
+            }
         }
 
         if (customId === 'admin_item_select_player') {
@@ -259,11 +274,25 @@ module.exports = async (interaction, client) => {
             return interaction.reply({ content: '📢 **Server Broadcast:** Select the color for your message:', components: [row], flags: 64 });
         }
 
+        // 👇 STEP 1 OF GIVE KIT: FETCHES SERVER KITS FROM DATABASE KIT MANAGER 👇
         if (customId === 'btn_admin_kit') {
+            const kits = await ServerKit.findAll({ where: { guildId: interaction.guild.id } });
+            
+            const kitOptions = kits.length > 0 
+                ? kits.slice(0, 25).map(k => ({ label: k.kitName.substring(0, 100), value: k.kitName, emoji: '📦' }))
+                : [
+                    { label: 'starter', value: 'starter', description: 'Default fallback kit', emoji: '📦' },
+                    { label: 'vip', value: 'vip', description: 'Default fallback kit', emoji: '⭐' },
+                    { label: 'builder', value: 'builder', description: 'Default fallback kit', emoji: '🏗️' }
+                  ];
+
             const row = new ActionRowBuilder().addComponents(
-                new UserSelectMenuBuilder().setCustomId('admin_kit_target_select').setPlaceholder('Step 1: Select the player to receive a kit...')
+                new StringSelectMenuBuilder()
+                    .setCustomId('admin_admin_kit_select')
+                    .setPlaceholder('Step 1: Select a kit from your kit manager...')
+                    .addOptions(kitOptions)
             );
-            return interaction.reply({ content: '📦 **Admin Kit Wizard:** First, choose the target player below:', components: [row], flags: 64 });
+            return interaction.reply({ content: '📦 **Admin Kit Wizard:** Select which kit you want to give:', components: [row], flags: 64 });
         }
 
         if (customId === 'btn_admin_vip') {
@@ -373,20 +402,6 @@ module.exports = async (interaction, client) => {
     }
 
     if (interaction.isModalSubmit()) {
-        if (customId.startsWith('modal_givekit_exec_')) {
-            const targetUserId = customId.replace('modal_givekit_exec_', '');
-            const kitName = interaction.fields.getTextInputValue('kit_name').trim();
-            const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
-            
-            try {
-                // 👇 USES OFFICIAL RCE COMMUNITY SERVER KIT COMMAND 👇
-                await sendRconCommand(interaction.guild.id, `kit givetoplayer "${kitName}" "${targetUser.inGameName}"`);
-                return interaction.reply({ content: `✅ Successfully gave kit **${kitName}** to **${targetUser.inGameName}**!`, flags: 64 });
-            } catch(e) {
-                return interaction.reply({ content: `❌ RCON Error giving kit: \`${e.message}\``, flags: 64 });
-            }
-        }
-
         if (customId.startsWith('modal_admin_say_')) {
             const hexColor = '#' + customId.replace('modal_admin_say_', '');
             const msg = interaction.fields.getTextInputValue('say_msg').replace(/"/g, "'"); 

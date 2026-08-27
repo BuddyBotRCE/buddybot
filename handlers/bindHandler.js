@@ -1,5 +1,5 @@
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, RoleSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } = require('discord.js');
-const { CustomBind } = require('../database/db');
+const { CustomBind, ServerKit } = require('../database/db');
 const { queueAdminPos } = require('../utils/rconManager'); 
 
 const bindSessions = new Map();
@@ -227,6 +227,28 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
             new ButtonBuilder().setCustomId('bind_back_category').setLabel('Back to Categories').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
         ));
     }
+    // 👇 DYNAMIC KIT PICKER VIEW FROM DATABASE 👇
+    else if (session.view === 'kit_picker') {
+        embed.setTitle('📦 Select In-Game Kit').setDescription('Choose which kit this bind will grant to players.');
+        const serverKits = await ServerKit.findAll({ where: { guildId } });
+
+        const kitOptions = serverKits.length > 0 
+            ? serverKits.slice(0, 25).map(k => ({ label: k.kitName.substring(0, 100), value: k.kitName, emoji: '📦' }))
+            : [
+                { label: 'starter', value: 'starter', description: 'Default fallback kit', emoji: '📦' },
+                { label: 'vip', value: 'vip', description: 'Default fallback kit', emoji: '⭐' },
+                { label: 'builder', value: 'builder', description: 'Default fallback kit', emoji: '🏗️' }
+              ];
+
+        components.push(new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder().setCustomId('bind_do_kit').setPlaceholder('Select a server kit...')
+                .addOptions(kitOptions)
+        ));
+
+        components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('bind_back_bind').setLabel('Cancel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+        ));
+    }
     else if (session.view === 'role_picker') {
         embed.setTitle('🛡️ Set Required Role').setDescription('Select the Discord Role required to use this Custom Bind. If they do not have this role, they cannot trigger it.');
 
@@ -333,6 +355,15 @@ const bindHandler = async (interaction, client) => {
             return await renderBindPanel(interaction, `💬 Quick-chat wheel trigger updated!`);
         }
 
+        // 👇 HANDLES THE SELECTION FROM THE KIT DROPDOWN MENU 👇
+        if (customId === 'bind_do_kit' && interaction.isStringSelectMenu()) {
+            const kitName = interaction.values[0];
+            const command = `kit givetoplayer "${kitName}" "{player}"`;
+            await CustomBind.update({ targetValue: kitName, command }, { where: { id: session.selectedBindId } });
+            session.view = 'bind';
+            return await renderBindPanel(interaction, `📦 Bound to kit: **${kitName}**!`);
+        }
+
         if (customId === 'bind_do_role' && interaction.isRoleSelectMenu()) {
             const roleId = interaction.values[0];
             await CustomBind.update({ roleId }, { where: { id: session.selectedBindId } });
@@ -347,16 +378,6 @@ const bindHandler = async (interaction, client) => {
                     await CustomBind.update({ name }, { where: { id: session.selectedBindId } });
                 }
                 return await renderBindPanel(interaction, `✅ Bind renamed successfully!`);
-            }
-
-            if (customId === 'modal_bind_kit') {
-                const kitName = interaction.fields.getTextInputValue('kit_name').trim();
-                // 👇 USES OFFICIAL RCE COMMUNITY SERVER KIT COMMAND 👇
-                const command = `kit givetoplayer "${kitName}" "{player}"`;
-                if (session.selectedBindId) {
-                    await CustomBind.update({ targetValue: kitName, command }, { where: { id: session.selectedBindId } });
-                }
-                return await renderBindPanel(interaction, `📦 Successfully bound to kit: **${kitName}**!`);
             }
 
             if (customId === 'bind_modal_economy') {
@@ -391,13 +412,10 @@ const bindHandler = async (interaction, client) => {
                 return await renderBindPanel(interaction);
             }
 
+            // 👇 OPENS THE DROPDOWN KIT PICKER VIEW 👇
             if (customId === 'bind_btn_kitselect') {
-                const b = await CustomBind.findByPk(session.selectedBindId);
-                const modal = new ModalBuilder().setCustomId('modal_bind_kit').setTitle(`Bind to Kit`);
-                modal.addComponents(new ActionRowBuilder().addComponents(
-                    new TextInputBuilder().setCustomId('kit_name').setLabel("Exact Kit Name (e.g. vip, starter)").setStyle(TextInputStyle.Short).setValue(b.targetValue || '').setRequired(true)
-                ));
-                return await interaction.showModal(modal);
+                session.view = 'kit_picker';
+                return await renderBindPanel(interaction);
             }
             
             if (customId === 'bind_btn_role') {
@@ -413,7 +431,7 @@ const bindHandler = async (interaction, client) => {
 
             if (customId === 'bind_btn_name') {
                 const b = await CustomBind.findByPk(session.selectedBindId);
-                const modal = new ModalBuilder().setCustomId('bind_modal_name').setTitle(`Rename Bind`);
+                const modal = new ModalBuilder().setCustomId('modal_bind_name').setTitle(`Rename Bind`);
                 modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_name').setLabel("Bind Name").setStyle(TextInputStyle.Short).setValue(b.name || '').setRequired(true)));
                 return await interaction.showModal(modal);
             }
