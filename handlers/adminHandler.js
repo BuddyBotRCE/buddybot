@@ -9,7 +9,7 @@ const { activeConnections } = require('../utils/rconManager');
 
 const giveKitSessions = new Map();
 
-// Upgraded RCE Native Kit List Scraper
+// Fully upgraded dual-layer RCE Kit Scraper
 async function fetchRceLiveKits(guildId) {
     return new Promise((resolve) => {
         const ws = activeConnections.get(guildId);
@@ -24,22 +24,28 @@ async function fetchRceLiveKits(guildId) {
                 if (!parsed || !parsed.Message) return;
                 const msg = parsed.Message;
                 
-                // Split multi-line responses safely and grab every valid entry
+                // Layer 1: Split and clean line-by-line
                 const lines = msg.split(/\r?\n/);
                 for (let line of lines) {
                     line = line.trim();
-                    if (line && 
-                        !line.toLowerCase().includes('list') && 
-                        !line.toLowerCase().includes('available') && 
-                        !line.toLowerCase().includes('kits') &&
-                        !line.toLowerCase().includes('command') &&
-                        !line.toLowerCase().includes('servervar') &&
-                        !line.startsWith('{') && !line.startsWith('}')) {
-                        
-                        // Clean up quotes, formatting markers, and bullet points
-                        const cleanName = line.replace(/["'*#\-]/g, '').trim();
-                        if (cleanName && !kitsFound.includes(cleanName) && cleanName.length < 30) {
-                            kitsFound.push(cleanName);
+                    if (line) {
+                        const tokens = line.split(/[\s,]+/);
+                        for (let token of tokens) {
+                            let cleanName = token.replace(/["'*#\-]/g, '').trim();
+                            const lower = cleanName.toLowerCase();
+                            const ignoreList = ['list', 'available', 'kits', 'command', 'servervar', 'kit', 'givetoplayer', 'true', 'false', 'null', 'adminwizard'];
+                            
+                            if (cleanName && 
+                                cleanName.length >= 2 && 
+                                cleanName.length < 30 && 
+                                !ignoreList.includes(lower) && 
+                                !cleanName.startsWith('{') && 
+                                !cleanName.startsWith('}')) {
+                                
+                                if (!kitsFound.includes(cleanName)) {
+                                    kitsFound.push(cleanName);
+                                }
+                            }
                         }
                     }
                 }
@@ -49,7 +55,6 @@ async function fetchRceLiveKits(guildId) {
         ws.on('message', listener);
         ws.send(JSON.stringify({ Identifier: 9999, Message: "kit list", Name: "AdminWizard" }));
 
-        // Give it a slightly longer window to catch all streamed chunks from RCE
         setTimeout(() => {
             ws.off('message', listener);
             if (kitsFound.length === 0) kitsFound = ['Test1'];
