@@ -465,10 +465,10 @@ const bindHandler = async (interaction, client) => {
                 
                 let newCommand = '';
                 if (bind.actionType === 'teleport') {
-                    // 👇 THE FINAL EXACT WORKING FORMAT 👇
-                    newCommand = `global.teleportpos {player} ${cX},${loweredY},${cZ}`;
+                    // 👇 SPACES ONLY, NO COMMAS 👇
+                    newCommand = `global.teleportpos {player} ${cX} ${loweredY} ${cZ}`;
                 } else if (bind.actionType === 'recycler') {
-                    newCommand = `global.spawn recycler_static ${cX},${loweredY},${cZ}`;
+                    newCommand = `global.spawn recycler_static ${cX} ${loweredY} ${cZ}`;
                 }
                 
                 await CustomBind.update({ command: newCommand }, { where: { id: session.selectedBindId } });

@@ -112,10 +112,10 @@ async function connectRcon(guildId, client) {
                                     if (bind) {
                                         let command = '';
                                         if (bind.actionType === 'teleport') {
-                                            // 👇 THE FINAL EXACT WORKING FORMAT 👇
-                                            command = `global.teleportpos {player} ${posX},${posY},${posZ}`;
+                                            // 👇 SPACES ONLY, NO COMMAS 👇
+                                            command = `global.teleportpos {player} ${posX} ${posY} ${posZ}`;
                                         } else if (bind.actionType === 'recycler') {
-                                            command = `global.spawn recycler_static ${posX},${posY},${posZ}`;
+                                            command = `global.spawn recycler_static ${posX} ${posY} ${posZ}`;
                                         }
                                         await bind.update({ command });
                                     }
@@ -207,7 +207,10 @@ async function connectRcon(guildId, client) {
                                 await matchedPlayer.update({ wallet: matchedPlayer.wallet - bind.cost });
                             }
 
-                            const finalCommandString = bind.command.replace(/{player}/gi, matchedPlayer.inGameName);
+                            // 👇 BULLETPROOF FILTER: Converts any commas stuck in the string into spaces before sending!
+                            let finalCommandString = bind.command.replace(/{player}/gi, matchedPlayer.inGameName);
+                            finalCommandString = finalCommandString.replace(/,/g, ' '); 
+
                             const commands = finalCommandString.split('\n');
                             for (const cmd of commands) {
                                 if (cmd.trim() !== '') {
