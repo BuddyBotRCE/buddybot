@@ -130,34 +130,7 @@ module.exports = async (interaction, client) => {
             return interaction.showModal(modal);
         }
 
-        // 👇 STEP 2 OF GIVE KIT: PLAYER CHOSEN, NOW CHOOSE KIT FROM MANAGER 👇
-        if (customId.startsWith('admin_kit_target_player_')) {
-            const targetUserId = customId.replace('admin_kit_target_player_', '');
-            const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
-            
-            if (!targetUser || !targetUser.inGameName) {
-                return interaction.reply({ content: `❌ This user has not linked an in-game Rust name yet!`, flags: 64 });
-            }
-
-            const kits = await ServerKit.findAll({ where: { guildId: interaction.guild.id } });
-            const kitOptions = kits.length > 0 
-                ? kits.slice(0, 25).map(k => ({ label: k.kitName.substring(0, 100), value: k.kitName, emoji: '📦' }))
-                : [
-                    { label: 'starter', value: 'starter', description: 'Default fallback kit', emoji: '📦' },
-                    { label: 'vip', value: 'vip', description: 'Default fallback kit', emoji: '⭐' },
-                    { label: 'builder', value: 'builder', description: 'Default fallback kit', emoji: '🏗️' }
-                  ];
-
-            const row = new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder()
-                    .setCustomId(`admin_kit_final_exec_${targetUserId}`)
-                    .setPlaceholder('Step 2: Choose a kit from your kit manager...')
-                    .addOptions(kitOptions)
-            );
-            return interaction.update({ content: `📦 **Admin Kit Wizard:** Target player set to **${targetUser.inGameName}**. Now select the kit:`, components: [row] });
-        }
-
-        // 👇 STEP 3 OF GIVE KIT: KIT CHOSEN FROM DROPDOWN, EXECUTES RCON COMMAND 👇
+        // 👇 STEP 3: KIT CHOSEN FROM KIT MANAGER DROPDOWN -> SENDS RCON COMMAND 👇
         if (customId.startsWith('admin_kit_final_exec_')) {
             const targetUserId = customId.replace('admin_kit_final_exec_', '');
             const kitName = selectedValue;
@@ -254,7 +227,7 @@ module.exports = async (interaction, client) => {
     }
 
     if (interaction.isUserSelectMenu()) {
-        // 👇 STEP 1 OF GIVE KIT: USER SELECTS PLAYER FIRST, THEN SHOWS KIT DROPDOWN 👇
+        // 👇 STEP 2: PLAYER CHOSEN -> NOW SHOWS KIT MANAGER DROPDOWN 👇
         if (customId === 'admin_kit_target_select') {
             const targetUserId = interaction.values[0];
             const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
@@ -271,8 +244,8 @@ module.exports = async (interaction, client) => {
 
             const row = new ActionRowBuilder().addComponents(
                 new StringSelectMenuBuilder()
-                    .setCustomId(`admin_kit_target_player_${targetUserId}`)
-                    .setPlaceholder('Step 2: Select a kit from your kit manager...')
+                    .setCustomId(`admin_kit_final_exec_${targetUserId}`)
+                    .setPlaceholder('Step 2: Choose a kit from your kit manager...')
                     .addOptions(kitOptions)
             );
             return interaction.update({ content: `📦 **Admin Kit Wizard:** Target player set to **${targetUser.inGameName}**. Now choose the kit:`, components: [row] });
@@ -312,7 +285,7 @@ module.exports = async (interaction, client) => {
             return interaction.reply({ content: '📢 **Server Broadcast:** Select the color for your message:', components: [row], flags: 64 });
         }
 
-        // 👇 START OF GIVE KIT: CHOOSE PLAYER FIRST 👇
+        // 👇 STEP 1: CLICK GIVE KIT -> CHOOSE PLAYER FIRST 👇
         if (customId === 'btn_admin_kit') {
             const row = new ActionRowBuilder().addComponents(
                 new UserSelectMenuBuilder().setCustomId('admin_kit_target_select').setPlaceholder('Step 1: Select the player to receive a kit...')
