@@ -53,6 +53,18 @@ module.exports = async (interaction, client) => {
                 return await adminHandler(interaction, client);
             }
 
+            // 👇 ROUTE ECONOMY MODALS 👇
+            if (
+                customId === 'modal_setup_economy' || 
+                customId === 'modal_econ_interest' || 
+                customId === 'modal_hub_deposit' || 
+                customId === 'modal_hub_withdraw' || 
+                customId.startsWith('modal_admin_give_exec_') || 
+                customId.startsWith('modal_admin_take_exec_')
+            ) {
+                return await economyHandler(interaction, client);
+            }
+
             if (customId === 'modal_ae_settings' || customId.startsWith('modal_ae_')) {
                 return await autoEventsHandler(interaction, client);
             }
@@ -161,7 +173,16 @@ module.exports = async (interaction, client) => {
             return await autoEventsHandler(interaction, client);
         }
 
-        if (customId.includes('econ') || customId.includes('balance') || customId.includes('daily') || customId.includes('deposit') || customId.includes('withdraw') || customId.includes('admin_give') || customId.includes('admin_take')) {
+        // 👇 ROUTE ALL ECONOMY BUTTONS, HUBS, AND USER SELECT MENUS 👇
+        if (
+            customId.includes('econ') || 
+            customId.includes('hub_') || 
+            customId.startsWith('btn_econ_') || 
+            customId === 'btn_admin_give' || 
+            customId === 'btn_admin_take' || 
+            customId === 'select_admin_give_target' || 
+            customId === 'select_admin_take_target'
+        ) {
             return await economyHandler(interaction, client);
         }
 
