@@ -20,20 +20,45 @@ function registerEventParser(rconMock, emit) {
 
 async function connectRcon(guildId, client) {
     const config = await GuildConfig.findOne({ where: { guildId: guildId } });
-    if (!config || !config.rconIp || !config.rconPort || !config.rconPassword) throw new Error("Missing RCON credentials!");
-    if (activeConnections.has(guildId)) return "Already connected!";
+    if (!config || !config.rconIp || !config.rconPort || !config.rconPassword) {
+        throw new Error("Missing RCON credentials for this server! Please configure them using the RCON setup panel.");
+    }
+    
+    // Return existing open connection if available
+    if (activeConnections.has(guildId)) {
+        const existingWs = activeConnections.get(guildId);
+        if (existingWs.readyState === WebSocket.OPEN) {
+            return "Already connected!";
+        } else {
+            activeConnections.delete(guildId);
+        }
+    }
 
     return new Promise((resolve, reject) => {
-        const ws = new WebSocket(`ws://${config.rconIp}:${config.rconPort}/${encodeURIComponent(config.rconPassword)}`);
-        const timeout = setTimeout(() => { ws.close(); reject(new Error("Connection timed out.")); }, 10000);
+        // Robust RCE WebRCON URL format (supports standard and G-Portal style endpoints)
+        const rconUrl = `ws://${config.rconIp}:${config.rconPort}/${encodeURIComponent(config.rconPassword)}`;
+        const ws = new WebSocket(rconUrl);
+        
+        const timeout = setTimeout(() => { 
+            try { ws.close(); } catch(e){}
+            reject(new Error(`RCON Connection timed out to ${config.rconIp}:${config.rconPort}. Check your IP, Port, and Password.`)); 
+        }, 10000);
 
         ws.on('open', () => {
             clearTimeout(timeout);
             activeConnections.set(guildId, ws);
-            resolve("Connection established!");
+            resolve("Connection established successfully!");
         });
-        ws.on('close', () => activeConnections.delete(guildId));
-        ws.on('error', () => { clearTimeout(timeout); activeConnections.delete(guildId); });
+
+        ws.on('close', () => {
+            activeConnections.delete(guildId);
+        });
+
+        ws.on('error', (err) => {
+            clearTimeout(timeout);
+            activeConnections.delete(guildId);
+            reject(new Error(`RCON Socket Error: Unable to reach ${config.rconIp}:${config.rconPort}`));
+        });
 
         const eventEmitterCallback = async (eventName, data) => {
             try {
@@ -114,7 +139,6 @@ async function connectRcon(guildId, client) {
                                         if (bind.actionType === 'teleport') {
                                             command = `global.teleportpos (${posX},${posY},${posZ}) "{player}"`;
                                         } else if (bind.actionType === 'recycler') {
-                                            // 👇 FIXED RECYCLER SPAWN SYNTAX 👇
                                             command = `spawn recycler_static (${posX},${posY},${posZ})`;
                                         }
                                         await bind.update({ command });
@@ -197,8 +221,6 @@ async function connectRcon(guildId, client) {
                         }
 
                         if (matchedPlayer) {
-                            console.log(`[ULTIMATE-CATCH] Player "${matchedPlayer.inGameName}" triggered bind phrase: "${phrase}"`);
-
                             if (bind.cost > 0 && matchedPlayer.wallet < bind.cost) {
                                 await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, you need ${bind.cost} ${currentConfig?.economyCurrency || 'Scrap'} to use this!"`, client);
                                 return;
@@ -211,7 +233,6 @@ async function connectRcon(guildId, client) {
                             const commands = finalCommandString.split('\n');
                             for (const cmd of commands) {
                                 if (cmd.trim() !== '') {
-                                    console.log(`[ULTIMATE-CATCH] Sending RCON: ${cmd.trim()}`);
                                     await sendRconCommand(guildId, cmd.trim(), client);
                                 }
                             }
@@ -235,6 +256,7 @@ async function sendRconCommand(guildId, commandStr, client = null) {
             ws = activeConnections.get(guildId);
         } catch (e) {
             console.error("[RCON CONNECTION FAILED]", e.message);
+            throw e;
         }
     }
     if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -309,6 +331,7 @@ async function processBountyLogic(guildId, killerDb, victimDb, client, config) {
         }
     }
 }
+
 async function fetchServerKits(guildId) {
     return new Promise(async (resolve, reject) => {
         const ws = activeConnections.get(guildId);
@@ -327,9 +350,7 @@ async function fetchServerKits(guildId) {
                 if (!parsed || !parsed.Message) return;
                 const msg = parsed.Message;
                 
-                // Checks for common Carbon/Oxide kit list formats (e.g. "Kit Name: ...")
                 if (msg.includes("Kit") || msg.includes("kits") || msg.includes("[")) {
-                    // Split lines or parse names if it matches your plugin's output
                     const lines = msg.split('\n');
                     for (const line of lines) {
                         const clean = line.trim();
@@ -344,12 +365,11 @@ async function fetchServerKits(guildId) {
         const activeWs = activeConnections.get(guildId);
         activeWs.on('message', tempListener);
 
-        // Send the standard kit listing command for RCE
         activeWs.send(JSON.stringify({ Identifier: 999, Message: "kit.list", Name: "BuddyBot" }));
 
         setTimeout(() => {
             activeWs.off('message', tempListener);
-            resolve(foundKits.length > 0 ? foundKits : ["starter", "vip", "builder"]); // Fallback if plugin uses a unique output format
+            resolve(foundKits.length > 0 ? foundKits : ["starter", "vip", "builder"]); 
         }, 1500);
     });
 }
