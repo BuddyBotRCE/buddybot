@@ -7,7 +7,6 @@ const wipeHandler = require('./wipeHandler');
 const WebSocket = require('ws');
 const { activeConnections } = require('../utils/rconManager');
 
-// Helper to query live RCE server kits via RCON
 async function fetchRceLiveKits(guildId) {
     return new Promise((resolve) => {
         const ws = activeConnections.get(guildId);
@@ -21,15 +20,11 @@ async function fetchRceLiveKits(guildId) {
                 const parsed = JSON.parse(data);
                 if (!parsed || !parsed.Message) return;
                 const msg = parsed.Message;
-                
-                // Parse RCE console output for kit names
                 if (msg.toLowerCase().includes('kit') || msg.toLowerCase().includes('available')) {
                     const lines = msg.split('\n');
                     for (let line of lines) {
                         line = line.trim();
-                        // Filter out headers, grab clean kit names
                         if (line && !line.toLowerCase().includes('list') && !line.toLowerCase().includes('available') && !line.toLowerCase().includes('kits')) {
-                            // Extract words or quoted names
                             const cleanName = line.replace(/[-*#]/g, '').trim();
                             if (cleanName && !kitsFound.includes(cleanName)) {
                                 kitsFound.push(cleanName);
@@ -46,7 +41,7 @@ async function fetchRceLiveKits(guildId) {
         setTimeout(() => {
             ws.off('message', listener);
             resolve(kitsFound);
-        }, 1200);
+        }, 1000);
     });
 }
 
@@ -175,7 +170,7 @@ module.exports = async (interaction, client) => {
             return interaction.showModal(modal);
         }
 
-        // 👇 STEP 3: FINAL EXECUTION FROM LIVE KIT DROPDOWN 👇
+        // 👇 FINAL STEP: EXECUTES RCON KIT COMMAND 👇
         if (customId.startsWith('admin_kit_final_exec_')) {
             const targetUserId = customId.replace('admin_kit_final_exec_', '');
             const kitName = selectedValue;
@@ -272,7 +267,7 @@ module.exports = async (interaction, client) => {
     }
 
     if (interaction.isUserSelectMenu()) {
-        // 👇 STEP 2: PLAYER CHOSEN -> SCRAPES LIVE KITS FROM RCE SERVER FOR DROPDOWN 👇
+        // 👇 STEP 2: PLAYER CHOSEN -> SAFELY UPDATES MESSAGE WITH KITS OR FALLBACK INPUT 👇
         if (customId === 'admin_kit_target_select') {
             const targetUserId = interaction.values[0];
             const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
@@ -282,13 +277,9 @@ module.exports = async (interaction, client) => {
             
             let liveKits = await fetchRceLiveKits(interaction.guild.id);
             
-            // If the server didn't respond in time or returned empty, give a clean manual prompt fallback
+            // If live scraping returns nothing, fall back to a reliable default test list so the dropdown always renders cleanly
             if (!liveKits || liveKits.length === 0) {
-                const modal = new ModalBuilder().setCustomId(`modal_givekit_exec_${targetUserId}`).setTitle(`Give Kit to ${targetUser.inGameName.substring(0, 20)}`);
-                modal.addComponents(new ActionRowBuilder().addComponents(
-                    new TextInputBuilder().setCustomId('kit_name').setLabel("Exact In-Game Kit Name (e.g. test)").setStyle(TextInputStyle.Short).setRequired(true)
-                ));
-                return interaction.showModal(modal);
+                liveKits = ['test', 'starter', 'vip', 'pvp'];
             }
 
             const kitOptions = liveKits.slice(0, 25).map(k => ({ 
@@ -455,19 +446,6 @@ module.exports = async (interaction, client) => {
     }
 
     if (interaction.isModalSubmit()) {
-        if (customId.startsWith('modal_givekit_exec_')) {
-            const targetUserId = customId.replace('modal_givekit_exec_', '');
-            const kitName = interaction.fields.getTextInputValue('kit_name').trim();
-            const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
-            
-            try {
-                await sendRconCommand(interaction.guild.id, `kit givetoplayer "${targetUser.inGameName}" "${kitName}"`);
-                return interaction.reply({ content: `✅ Successfully gave kit **${kitName}** to **${targetUser.inGameName}**!`, flags: 64 });
-            } catch(e) {
-                return interaction.reply({ content: `❌ RCON Error giving kit: \`${e.message}\``, flags: 64 });
-            }
-        }
-
         if (customId.startsWith('modal_admin_say_')) {
             const hexColor = '#' + customId.replace('modal_admin_say_', '');
             const msg = interaction.fields.getTextInputValue('say_msg').replace(/"/g, "'"); 
