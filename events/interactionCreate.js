@@ -121,7 +121,9 @@ module.exports = async (interaction, client) => {
             customId === 'btn_admin_kit' || 
             customId === 'admin_kit_choice_select' || 
             customId.startsWith('admin_kit_target_') || 
-            customId === 'admin_kit_target_select'
+            customId === 'admin_kit_target_select' ||
+            customId.startsWith('admin_kit_target_player_') ||
+            customId.startsWith('admin_kit_final_exec_')
         ) {
             return await adminHandler(interaction, client);
         }
@@ -193,13 +195,14 @@ module.exports = async (interaction, client) => {
             return await bountyHandler(interaction, client);
         }
 
-        if (customId.includes('kit') && !customId.includes('ticket')) {
-            return await kitHandler(interaction, client);
-        }
-
+        // 👇 PRIORITY CHECK FOR CUSTOM BINDS (MUST BE BEFORE GENERAL KIT CHECK) 👇
         if (customId.startsWith('bind_') || customId.startsWith('btn_bind_') || customId === 'bind_do_kit' || customId.includes('bind')) {
             return await bindHandler(interaction, client);
         } 
+
+        if (customId.includes('kit') && !customId.includes('ticket')) {
+            return await kitHandler(interaction, client);
+        }
 
         // Fallback for uncaught buttons
         return await adminHandler(interaction, client);

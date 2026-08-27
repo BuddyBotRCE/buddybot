@@ -227,7 +227,6 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
             new ButtonBuilder().setCustomId('bind_back_category').setLabel('Back to Categories').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
         ));
     }
-    // 👇 DYNAMIC KIT PICKER VIEW FROM DATABASE 👇
     else if (session.view === 'kit_picker') {
         embed.setTitle('📦 Select In-Game Kit').setDescription('Choose which kit this bind will grant to players.');
         const serverKits = await ServerKit.findAll({ where: { guildId } });
@@ -314,6 +313,7 @@ const bindHandler = async (interaction, client) => {
             return await renderBindPanel(interaction);
         }
 
+        // 👇 CATCHES NEW KIT, TELEPORT, AND RECYCLER BINDS PROPERLY 👇
         if (customId.startsWith('bind_create_')) {
             const type = customId.replace('bind_create_', '');
             const newBind = await CustomBind.create({ 
@@ -355,7 +355,6 @@ const bindHandler = async (interaction, client) => {
             return await renderBindPanel(interaction, `💬 Quick-chat wheel trigger updated!`);
         }
 
-        // 👇 HANDLES THE SELECTION FROM THE KIT DROPDOWN MENU 👇
         if (customId === 'bind_do_kit' && interaction.isStringSelectMenu()) {
             const kitName = interaction.values[0];
             const command = `kit givetoplayer "${kitName}" "{player}"`;
@@ -412,7 +411,6 @@ const bindHandler = async (interaction, client) => {
                 return await renderBindPanel(interaction);
             }
 
-            // 👇 OPENS THE DROPDOWN KIT PICKER VIEW 👇
             if (customId === 'bind_btn_kitselect') {
                 session.view = 'kit_picker';
                 return await renderBindPanel(interaction);
