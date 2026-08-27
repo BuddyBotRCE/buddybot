@@ -233,14 +233,18 @@ module.exports = async (interaction, client) => {
             const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
             if (!targetUser || !targetUser.inGameName) return interaction.reply({ content: `❌ This user has not linked their Rust account yet!`, flags: 64 });
             
+            // Strictly querying real kit manager entries from database
             const kits = await ServerKit.findAll({ where: { guildId: interaction.guild.id } });
-            const kitOptions = kits.length > 0 
-                ? kits.slice(0, 25).map(k => ({ label: k.kitName.substring(0, 100), value: k.kitName, emoji: '📦' }))
-                : [
-                    { label: 'starter', value: 'starter', description: 'Default fallback kit', emoji: '📦' },
-                    { label: 'vip', value: 'vip', description: 'Default fallback kit', emoji: '⭐' },
-                    { label: 'builder', value: 'builder', description: 'Default fallback kit', emoji: '🏗️' }
-                  ];
+            
+            if (!kits || kits.length === 0) {
+                return interaction.update({ content: `❌ **No kits found in your Kit Manager database!** Please configure your kits first.`, components: [] });
+            }
+
+            const kitOptions = kits.slice(0, 25).map(k => ({ 
+                label: k.kitName.substring(0, 100), 
+                value: k.kitName, 
+                emoji: '📦' 
+            }));
 
             const row = new ActionRowBuilder().addComponents(
                 new StringSelectMenuBuilder()
@@ -248,7 +252,7 @@ module.exports = async (interaction, client) => {
                     .setPlaceholder('Step 2: Choose a kit from your kit manager...')
                     .addOptions(kitOptions)
             );
-            return interaction.update({ content: `📦 **Admin Kit Wizard:** Target player set to **${targetUser.inGameName}**. Now choose the kit:`, components: [row] });
+            return interaction.update({ content: `📦 **Admin Kit Wizard:** Target player set to **${targetUser.inGameName}**. Now select the kit:`, components: [row] });
         }
 
         if (customId === 'admin_item_select_player') {
