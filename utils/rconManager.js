@@ -309,5 +309,49 @@ async function processBountyLogic(guildId, killerDb, victimDb, client, config) {
         }
     }
 }
+async function fetchServerKits(guildId) {
+    return new Promise(async (resolve, reject) => {
+        const ws = activeConnections.get(guildId);
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+            try {
+                await connectRcon(guildId, global.discordClient);
+            } catch (e) {
+                return reject(new Error("Not connected to RCON."));
+            }
+        }
+        
+        let foundKits = [];
+        const tempListener = (data) => {
+            try {
+                const parsed = JSON.parse(data);
+                if (!parsed || !parsed.Message) return;
+                const msg = parsed.Message;
+                
+                // Checks for common Carbon/Oxide kit list formats (e.g. "Kit Name: ...")
+                if (msg.includes("Kit") || msg.includes("kits") || msg.includes("[")) {
+                    // Split lines or parse names if it matches your plugin's output
+                    const lines = msg.split('\n');
+                    for (const line of lines) {
+                        const clean = line.trim();
+                        if (clean && !clean.toLowerCase().includes('list')) {
+                            foundKits.push(clean);
+                        }
+                    }
+                }
+            } catch (e) {}
+        };
 
-module.exports = { connectRcon, sendRconCommand, triggerCustomEvent, activeConnections, adminPosQueue, queueAdminPos };
+        const activeWs = activeConnections.get(guildId);
+        activeWs.on('message', tempListener);
+
+        // Send the standard kit listing command for RCE
+        activeWs.send(JSON.stringify({ Identifier: 999, Message: "kit.list", Name: "BuddyBot" }));
+
+        setTimeout(() => {
+            activeWs.off('message', tempListener);
+            resolve(foundKits.length > 0 ? foundKits : ["starter", "vip", "builder"]); // Fallback if plugin uses a unique output format
+        }, 1500);
+    });
+}
+
+module.exports = { connectRcon, sendRconCommand, triggerCustomEvent, activeConnections, adminPosQueue, queueAdminPos, fetchServerKits };

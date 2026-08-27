@@ -349,7 +349,6 @@ const bindHandler = async (interaction, client) => {
                 return await renderBindPanel(interaction, `✅ Bind renamed successfully!`);
             }
 
-            // 👇 SAVES THE KIT TYPED BY THE USER IN THE TEXT BOX 👇
             if (customId === 'modal_bind_kit') {
                 const kitName = interaction.fields.getTextInputValue('kit_name').trim();
                 const command = `kit.give "{player}" "${kitName}"`;
@@ -391,7 +390,6 @@ const bindHandler = async (interaction, client) => {
                 return await renderBindPanel(interaction);
             }
 
-            // 👇 THE FIX FOR THE DEAD KIT BUTTON 👇
             if (customId === 'bind_btn_kitselect') {
                 const b = await CustomBind.findByPk(session.selectedBindId);
                 const modal = new ModalBuilder().setCustomId('modal_bind_kit').setTitle(`Bind to Kit`);
@@ -459,7 +457,6 @@ const bindHandler = async (interaction, client) => {
                 if (bind.actionType === 'teleport') {
                     newCommand = `global.teleportpos (${cX},${loweredY},${cZ}) "{player}"`;
                 } else if (bind.actionType === 'recycler') {
-                    // 👇 FIXED RECYCLER SPAWN SYNTAX FOR PLACE ON GROUND 👇
                     newCommand = `spawn recycler_static (${cX},${loweredY},${cZ})`;
                 }
                 
