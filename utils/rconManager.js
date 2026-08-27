@@ -1,5 +1,5 @@
 const WebSocket = require('ws');
-const { GuildConfig, UserEconomy, CustomBind, BindCooldown, ActiveBounty, BountyCooldown } = require('../database/db');
+const { GuildConfig, GameServer, UserEconomy, CustomBind, BindCooldown, ActiveBounty, BountyCooldown } = require('../database/db');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 
 const activeConnections = new Map();
@@ -18,10 +18,42 @@ function registerEventParser(rconMock, emit) {
     });
 }
 
-async function connectRcon(guildId, client) {
-    const config = await GuildConfig.findOne({ where: { guildId: guildId } });
-    if (!config || !config.rconIp || !config.rconPort || !config.rconPassword) {
-        throw new Error("Missing RCON credentials for this server! Please configure them using the RCON setup panel.");
+async function connectRcon(guildId, client, targetServerId = null) {
+    let rconIp, rconPort, rconPassword;
+
+    // 1. If a specific multi-server ID was provided, use its credentials
+    if (targetServerId) {
+        const specificServer = await GameServer.findByPk(targetServerId);
+        if (specificServer) {
+            rconIp = specificServer.rconIp;
+            rconPort = specificServer.rconPort;
+            rconPassword = specificServer.rconPassword;
+        }
+    }
+
+    // 2. If not found yet, check the main GuildConfig table
+    if (!rconIp || !rconPort || !rconPassword) {
+        const config = await GuildConfig.findOne({ where: { guildId: guildId } });
+        if (config && config.rconIp && config.rconPort && config.rconPassword) {
+            rconIp = config.rconIp;
+            rconPort = config.rconPort;
+            rconPassword = config.rconPassword;
+        }
+    }
+
+    // 3. If still not found, fall back to the first available server in the Multi-Server table
+    if (!rconIp || !rconPort || !rconPassword) {
+        const firstGameServer = await GameServer.findOne({ where: { guildId: guildId } });
+        if (firstGameServer) {
+            rconIp = firstGameServer.rconIp;
+            rconPort = firstGameServer.rconPort;
+            rconPassword = firstGameServer.rconPassword;
+        }
+    }
+
+    // Final check: if everything is empty, throw the error
+    if (!rconIp || !rconPort || !rconPassword) {
+        throw new Error("Missing RCON credentials for this server! Please add a game server or configure them using the RCON setup panel.");
     }
     
     // Return existing open connection if available
@@ -35,13 +67,12 @@ async function connectRcon(guildId, client) {
     }
 
     return new Promise((resolve, reject) => {
-        // Robust RCE WebRCON URL format (supports standard and G-Portal style endpoints)
-        const rconUrl = `ws://${config.rconIp}:${config.rconPort}/${encodeURIComponent(config.rconPassword)}`;
+        const rconUrl = `ws://${rconIp}:${rconPort}/${encodeURIComponent(rconPassword)}`;
         const ws = new WebSocket(rconUrl);
         
         const timeout = setTimeout(() => { 
             try { ws.close(); } catch(e){}
-            reject(new Error(`RCON Connection timed out to ${config.rconIp}:${config.rconPort}. Check your IP, Port, and Password.`)); 
+            reject(new Error(`RCON Connection timed out to ${rconIp}:${rconPort}. Check your IP, Port, and Password.`)); 
         }, 10000);
 
         ws.on('open', () => {
@@ -57,7 +88,7 @@ async function connectRcon(guildId, client) {
         ws.on('error', (err) => {
             clearTimeout(timeout);
             activeConnections.delete(guildId);
-            reject(new Error(`RCON Socket Error: Unable to reach ${config.rconIp}:${config.rconPort}`));
+            reject(new Error(`RCON Socket Error: Unable to reach ${rconIp}:${rconPort}`));
         });
 
         const eventEmitterCallback = async (eventName, data) => {
@@ -248,11 +279,11 @@ async function connectRcon(guildId, client) {
     });
 }
 
-async function sendRconCommand(guildId, commandStr, client = null) {
+async function sendRconCommand(guildId, commandStr, client = null, serverId = null) {
     let ws = activeConnections.get(guildId);
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         try {
-            await connectRcon(guildId, client || global.discordClient); 
+            await connectRcon(guildId, client || global.discordClient, serverId); 
             ws = activeConnections.get(guildId);
         } catch (e) {
             console.error("[RCON CONNECTION FAILED]", e.message);
