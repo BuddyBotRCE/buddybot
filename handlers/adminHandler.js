@@ -9,11 +9,12 @@ const { activeConnections } = require('../utils/rconManager');
 
 const giveKitSessions = new Map();
 
+// High-precision RCE Live Kit Scraper
 async function fetchRceLiveKits(guildId) {
     return new Promise((resolve) => {
         const ws = activeConnections.get(guildId);
         if (!ws || ws.readyState !== WebSocket.OPEN) {
-            return resolve(['test', 'starter', 'vip']); // Safe default fallback list so it never fails
+            return resolve([]);
         }
 
         let kitsFound = [];
@@ -22,15 +23,23 @@ async function fetchRceLiveKits(guildId) {
                 const parsed = JSON.parse(data);
                 if (!parsed || !parsed.Message) return;
                 const msg = parsed.Message;
-                if (msg.toLowerCase().includes('kit') || msg.toLowerCase().includes('available')) {
-                    const lines = msg.split('\n');
-                    for (let line of lines) {
-                        line = line.trim();
-                        if (line && !line.toLowerCase().includes('list') && !line.toLowerCase().includes('available') && !line.toLowerCase().includes('kits')) {
-                            const cleanName = line.replace(/[-*#]/g, '').trim();
-                            if (cleanName && !kitsFound.includes(cleanName)) {
-                                kitsFound.push(cleanName);
-                            }
+                
+                // Read console text output lines coming back from kit.list
+                const lines = msg.split('\n');
+                for (let line of lines) {
+                    line = line.trim();
+                    // Clean out common RCE console fluff and keep actual kit identifier words
+                    if (line && 
+                        !line.toLowerCase().includes('list') && 
+                        !line.toLowerCase().includes('available') && 
+                        !line.toLowerCase().includes('kits') &&
+                        !line.toLowerCase().includes('command') &&
+                        !line.startsWith('{') && !line.startsWith('}')) {
+                        
+                        // Strip quotes or bullet symbols if present
+                        const cleanName = line.replace(/["'*#-]/g, '').trim();
+                        if (cleanName && !kitsFound.includes(cleanName) && cleanName.length < 30) {
+                            kitsFound.push(cleanName);
                         }
                     }
                 }
@@ -40,11 +49,11 @@ async function fetchRceLiveKits(guildId) {
         ws.on('message', listener);
         ws.send(JSON.stringify({ Identifier: 9999, Message: "kit.list", Name: "AdminWizard" }));
 
+        // Give the RCE server 2 full seconds to reply back with the active list over WebRCON
         setTimeout(() => {
             ws.off('message', listener);
-            if (kitsFound.length === 0) kitsFound = ['test', 'starter', 'vip', 'builder'];
             resolve(kitsFound);
-        }, 1000);
+        }, 2000);
     });
 }
 
@@ -334,10 +343,19 @@ module.exports = async (interaction, client) => {
             return interaction.update({ content: '👤 **Select Target Player:**', components: [row], embeds: [] });
         }
 
-        // 👇 SAFELY DEFERRED LIVE RCON SCRAPE WITH NO MODAL FALLBACK 👇
+        // 👇 LIVE RCON KIT SCRAPER BUTTON TRIGGER 👇
         if (customId === 'ak_panel_kit') {
             await interaction.deferUpdate();
             let liveKits = await fetchRceLiveKits(interaction.guild.id);
+
+            // If the live query found no kits, give a direct fallback modal so you can type your actual kit name
+            if (!liveKits || liveKits.length === 0) {
+                const modal = new ModalBuilder().setCustomId('ak_modal_kit_input').setTitle('Enter In-Game Kit Name');
+                modal.addComponents(new ActionRowBuilder().addComponents(
+                    new TextInputBuilder().setCustomId('kit_name').setLabel("Exact Kit Name (e.g. test)").setStyle(TextInputStyle.Short).setRequired(true)
+                ));
+                return interaction.showModal(modal);
+            }
 
             const kitOptions = liveKits.slice(0, 25).map(k => ({
                 label: k.substring(0, 100),
@@ -348,7 +366,7 @@ module.exports = async (interaction, client) => {
             const row = new ActionRowBuilder().addComponents(
                 new StringSelectMenuBuilder()
                     .setCustomId('ak_panel_kit_select')
-                    .setPlaceholder('Select a kit from your RCE server...')
+                    .setPlaceholder('Select a kit from your server...')
                     .addOptions(kitOptions)
             );
             return interaction.editReply({ content: '📦 **Select Kit from RCE Server:**', components: [row], embeds: [] });
@@ -486,6 +504,13 @@ module.exports = async (interaction, client) => {
     }
 
     if (interaction.isModalSubmit()) {
+        if (customId === 'ak_modal_kit_input') {
+            if (!giveKitSessions.has(userId)) giveKitSessions.set(userId, { targetUserId: null, kitName: null });
+            const session = giveKitSessions.get(userId);
+            session.kitName = interaction.fields.getTextInputValue('kit_name').trim();
+            return await renderGiveKitPanel(interaction, session, `📦 Kit name "**${session.kitName}**" saved to session!`);
+        }
+
         if (customId.startsWith('modal_admin_say_')) {
             const hexColor = '#' + customId.replace('modal_admin_say_', '');
             const msg = interaction.fields.getTextInputValue('say_msg').replace(/"/g, "'"); 
