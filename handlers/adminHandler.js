@@ -155,9 +155,13 @@ module.exports = async (interaction, client) => {
             if (server) {
                 const serverName = server.serverName;
                 await server.destroy();
-                return interaction.update({ content: `✅ Successfully removed game server **${serverName}** from the manager.`, components: [], embeds: [] });
+                return interaction.update({ content: `✅ Successfully removed game server **${serverName}** from the database.`, components: [], embeds: [] }).catch(() => {
+                    return interaction.reply({ content: `✅ Successfully removed game server **${serverName}** from the database.`, flags: 64 });
+                });
             }
-            return interaction.update({ content: `❌ Server not found or already deleted.`, components: [], embeds: [] });
+            return interaction.update({ content: `❌ Server not found or already deleted.`, components: [], embeds: [] }).catch(() => {
+                return interaction.reply({ content: `❌ Server not found or already deleted.`, flags: 64 });
+            });
         }
         
         if (selectedValue === 'setup_embed') {
