@@ -4,46 +4,6 @@ const { connectRcon, sendRconCommand } = require('../utils/rconManager');
 const { RUST_CATEGORIES } = require('../utils/rustCatalog');
 const postEmbedHandler = require('./postEmbedHandler');
 const wipeHandler = require('./wipeHandler'); 
-const WebSocket = require('ws');
-const { activeConnections } = require('../utils/rconManager');
-
-async function fetchRceLiveKits(guildId) {
-    return new Promise((resolve) => {
-        const ws = activeConnections.get(guildId);
-        if (!ws || ws.readyState !== WebSocket.OPEN) {
-            return resolve([]);
-        }
-
-        let kitsFound = [];
-        const listener = (data) => {
-            try {
-                const parsed = JSON.parse(data);
-                if (!parsed || !parsed.Message) return;
-                const msg = parsed.Message;
-                if (msg.toLowerCase().includes('kit') || msg.toLowerCase().includes('available')) {
-                    const lines = msg.split('\n');
-                    for (let line of lines) {
-                        line = line.trim();
-                        if (line && !line.toLowerCase().includes('list') && !line.toLowerCase().includes('available') && !line.toLowerCase().includes('kits')) {
-                            const cleanName = line.replace(/[-*#]/g, '').trim();
-                            if (cleanName && !kitsFound.includes(cleanName)) {
-                                kitsFound.push(cleanName);
-                            }
-                        }
-                    }
-                }
-            } catch (e) {}
-        };
-
-        ws.on('message', listener);
-        ws.send(JSON.stringify({ Identifier: 9999, Message: "kit.list", Name: "AdminWizard" }));
-
-        setTimeout(() => {
-            ws.off('message', listener);
-            resolve(kitsFound);
-        }, 1000);
-    });
-}
 
 module.exports = async (interaction, client) => {
     const customId = interaction.customId || '';
@@ -170,13 +130,14 @@ module.exports = async (interaction, client) => {
             return interaction.showModal(modal);
         }
 
-        // 👇 FINAL STEP: EXECUTES RCON KIT COMMAND 👇
+        // 👇 STEP 2 COMPLETED: KIT CHOSEN FROM KIT MANAGER -> SENDS RCE RCON COMMAND 👇
         if (customId.startsWith('admin_kit_final_exec_')) {
             const targetUserId = customId.replace('admin_kit_final_exec_', '');
             const kitName = selectedValue;
             const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
 
             try {
+                // Official Rust Console Edition kit command: kit givetoplayer "PlayerName" "KitName"
                 await sendRconCommand(interaction.guild.id, `kit givetoplayer "${targetUser.inGameName}" "${kitName}"`);
                 return interaction.update({ content: `✅ Successfully gave kit **${kitName}** to **${targetUser.inGameName}** (<@${targetUserId}>)!`, components: [] });
             } catch (e) {
@@ -267,34 +228,32 @@ module.exports = async (interaction, client) => {
     }
 
     if (interaction.isUserSelectMenu()) {
-        // 👇 STEP 2: PLAYER CHOSEN -> SAFELY UPDATES MESSAGE WITH KITS OR FALLBACK INPUT 👇
+        // 👇 STEP 1 COMPLETED: PLAYER CHOSEN -> NOW SHOWS KIT MANAGER DROPDOWN 👇
         if (customId === 'admin_kit_target_select') {
             const targetUserId = interaction.values[0];
             const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
             if (!targetUser || !targetUser.inGameName) return interaction.reply({ content: `❌ This user has not linked their Rust account yet!`, flags: 64 });
             
-            await interaction.deferUpdate();
+            // Query 100% strictly from the database Kit Manager table
+            const dbKits = await ServerKit.findAll({ where: { guildId: interaction.guild.id } });
             
-            let liveKits = await fetchRceLiveKits(interaction.guild.id);
-            
-            // If live scraping returns nothing, fall back to a reliable default test list so the dropdown always renders cleanly
-            if (!liveKits || liveKits.length === 0) {
-                liveKits = ['test', 'starter', 'vip', 'pvp'];
+            if (!dbKits || dbKits.length === 0) {
+                return interaction.reply({ content: `❌ **No kits found in your Kit Manager database!** Please register your kits in the bot's Kit Manager first so they appear here.`, flags: 64 });
             }
 
-            const kitOptions = liveKits.slice(0, 25).map(k => ({ 
-                label: k.substring(0, 100), 
-                value: k, 
+            const kitOptions = dbKits.slice(0, 25).map(k => ({ 
+                label: k.kitName.substring(0, 100), 
+                value: k.kitName, 
                 emoji: '📦' 
             }));
 
             const row = new ActionRowBuilder().addComponents(
                 new StringSelectMenuBuilder()
                     .setCustomId(`admin_kit_final_exec_${targetUserId}`)
-                    .setPlaceholder('Step 2: Select a kit from your server...')
+                    .setPlaceholder('Step 2: Select a kit from your Kit Manager...')
                     .addOptions(kitOptions)
             );
-            return interaction.editReply({ content: `📦 **Admin Kit Wizard:** Target player set to **${targetUser.inGameName}**. Now select the kit:`, components: [row] });
+            return interaction.update({ content: `📦 **Admin Kit Wizard:** Target player set to **${targetUser.inGameName}**. Now select the kit from your Kit Manager:`, components: [row] });
         }
 
         if (customId === 'admin_item_select_player') {
@@ -331,7 +290,7 @@ module.exports = async (interaction, client) => {
             return interaction.reply({ content: '📢 **Server Broadcast:** Select the color for your message:', components: [row], flags: 64 });
         }
 
-        // 👇 STEP 1: CLICK GIVE KIT -> CHOOSE PLAYER FIRST 👇
+        // 👇 STEP 1: CLICK GIVE KIT -> CHOOSE PLAYER FIRST VIA USER SELECT MENU 👇
         if (customId === 'btn_admin_kit') {
             const row = new ActionRowBuilder().addComponents(
                 new UserSelectMenuBuilder().setCustomId('admin_kit_target_select').setPlaceholder('Step 1: Select the player to receive a kit...')
