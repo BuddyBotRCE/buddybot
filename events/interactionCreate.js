@@ -49,11 +49,14 @@ module.exports = async (interaction, client) => {
         // 🚦 0. UNIVERSAL MODAL SUBMISSION ROUTER (Catch modals first)
         // ====================================================================
         if (interaction.isModalSubmit()) {
+            // 👇 DIRECT ROUTE FOR LIVE ADMIN KIT EXECUTION MODAL 👇
+            if (customId.startsWith('modal_givekit_exec_')) {
+                return await adminHandler(interaction, client);
+            }
 
             if (customId === 'modal_ae_settings' || customId.startsWith('modal_ae_')) {
                 return await autoEventsHandler(interaction, client);
             }
-            // ... (rest of your modal checks)
             if (customId.startsWith('modal_emb_') || customId === 'modal_admin_embed') {
                 return await postEmbedHandler(interaction, client);
             }
@@ -112,6 +115,16 @@ module.exports = async (interaction, client) => {
         // ====================================================================
         // 🚦 2. COMPONENT ROUTING STATION (Buttons & Select Menus)
         // ====================================================================
+
+        // 👇 DIRECT ROUTE FOR LIVE ADMIN KIT BUTTONS & SELECT MENUS 👇
+        if (
+            customId === 'btn_admin_kit' || 
+            customId === 'admin_kit_choice_select' || 
+            customId.startsWith('admin_kit_target_') || 
+            customId === 'admin_kit_target_select'
+        ) {
+            return await adminHandler(interaction, client);
+        }
 
         if (customId.startsWith('btn_log_') || customId.startsWith('select_log_chan_')) {
             return await loggingHandler(interaction, client);
@@ -186,10 +199,6 @@ module.exports = async (interaction, client) => {
 
         if (customId.startsWith('bind_') || customId.startsWith('btn_bind_') || customId.includes('bind')) {
             return await bindHandler(interaction, client);
-        }
-
-        if (customId === 'btn_admin_kit' || customId === 'admin_kit_choice_select' || customId.startsWith('admin_kit_target_')) {
-            return await adminHandler(interaction, client);
         }
 
         // Fallback for uncaught buttons
