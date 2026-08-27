@@ -227,32 +227,28 @@ module.exports = async (interaction, client) => {
     }
 
     if (interaction.isUserSelectMenu()) {
-        // 👇 STEP 2: PLAYER CHOSEN -> GRABS KITS FROM DATABASE KIT MANAGER 👇
+        // 👇 STEP 2: PLAYER CHOSEN -> PULLS 100% STRICTLY FROM DATABASE KIT MANAGER 👇
         if (customId === 'admin_kit_target_select') {
             const targetUserId = interaction.values[0];
             const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
             if (!targetUser || !targetUser.inGameName) return interaction.reply({ content: `❌ This user has not linked their Rust account yet!`, flags: 64 });
             
-            // Query database kit manager records
             const dbKits = await ServerKit.findAll({ where: { guildId: interaction.guild.id } });
             
-            // Fallback: If no kits are registered in the db yet, include any kit name dynamically
-            // or use standard names so it never blocks you with a "no kits found" error.
-            let kitList = dbKits.map(k => k.kitName);
-            if (kitList.length === 0) {
-                kitList = ['starter', 'vip', 'builder', 'test']; // Safety fallback if db is empty
+            if (!dbKits || dbKits.length === 0) {
+                return interaction.update({ content: `❌ **No kits found in your Kit Manager database!** Please register your kits in the bot's Kit Manager first.`, components: [] });
             }
 
-            const kitOptions = kitList.slice(0, 25).map(kitName => ({ 
-                label: kitName.substring(0, 100), 
-                value: kitName, 
+            const kitOptions = dbKits.slice(0, 25).map(k => ({ 
+                label: k.kitName.substring(0, 100), 
+                value: k.kitName, 
                 emoji: '📦' 
             }));
 
             const row = new ActionRowBuilder().addComponents(
                 new StringSelectMenuBuilder()
                     .setCustomId(`admin_kit_final_exec_${targetUserId}`)
-                    .setPlaceholder('Step 2: Choose a kit...')
+                    .setPlaceholder('Step 2: Choose a kit from your kit manager...')
                     .addOptions(kitOptions)
             );
             return interaction.update({ content: `📦 **Admin Kit Wizard:** Target player set to **${targetUser.inGameName}**. Now select the kit:`, components: [row] });
