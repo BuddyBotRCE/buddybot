@@ -17,7 +17,6 @@ const CHAT_CATEGORIES = [
     { label: 'I Have', value: 'cat_have', emoji: '🎒', description: 'I have scrap, bow, pickaxe' }
 ];
 
-// 👇 THE FIX: WE NOW SAVE THE RAW RUST DEVELOPER CODES TO MATCH THE RCON STREAM!
 const CHAT_OPTIONS_MAP = {
     cat_combat: [
         { label: 'We\'re Under Attack', value: 'd11_quick_chat_combat_slot_0', emoji: '⚔️' },
@@ -330,7 +329,6 @@ const bindHandler = async (interaction, client) => {
             const wheelOption = options.find(o => o.value === interaction.values[0]);
             
             const emote = wheelOption ? `${wheelOption.emoji} ${wheelOption.label}` : interaction.values[0];
-            // 👇 THIS IS THE FIX: We explicitly save the internal d11 code to the database!
             const targetPhrase = wheelOption ? wheelOption.value : interaction.values[0];
             
             await CustomBind.update({ emote, targetValue: targetPhrase }, { where: { id: session.selectedBindId } });
@@ -467,9 +465,10 @@ const bindHandler = async (interaction, client) => {
                 
                 let newCommand = '';
                 if (bind.actionType === 'teleport') {
-                    newCommand = `teleportpos "{player}" ${cX} ${loweredY} ${cZ}`;
+                    // 👇 FORMATTED EXACTLY HOW YOUR CONSOLE LIKES IT 👇
+                    newCommand = `global.teleports "{player}" ${cX},${loweredY},${cZ}`;
                 } else if (bind.actionType === 'recycler') {
-                    newCommand = `spawn recycler_static ${cX} ${loweredY} ${cZ}`;
+                    newCommand = `global.spawn recycler_static ${cX},${loweredY},${cZ}`;
                 }
                 
                 await CustomBind.update({ command: newCommand }, { where: { id: session.selectedBindId } });
