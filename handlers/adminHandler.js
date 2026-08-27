@@ -5,9 +5,45 @@ const { RUST_CATEGORIES } = require('../utils/rustCatalog');
 const postEmbedHandler = require('./postEmbedHandler');
 const wipeHandler = require('./wipeHandler'); 
 
+const giveKitSessions = new Map();
+
+async function renderGiveKitPanel(interaction, session, messageOverride = '') {
+    const targetUser = session.targetUserId ? await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: session.targetUserId } }) : null;
+    const ignDisplay = targetUser?.inGameName ? `**${targetUser.inGameName}** (<@${session.targetUserId}>)` : '`Not Selected`';
+    const kitDisplay = session.kitName ? `**${session.kitName}**` : '`Not Selected`';
+
+    const embed = new EmbedBuilder()
+        .setTitle('📦 Live Admin: Give Kit Wizard')
+        .setDescription(messageOverride ? `**${messageOverride}**\n\nConfigure your selections below and click Send.` : 'Configure your selections below and click Send.')
+        .setColor('#3498db')
+        .addFields(
+            { name: '👤 Target Player', value: ignDisplay, inline: true },
+            { name: '📦 Selected Kit', value: kitDisplay, inline: true }
+        );
+
+    const row1 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('ak_panel_player').setLabel('Select Player').setStyle(ButtonStyle.Primary).setEmoji('👤'),
+        new ButtonBuilder().setCustomId('ak_panel_kit').setLabel('Select Kit').setStyle(ButtonStyle.Secondary).setEmoji('📦')
+    );
+
+    const isReady = session.targetUserId && session.kitName;
+    const row2 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('ak_panel_send').setLabel('🚀 Send Kit to Player').setStyle(ButtonStyle.Success).setDisabled(!isReady),
+        new ButtonBuilder().setCustomId('ak_panel_cancel').setLabel('Cancel').setStyle(ButtonStyle.Danger)
+    );
+
+    const payload = { embeds: [embed], components: [row1, row2], flags: 64 };
+    if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
+        return await interaction.reply(payload);
+    } else {
+        return await interaction.update(payload).catch(() => interaction.editReply(payload));
+    }
+}
+
 module.exports = async (interaction, client) => {
     const customId = interaction.customId || '';
     const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
+    const userId = interaction.user.id;
 
     if (
         selectedValue === 'setup_wipe' || 
@@ -123,26 +159,19 @@ module.exports = async (interaction, client) => {
     }
 
     if (interaction.isStringSelectMenu()) {
+        // 👇 HANDLES KIT SELECTION FROM THE DROPDOWN MENU POPULATED BY KIT MANAGER 👇
+        if (customId === 'ak_panel_kit_select') {
+            if (!giveKitSessions.has(userId)) giveKitSessions.set(userId, { targetUserId: null, kitName: null });
+            const session = giveKitSessions.get(userId);
+            session.kitName = selectedValue;
+            return await renderGiveKitPanel(interaction, session, `📦 Selected kit: **${selectedValue}**`);
+        }
+
         if (customId === 'admin_say_color_select') {
             const selectedColor = selectedValue.replace('#', '');
             const modal = new ModalBuilder().setCustomId(`modal_admin_say_${selectedColor}`).setTitle('Server Broadcast Message');
             modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('say_msg').setLabel("Type your message").setStyle(TextInputStyle.Paragraph).setRequired(true)));
             return interaction.showModal(modal);
-        }
-
-        // 👇 STEP 2 COMPLETED: KIT CHOSEN FROM KIT MANAGER -> SENDS RCE RCON COMMAND 👇
-        if (customId.startsWith('admin_kit_final_exec_')) {
-            const targetUserId = customId.replace('admin_kit_final_exec_', '');
-            const kitName = selectedValue;
-            const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
-
-            try {
-                // Official Rust Console Edition kit command: kit givetoplayer "PlayerName" "KitName"
-                await sendRconCommand(interaction.guild.id, `kit givetoplayer "${targetUser.inGameName}" "${kitName}"`);
-                return interaction.update({ content: `✅ Successfully gave kit **${kitName}** to **${targetUser.inGameName}** (<@${targetUserId}>)!`, components: [] });
-            } catch (e) {
-                return interaction.update({ content: `❌ RCON Error giving kit: \`${e.message}\``, components: [] });
-            }
         }
 
         if (customId === 'log_action_select') {
@@ -228,32 +257,11 @@ module.exports = async (interaction, client) => {
     }
 
     if (interaction.isUserSelectMenu()) {
-        // 👇 STEP 1 COMPLETED: PLAYER CHOSEN -> NOW SHOWS KIT MANAGER DROPDOWN 👇
-        if (customId === 'admin_kit_target_select') {
-            const targetUserId = interaction.values[0];
-            const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
-            if (!targetUser || !targetUser.inGameName) return interaction.reply({ content: `❌ This user has not linked their Rust account yet!`, flags: 64 });
-            
-            // Query 100% strictly from the database Kit Manager table
-            const dbKits = await ServerKit.findAll({ where: { guildId: interaction.guild.id } });
-            
-            if (!dbKits || dbKits.length === 0) {
-                return interaction.reply({ content: `❌ **No kits found in your Kit Manager database!** Please register your kits in the bot's Kit Manager first so they appear here.`, flags: 64 });
-            }
-
-            const kitOptions = dbKits.slice(0, 25).map(k => ({ 
-                label: k.kitName.substring(0, 100), 
-                value: k.kitName, 
-                emoji: '📦' 
-            }));
-
-            const row = new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder()
-                    .setCustomId(`admin_kit_final_exec_${targetUserId}`)
-                    .setPlaceholder('Step 2: Select a kit from your Kit Manager...')
-                    .addOptions(kitOptions)
-            );
-            return interaction.update({ content: `📦 **Admin Kit Wizard:** Target player set to **${targetUser.inGameName}**. Now select the kit from your Kit Manager:`, components: [row] });
+        if (customId === 'ak_panel_player_select') {
+            if (!giveKitSessions.has(userId)) giveKitSessions.set(userId, { targetUserId: null, kitName: null });
+            const session = giveKitSessions.get(userId);
+            session.targetUserId = interaction.values[0];
+            return await renderGiveKitPanel(interaction, session, '✅ Target player selected!');
         }
 
         if (customId === 'admin_item_select_player') {
@@ -274,28 +282,64 @@ module.exports = async (interaction, client) => {
     }
 
     if (interaction.isButton()) {
-        if (customId === 'btn_admin_say') {
-            const row = new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder().setCustomId('admin_say_color_select').setPlaceholder('Select Broadcast Color...')
-                .addOptions([
-                    { label: 'White (Default)', value: '#FFFFFF', emoji: '⚪' },
-                    { label: 'Red (Alert/Warning)', value: '#FF4C4C', emoji: '🔴' },
-                    { label: 'Green (Success/Event)', value: '#00FF00', emoji: '🟢' },
-                    { label: 'Blue (Info)', value: '#3498DB', emoji: '🔵' },
-                    { label: 'Yellow (Notice)', value: '#F1C40F', emoji: '🟡' },
-                    { label: 'Orange', value: '#E67E22', emoji: '🟠' },
-                    { label: 'Purple', value: '#9B59B6', emoji: '🟣' }
-                ])
-            );
-            return interaction.reply({ content: '📢 **Server Broadcast:** Select the color for your message:', components: [row], flags: 64 });
+        if (customId === 'btn_admin_kit') {
+            giveKitSessions.set(userId, { targetUserId: null, kitName: null });
+            return await renderGiveKitPanel(interaction, giveKitSessions.get(userId));
         }
 
-        // 👇 STEP 1: CLICK GIVE KIT -> CHOOSE PLAYER FIRST VIA USER SELECT MENU 👇
-        if (customId === 'btn_admin_kit') {
+        if (customId === 'ak_panel_player') {
             const row = new ActionRowBuilder().addComponents(
-                new UserSelectMenuBuilder().setCustomId('admin_kit_target_select').setPlaceholder('Step 1: Select the player to receive a kit...')
+                new UserSelectMenuBuilder().setCustomId('ak_panel_player_select').setPlaceholder('Select the player to receive the kit...')
             );
-            return interaction.reply({ content: '📦 **Admin Kit Wizard:** First, choose the target player below:', components: [row], flags: 64 });
+            return interaction.update({ content: '👤 **Select Target Player:**', components: [row], embeds: [] });
+        }
+
+        // 👇 FETCHES KITS STRICTLY FROM THE BOT'S KIT MANAGER DATABASE TABLE 👇
+        if (customId === 'ak_panel_kit') {
+            const dbKits = await ServerKit.findAll({ where: { guildId: interaction.guild.id } });
+            
+            if (!dbKits || dbKits.length === 0) {
+                return interaction.reply({ content: '❌ **No kits found in your Kit Manager database!** Please add kits using the bot’s Kit Manager first.', flags: 64 });
+            }
+
+            const kitOptions = dbKits.slice(0, 25).map(k => ({
+                label: k.kitName.substring(0, 100),
+                value: k.kitName,
+                emoji: '📦'
+            }));
+
+            const row = new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('ak_panel_kit_select')
+                    .setPlaceholder('Select a kit from your Kit Manager...')
+                    .addOptions(kitOptions)
+            );
+            return interaction.update({ content: '📦 **Select Kit from Kit Manager:**', components: [row], embeds: [] });
+        }
+
+        if (customId === 'ak_panel_send') {
+            const session = giveKitSessions.get(userId);
+            if (!session || !session.targetUserId || !session.kitName) {
+                return interaction.reply({ content: '❌ Please select both a player and a kit first.', flags: 64 });
+            }
+
+            const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: session.targetUserId } });
+            if (!targetUser || !targetUser.inGameName) {
+                return interaction.reply({ content: '❌ Target user has not linked their in-game Rust name!', flags: 64 });
+            }
+
+            try {
+                await sendRconCommand(interaction.guild.id, `kit givetoplayer "${targetUser.inGameName}" "${session.kitName}"`);
+                giveKitSessions.delete(userId);
+                return interaction.update({ content: `✅ Successfully gave kit **${session.kitName}** to **${targetUser.inGameName}** (<@${session.targetUserId}>)!`, components: [], embeds: [] });
+            } catch (e) {
+                return interaction.reply({ content: `❌ RCON Error: \`${e.message}\``, flags: 64 });
+            }
+        }
+
+        if (customId === 'ak_panel_cancel') {
+            giveKitSessions.delete(userId);
+            return interaction.update({ content: '❌ Give kit action cancelled.', components: [], embeds: [] });
         }
 
         if (customId === 'btn_admin_vip') {
@@ -348,7 +392,7 @@ module.exports = async (interaction, client) => {
             const servers = await GameServer.findAll({ where: { guildId: interaction.guild.id } });
             if (!servers || servers.length === 0) {
                 const modal = new ModalBuilder().setCustomId('modal_link_account_global').setTitle('Link Rust Account');
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ign').setLabel("Your exact in-game Rust name").setStyle(TextInputStyle.Short).setRequired(true)));
+                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ign').setLabel("Your exact in-ge name").setStyle(TextInputStyle.Short).setRequired(true)));
                 return interaction.showModal(modal);
             }
             const options = servers.map(s => ({ label: s.serverName, value: `link_server_${s.id}`, emoji: '🖥️' }));
@@ -371,7 +415,7 @@ module.exports = async (interaction, client) => {
                 sortedPlayers.forEach((player, index) => { const rank = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `**#${index + 1}**`; const ign = player.inGameName ? `**${player.inGameName}**` : 'Unlinked'; leaderboardText += `${rank} ${ign} (<@${player.userId}>) - **Level ${player.level || 1}** (${player.xp || 0} XP)\n`; });
             } else if (category === 'pvp') {
                 const sortedPlayers = allPlayers.sort((a, b) => {
-                    const kdRatioA = a.deaths === 0 ? a.pvpKills : (a.pvpKills / a.deaths); const kdRatioB = b.deaths === 0 ? b.pvpKills : (b.pvpKills / b.deaths);
+                    const kdRatioA = a.deaths === 0 ? a.pvpKills : (a.pvpKills / a.deaths); const kdRatioB = a.deaths === 0 ? b.pvpKills : (b.pvpKills / b.deaths);
                     if (kdRatioB === kdRatioA) return b.pvpKills - a.pvpKills; return kdRatioB - kdRatioA;
                 }).slice(0, 10);
                 embedTitle = '⚔️ PvP K/D Leaderboard (Refreshed)'; embedColor = '#e74c3c';
