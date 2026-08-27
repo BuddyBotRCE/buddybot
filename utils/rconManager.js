@@ -176,7 +176,6 @@ async function connectRcon(guildId, client) {
                 // ==========================================
                 // 4. ABSOLUTE DIRECT MATCH QUICK-CHAT CATCHER
                 // ==========================================
-                // Scans every incoming message for any registered player name AND the bind phrase simultaneously.
                 const serverBinds = await CustomBind.findAll({ where: { guildId: guildId } });
                 if (serverBinds.length === 0) return;
 
@@ -187,9 +186,7 @@ async function connectRcon(guildId, client) {
 
                     const phrase = bind.targetValue.toLowerCase();
 
-                    // Check if the log line contains the quick-chat phrase
                     if (msgLower.includes(phrase)) {
-                        
                         let matchedPlayer = null;
                         for (const player of registeredPlayers) {
                             if (player.inGameName && msgLower.includes(player.inGameName.toLowerCase())) {
@@ -201,7 +198,6 @@ async function connectRcon(guildId, client) {
                         if (matchedPlayer) {
                             console.log(`[ULTIMATE-CATCH] Player "${matchedPlayer.inGameName}" triggered bind phrase: "${phrase}"`);
 
-                            // Check scrap cost
                             if (bind.cost > 0 && matchedPlayer.wallet < bind.cost) {
                                 await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, you need ${bind.cost} ${currentConfig?.economyCurrency || 'Scrap'} to use this!"`, client);
                                 return;
@@ -210,7 +206,6 @@ async function connectRcon(guildId, client) {
                                 await matchedPlayer.update({ wallet: matchedPlayer.wallet - bind.cost });
                             }
 
-                            // Execute the teleport command directly targeting the player name
                             const finalCommandString = bind.command.replace(/{player}/gi, matchedPlayer.inGameName);
                             const commands = finalCommandString.split('\n');
                             for (const cmd of commands) {
