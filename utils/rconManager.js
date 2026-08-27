@@ -71,7 +71,6 @@ async function connectRcon(guildId, client) {
                 const parsed = JSON.parse(data);
                 if (!parsed || !parsed.Message) return;
                 const msg = parsed.Message;
-                console.log(`[RAW SERVER FEED] -> ${msg}`);
                 const msgLower = msg.toLowerCase();
 
                 const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });

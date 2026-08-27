@@ -17,95 +17,96 @@ const CHAT_CATEGORIES = [
     { label: 'I Have', value: 'cat_have', emoji: '🎒', description: 'I have scrap, bow, pickaxe' }
 ];
 
+// 👇 THE FIX: WE NOW SAVE THE RAW RUST DEVELOPER CODES TO MATCH THE RCON STREAM!
 const CHAT_OPTIONS_MAP = {
     cat_combat: [
-        { label: 'We\'re Under Attack', value: 'combat_under_attack', emoji: '⚔️' },
-        { label: 'Retreat', value: 'combat_retreat', emoji: '🏃' },
-        { label: 'Move Out', value: 'combat_move_out', emoji: '🚀' },
-        { label: 'Don\'t Shoot', value: 'combat_dont_shoot', emoji: '🛑' },
-        { label: 'Be Careful - Better Armed', value: 'combat_better_armed', emoji: '⚠️' },
-        { label: 'I\'m Out of Ammo', value: 'combat_out_of_ammo', emoji: '🔴' },
-        { label: 'I\'m Hurt', value: 'combat_hurt', emoji: '🩸' }
+        { label: 'We\'re Under Attack', value: 'd11_quick_chat_combat_slot_0', emoji: '⚔️' },
+        { label: 'Retreat', value: 'd11_quick_chat_combat_slot_1', emoji: '🏃' },
+        { label: 'Move Out', value: 'd11_quick_chat_combat_slot_2', emoji: '🚀' },
+        { label: 'Don\'t Shoot', value: 'd11_quick_chat_combat_slot_3', emoji: '🛑' },
+        { label: 'Be Careful - Better Armed', value: 'd11_quick_chat_combat_slot_4', emoji: '⚠️' },
+        { label: 'I\'m Out of Ammo', value: 'd11_quick_chat_combat_slot_5', emoji: '🔴' },
+        { label: 'I\'m Hurt', value: 'd11_quick_chat_combat_slot_6', emoji: '🩸' }
     ],
     cat_building: [
-        { label: 'Upgrade Walls', value: 'build_upgrade_walls', emoji: '🧱' },
-        { label: 'We Need Beds', value: 'build_need_beds', emoji: '🛏️' },
-        { label: 'I Need Building Auth', value: 'build_need_tc', emoji: '🔑' },
-        { label: 'What\'s the Door Code?', value: 'build_door_code', emoji: '🔢' },
-        { label: 'Can I Have a Key?', value: 'build_have_key', emoji: '🗝️' },
-        { label: 'We Need a Better Door', value: 'build_better_door', emoji: '🚪' },
-        { label: 'Upkeep Running Low', value: 'build_upkeep_low', emoji: '⏳' },
-        { label: 'Which Chest is Free Game?', value: 'build_free_chest', emoji: '📦' }
+        { label: 'Upgrade Walls', value: 'd11_quick_chat_building_slot_0', emoji: '🧱' },
+        { label: 'We Need Beds', value: 'd11_quick_chat_building_slot_1', emoji: '🛏️' },
+        { label: 'I Need Building Auth', value: 'd11_quick_chat_building_slot_2', emoji: '🔑' },
+        { label: 'What\'s the Door Code?', value: 'd11_quick_chat_building_slot_3', emoji: '🔢' },
+        { label: 'Can I Have a Key?', value: 'd11_quick_chat_building_slot_4', emoji: '🗝️' },
+        { label: 'We Need a Better Door', value: 'd11_quick_chat_building_slot_5', emoji: '🚪' },
+        { label: 'Upkeep Running Low', value: 'd11_quick_chat_building_slot_6', emoji: '⏳' },
+        { label: 'Which Chest is Free Game?', value: 'd11_quick_chat_building_slot_7', emoji: '📦' }
     ],
     cat_activities: [
-        { label: 'Going for Stone', value: 'act_stone', emoji: '🪨' },
-        { label: 'Going for Wood', value: 'act_wood', emoji: '🪵' },
-        { label: 'Going for Metal', value: 'act_metal', emoji: '⛏️' },
-        { label: 'Going for Food', value: 'act_food', emoji: '🍖' },
-        { label: 'Going for Water', value: 'act_water', emoji: '💧' },
-        { label: 'Going for Scrap', value: 'act_scrap', emoji: '⚙️' },
-        { label: 'Going for Metal Frags', value: 'act_frags', emoji: '🔩' },
-        { label: 'Going for Medicine', value: 'act_meds', emoji: '💉' }
+        { label: 'Going for Stone', value: 'd11_quick_chat_activities_slot_0', emoji: '🪨' },
+        { label: 'Going for Wood', value: 'd11_quick_chat_activities_slot_1', emoji: '🪵' },
+        { label: 'Going for Metal', value: 'd11_quick_chat_activities_slot_2', emoji: '⛏️' },
+        { label: 'Going for Food', value: 'd11_quick_chat_activities_slot_3', emoji: '🍖' },
+        { label: 'Going for Water', value: 'd11_quick_chat_activities_slot_4', emoji: '💧' },
+        { label: 'Going for Scrap', value: 'd11_quick_chat_activities_slot_5', emoji: '⚙️' },
+        { label: 'Going for Metal Frags', value: 'd11_quick_chat_activities_slot_6', emoji: '🔩' },
+        { label: 'Going for Medicine', value: 'd11_quick_chat_activities_slot_7', emoji: '💉' }
     ],
     cat_questions: [
-        { label: 'Are You Friendly?', value: 'q_friendly', emoji: '🤝' },
-        { label: 'Can I Build Around Here?', value: 'q_build_here', emoji: '🏗️' },
-        { label: 'Do You Want to Team Up?', value: 'q_team_up', emoji: '👥' },
-        { label: 'Do You Need Anything?', value: 'q_need_anything', emoji: '❓' },
-        { label: 'Could You Help Me?', value: 'q_help_me', emoji: '🆘' },
-        { label: 'Want to Trade?', value: 'q_trade', emoji: '🤝' },
-        { label: 'Who\'s There?', value: 'q_whos_there', emoji: '👀' },
-        { label: 'Can I Enter?', value: 'q_can_enter', emoji: '🚪' }
+        { label: 'Are You Friendly?', value: 'd11_quick_chat_questions_slot_0', emoji: '🤝' },
+        { label: 'Can I Build Around Here?', value: 'd11_quick_chat_questions_slot_1', emoji: '🏗️' },
+        { label: 'Do You Want to Team Up?', value: 'd11_quick_chat_questions_slot_2', emoji: '👥' },
+        { label: 'Do You Need Anything?', value: 'd11_quick_chat_questions_slot_3', emoji: '❓' },
+        { label: 'Could You Help Me?', value: 'd11_quick_chat_questions_slot_4', emoji: '🆘' },
+        { label: 'Want to Trade?', value: 'd11_quick_chat_questions_slot_5', emoji: '🤝' },
+        { label: 'Who\'s There?', value: 'd11_quick_chat_questions_slot_6', emoji: '👀' },
+        { label: 'Can I Enter?', value: 'd11_quick_chat_questions_slot_7', emoji: '🚪' }
     ],
     cat_responses: [
-        { label: 'Yes', value: 'resp_yes', emoji: '✅' },
-        { label: 'No', value: 'resp_no', emoji: '❌' },
-        { label: 'OK', value: 'resp_ok', emoji: '👌' },
-        { label: 'Thank You', value: 'resp_thanks', emoji: '🙏' },
-        { label: 'No Problem', value: 'resp_no_problem', emoji: '😎' },
-        { label: 'Hello', value: 'resp_hello', emoji: '👋' },
-        { label: 'Goodbye', value: 'resp_goodbye', emoji: '🚶' },
-        { label: 'I\'m Sorry', value: 'resp_sorry', emoji: '🙇' }
+        { label: 'Yes', value: 'd11_quick_chat_responses_slot_0', emoji: '✅' },
+        { label: 'No', value: 'd11_quick_chat_responses_slot_1', emoji: '❌' },
+        { label: 'OK', value: 'd11_quick_chat_responses_slot_2', emoji: '👌' },
+        { label: 'Thank You', value: 'd11_quick_chat_responses_slot_3', emoji: '🙏' },
+        { label: 'No Problem', value: 'd11_quick_chat_responses_slot_4', emoji: '😎' },
+        { label: 'Hello', value: 'd11_quick_chat_responses_slot_5', emoji: '👋' },
+        { label: 'Goodbye', value: 'd11_quick_chat_responses_slot_6', emoji: '🚶' },
+        { label: 'I\'m Sorry', value: 'd11_quick_chat_responses_slot_7', emoji: '🙇' }
     ],
     cat_orders: [
-        { label: 'Follow Me', value: 'order_follow', emoji: '👉' },
-        { label: 'Go Away', value: 'order_go_away', emoji: '🚷' },
-        { label: 'Repair This', value: 'order_repair', emoji: '🔨' },
-        { label: 'Wait Here', value: 'order_wait', emoji: '✋' },
-        { label: 'Come In', value: 'order_come_in', emoji: '📥' },
-        { label: 'Let\'s Go', value: 'order_lets_go', emoji: '🏃‍♂️' },
-        { label: 'Here, Take This', value: 'order_take_this', emoji: '🎁' },
-        { label: 'Hurry Up', value: 'order_hurry', emoji: '⚡' }
+        { label: 'Follow Me', value: 'd11_quick_chat_orders_slot_0', emoji: '👉' },
+        { label: 'Go Away', value: 'd11_quick_chat_orders_slot_1', emoji: '🚷' },
+        { label: 'Repair This', value: 'd11_quick_chat_orders_slot_2', emoji: '🔨' },
+        { label: 'Wait Here', value: 'd11_quick_chat_orders_slot_3', emoji: '✋' },
+        { label: 'Come In', value: 'd11_quick_chat_orders_slot_4', emoji: '📥' },
+        { label: 'Let\'s Go', value: 'd11_quick_chat_orders_slot_5', emoji: '🏃‍♂️' },
+        { label: 'Here, Take This', value: 'd11_quick_chat_orders_slot_6', emoji: '🎁' },
+        { label: 'Hurry Up', value: 'd11_quick_chat_orders_slot_7', emoji: '⚡' }
     ],
     cat_location: [
-        { label: 'North', value: 'loc_north', emoji: '⬆️' },
-        { label: 'North East', value: 'loc_northeast', emoji: '↗️' },
-        { label: 'East', value: 'loc_east', emoji: '➡️' },
-        { label: 'South East', value: 'loc_southeast', emoji: '↘️' },
-        { label: 'South', value: 'loc_south', emoji: '⬇️' },
-        { label: 'South West', value: 'loc_southwest', emoji: '↙️' },
-        { label: 'West', value: 'loc_west', emoji: '⬅️' },
-        { label: 'North West', value: 'loc_northwest', emoji: '↖️' }
+        { label: 'North', value: 'd11_quick_chat_location_slot_0', emoji: '⬆️' },
+        { label: 'North East', value: 'd11_quick_chat_location_slot_1', emoji: '↗️' },
+        { label: 'East', value: 'd11_quick_chat_location_slot_2', emoji: '➡️' },
+        { label: 'South East', value: 'd11_quick_chat_location_slot_3', emoji: '↘️' },
+        { label: 'South', value: 'd11_quick_chat_location_slot_4', emoji: '⬇️' },
+        { label: 'South West', value: 'd11_quick_chat_location_slot_5', emoji: '↙️' },
+        { label: 'West', value: 'd11_quick_chat_location_slot_6', emoji: '⬅️' },
+        { label: 'North West', value: 'd11_quick_chat_location_slot_7', emoji: '↖️' }
     ],
     cat_need: [
-        { label: 'I Need Scrap', value: 'need_scrap', emoji: '⚙️' },
-        { label: 'I Need Low Grade Fuel', value: 'need_fuel', emoji: '⛽' },
-        { label: 'I Need Food', value: 'need_food', emoji: '🍖' },
-        { label: 'I Need Water', value: 'need_water', emoji: '💧' },
-        { label: 'I Need Wood', value: 'need_wood', emoji: '🪵' },
-        { label: 'I Need Stones', value: 'need_stones', emoji: '🪨' },
-        { label: 'I Need Metal Fragments', value: 'need_frags', emoji: '🔩' },
-        { label: 'I Need High Quality Metal', value: 'need_hqm', emoji: '🛡️' }
+        { label: 'I Need Scrap', value: 'd11_quick_chat_need_slot_0', emoji: '⚙️' },
+        { label: 'I Need Low Grade Fuel', value: 'd11_quick_chat_need_slot_1', emoji: '⛽' },
+        { label: 'I Need Food', value: 'd11_quick_chat_need_slot_2', emoji: '🍖' },
+        { label: 'I Need Water', value: 'd11_quick_chat_need_slot_3', emoji: '💧' },
+        { label: 'I Need Wood', value: 'd11_quick_chat_need_slot_4', emoji: '🪵' },
+        { label: 'I Need Stones', value: 'd11_quick_chat_need_slot_5', emoji: '🪨' },
+        { label: 'I Need Metal Fragments', value: 'd11_quick_chat_need_slot_6', emoji: '🔩' },
+        { label: 'I Need High Quality Metal', value: 'd11_quick_chat_need_slot_7', emoji: '🛡️' }
     ],
     cat_have: [
-        { label: 'I Have Scrap', value: 'have_scrap', emoji: '⚙️' },
-        { label: 'I Have Low Grade Fuel', value: 'have_fuel', emoji: '⛽' },
-        { label: 'I Have Food', value: 'have_food', emoji: '🍖' },
-        { label: 'I Have Water', value: 'have_water', emoji: '💧' },
-        { label: 'I Have Hunting Bow', value: 'have_bow', emoji: '🏹' },
-        { label: 'I Have Pickaxe', value: 'have_pickaxe', emoji: '⛏️' },
-        { label: 'I Have Hatchet', value: 'have_hatchet', emoji: '🪓' },
-        { label: 'I Have High Quality Metal', value: 'have_hqm', emoji: '🛡️' }
+        { label: 'I Have Scrap', value: 'd11_quick_chat_have_slot_0', emoji: '⚙️' },
+        { label: 'I Have Low Grade Fuel', value: 'd11_quick_chat_have_slot_1', emoji: '⛽' },
+        { label: 'I Have Food', value: 'd11_quick_chat_have_slot_2', emoji: '🍖' },
+        { label: 'I Have Water', value: 'd11_quick_chat_have_slot_3', emoji: '💧' },
+        { label: 'I Have Hunting Bow', value: 'd11_quick_chat_have_slot_4', emoji: '🏹' },
+        { label: 'I Have Pickaxe', value: 'd11_quick_chat_have_slot_5', emoji: '⛏️' },
+        { label: 'I Have Hatchet', value: 'd11_quick_chat_have_slot_6', emoji: '🪓' },
+        { label: 'I Have High Quality Metal', value: 'd11_quick_chat_have_slot_7', emoji: '🛡️' }
     ]
 };
 
@@ -329,7 +330,8 @@ const bindHandler = async (interaction, client) => {
             const wheelOption = options.find(o => o.value === interaction.values[0]);
             
             const emote = wheelOption ? `${wheelOption.emoji} ${wheelOption.label}` : interaction.values[0];
-            const targetPhrase = wheelOption ? wheelOption.label : interaction.values[0];
+            // 👇 THIS IS THE FIX: We explicitly save the internal d11 code to the database!
+            const targetPhrase = wheelOption ? wheelOption.value : interaction.values[0];
             
             await CustomBind.update({ emote, targetValue: targetPhrase }, { where: { id: session.selectedBindId } });
             session.view = 'bind';
