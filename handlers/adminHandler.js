@@ -1,11 +1,54 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelSelectMenuBuilder, UserSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType } = require('discord.js');
-const { GuildConfig, GameServer, UserEconomy, ServerKit } = require('../database/db');
+const { GuildConfig, GameServer, UserEconomy } = require('../database/db');
 const { connectRcon, sendRconCommand } = require('../utils/rconManager');
 const { RUST_CATEGORIES } = require('../utils/rustCatalog');
 const postEmbedHandler = require('./postEmbedHandler');
 const wipeHandler = require('./wipeHandler'); 
+const WebSocket = require('ws');
+const { activeConnections } = require('../utils/rconManager');
 
 const giveKitSessions = new Map();
+
+// Helper to query live RCE server kits via RCON
+async function fetchRceLiveKits(guildId) {
+    return new Promise((resolve) => {
+        const ws = activeConnections.get(guildId);
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+            return resolve([]);
+        }
+
+        let kitsFound = [];
+        const listener = (data) => {
+            try {
+                const parsed = JSON.parse(data);
+                if (!parsed || !parsed.Message) return;
+                const msg = parsed.Message;
+                
+                // Parse RCE console output for kit names
+                if (msg.toLowerCase().includes('kit') || msg.toLowerCase().includes('available')) {
+                    const lines = msg.split('\n');
+                    for (let line of lines) {
+                        line = line.trim();
+                        if (line && !line.toLowerCase().includes('list') && !line.toLowerCase().includes('available') && !line.toLowerCase().includes('kits')) {
+                            const cleanName = line.replace(/[-*#]/g, '').trim();
+                            if (cleanName && !kitsFound.includes(cleanName)) {
+                                kitsFound.push(cleanName);
+                            }
+                        }
+                    }
+                }
+            } catch (e) {}
+        };
+
+        ws.on('message', listener);
+        ws.send(JSON.stringify({ Identifier: 9999, Message: "kit.list", Name: "AdminWizard" }));
+
+        setTimeout(() => {
+            ws.off('message', listener);
+            resolve(kitsFound);
+        }, 1200);
+    });
+}
 
 async function renderGiveKitPanel(interaction, session, messageOverride = '') {
     const targetUser = session.targetUserId ? await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: session.targetUserId } }) : null;
@@ -159,7 +202,7 @@ module.exports = async (interaction, client) => {
     }
 
     if (interaction.isStringSelectMenu()) {
-        // 👇 HANDLES KIT SELECTION STRICTLY FROM KIT MANAGER DATABASE 👇
+        // 👇 HANDLES KIT SELECTION FROM LIVE RCON SERVER SCRAPE 👇
         if (customId === 'ak_panel_kit_select') {
             if (!giveKitSessions.has(userId)) giveKitSessions.set(userId, { targetUserId: null, kitName: null });
             const session = giveKitSessions.get(userId);
@@ -204,7 +247,7 @@ module.exports = async (interaction, client) => {
                 sortedPlayers.forEach((player, index) => { const rank = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `**#${index + 1}**`; const ign = player.inGameName ? `**${player.inGameName}**` : 'Unlinked'; leaderboardText += `${rank} ${ign} (<@${player.userId}>) - **Level ${player.level || 1}** (${player.xp || 0} XP)\n`; });
             } else if (category === 'pvp') {
                 const sortedPlayers = allPlayers.sort((a, b) => {
-                    const kdRatioA = a.deaths === 0 ? a.pvpKills : (a.pvpKills / a.deaths); const kdRatioB = b.deaths === 0 ? b.pvpKills : (b.pvpKills / b.deaths);
+                    const kdRatioA = a.deaths === 0 ? a.pvpKills : (a.pvpKills / a.deaths); const kdRatioB = a.deaths === 0 ? b.pvpKills : (b.pvpKills / b.deaths);
                     if (kdRatioB === kdRatioA) return b.pvpKills - a.pvpKills; return kdRatioB - kdRatioA;
                 }).slice(0, 10);
                 embedTitle = '⚔️ PvP K/D Leaderboard'; embedColor = '#e74c3c';
@@ -294,27 +337,33 @@ module.exports = async (interaction, client) => {
             return interaction.update({ content: '👤 **Select Target Player:**', components: [row], embeds: [] });
         }
 
-        // 👇 PULLS KITS DIRECTLY FROM THE DATABASE KIT MANAGER TABLE (`ServerKit`) 👇
+        // 👇 SCRAPES KITS LIVE VIA RCON (`kit.list`) FROM THE RCE SERVER 👇
         if (customId === 'ak_panel_kit') {
-            const dbKits = await ServerKit.findAll({ where: { guildId: interaction.guild.id } });
+            await interaction.deferUpdate();
+            let liveKits = await fetchRceLiveKits(interaction.guild.id);
             
-            if (!dbKits || dbKits.length === 0) {
-                return interaction.reply({ content: '❌ **No kits found in your Kit Manager database!** Please add kits using the bot’s Kit Manager first.', flags: 64 });
+            if (!liveKits || liveKits.length === 0) {
+                // Fallback prompt modal if the console response takes a moment
+                const modal = new ModalBuilder().setCustomId('ak_modal_kit_input').setTitle('Enter Kit Name');
+                modal.addComponents(new ActionRowBuilder().addComponents(
+                    new TextInputBuilder().setCustomId('kit_name').setLabel("Exact In-Game Kit Name (e.g. test)").setStyle(TextInputStyle.Short).setRequired(true)
+                ));
+                return interaction.showModal(modal);
             }
 
-            const kitOptions = dbKits.slice(0, 25).map(k => ({
-                label: k.kitName.substring(0, 100),
-                value: k.kitName,
+            const kitOptions = liveKits.slice(0, 25).map(k => ({
+                label: k.substring(0, 100),
+                value: k,
                 emoji: '📦'
             }));
 
             const row = new ActionRowBuilder().addComponents(
                 new StringSelectMenuBuilder()
                     .setCustomId('ak_panel_kit_select')
-                    .setPlaceholder('Select a kit from your Kit Manager...')
+                    .setPlaceholder('Select a kit from your RCE server...')
                     .addOptions(kitOptions)
             );
-            return interaction.update({ content: '📦 **Select Kit from Kit Manager:**', components: [row], embeds: [] });
+            return interaction.editReply({ content: '📦 **Select Kit from RCE Server:**', components: [row], embeds: [] });
         }
 
         if (customId === 'ak_panel_send') {
@@ -329,7 +378,6 @@ module.exports = async (interaction, client) => {
             }
 
             try {
-                // Official Rust Console Edition command format
                 await sendRconCommand(interaction.guild.id, `kit givetoplayer "${targetUser.inGameName}" "${session.kitName}"`);
                 giveKitSessions.delete(userId);
                 return interaction.update({ content: `✅ Successfully gave kit **${session.kitName}** to **${targetUser.inGameName}** (<@${session.targetUserId}>)!`, components: [], embeds: [] });
@@ -450,6 +498,13 @@ module.exports = async (interaction, client) => {
     }
 
     if (interaction.isModalSubmit()) {
+        if (customId === 'ak_modal_kit_input') {
+            if (!giveKitSessions.has(userId)) giveKitSessions.set(userId, { targetUserId: null, kitName: null });
+            const session = giveKitSessions.get(userId);
+            session.kitName = interaction.fields.getTextInputValue('kit_name').trim();
+            return await renderGiveKitPanel(interaction, session, '📦 Kit name saved to session!');
+        }
+
         if (customId.startsWith('modal_admin_say_')) {
             const hexColor = '#' + customId.replace('modal_admin_say_', '');
             const msg = interaction.fields.getTextInputValue('say_msg').replace(/"/g, "'"); 
