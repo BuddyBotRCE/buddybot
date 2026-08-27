@@ -24,7 +24,7 @@ async function fetchRceLiveKits(guildId) {
                 if (!parsed || !parsed.Message) return;
                 const msg = parsed.Message;
                 
-                // Tokenize by quotes, spaces, newlines, and brackets to catch all custom kits
+                // Deep tokenization to capture all custom kit strings across the entire output block
                 const rawTokens = msg.split(/["'\r\n\s,\/\[\]{}]+/);
                 for (let token of rawTokens) {
                     let cleanName = token.replace(/[*#\-]/g, '').trim();
@@ -34,13 +34,13 @@ async function fetchRceLiveKits(guildId) {
                         'list', 'available', 'kits', 'command', 'servervar', 'kit', 
                         'givetoplayer', 'true', 'false', 'null', 'adminwizard', 
                         'players', 'player', 'server', 'oxide', 'plugin', 'version',
-                        'success', 'error', 'info', 'id', 'name', 'items', 'item'
+                        'success', 'error', 'info', 'id', 'name', 'items', 'item',
+                        'webrcon', 'connected', 'disconnected'
                     ];
                     
                     if (cleanName && 
                         cleanName.length >= 2 && 
-                        cleanName.length < 25 && 
-                        isNaN(cleanName) && 
+                        cleanName.length < 35 && 
                         !ignoreList.includes(lower)) {
                         
                         if (!kitsFound.includes(cleanName)) {
@@ -54,11 +54,12 @@ async function fetchRceLiveKits(guildId) {
         ws.on('message', listener);
         ws.send(JSON.stringify({ Identifier: 9999, Message: "kit list", Name: "AdminWizard" }));
 
+        // Extended timeout to 3 seconds to ensure the server streams the entire database array, including the last created kit
         setTimeout(() => {
             ws.off('message', listener);
             if (kitsFound.length === 0) kitsFound = ['Test1'];
             resolve(kitsFound);
-        }, 2000);
+        }, 3000);
     });
 }
 
@@ -379,7 +380,6 @@ module.exports = async (interaction, client) => {
             }
 
             try {
-                // Official RCE Syntax: kit givetoplayer "kitname" "playername"
                 await sendRconCommand(interaction.guild.id, `kit givetoplayer "${session.kitName}" "${targetUser.inGameName}"`);
                 
                 giveKitSessions.delete(userId);
@@ -590,7 +590,7 @@ module.exports = async (interaction, client) => {
         if (customId === 'modal_admin_embed') {
             const channelId = interaction.fields.getTextInputValue('channel_id');
             const title = interaction.fields.getTextInputValue('title');
-            const description = interaction.fields.getTextInputValue('description');
+            const description =interaction.fields.getTextInputValue('description');
             const color = interaction.fields.getTextInputValue('color') || '#2b2d31';
             const targetChannel = interaction.guild.channels.cache.get(channelId);
             if (!targetChannel) return interaction.reply({ content: '❌ Invalid Channel ID provided.', flags: 64 });
