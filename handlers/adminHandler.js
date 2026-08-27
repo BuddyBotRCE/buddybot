@@ -9,7 +9,7 @@ const { activeConnections } = require('../utils/rconManager');
 
 const giveKitSessions = new Map();
 
-// Fully upgraded dual-layer RCE Kit Scraper
+// Upgraded High-Yield RCE Native Kit List Scraper
 async function fetchRceLiveKits(guildId) {
     return new Promise((resolve) => {
         const ws = activeConnections.get(guildId);
@@ -24,13 +24,13 @@ async function fetchRceLiveKits(guildId) {
                 if (!parsed || !parsed.Message) return;
                 const msg = parsed.Message;
                 
-                // Tokenize everything by quotes, newlines, spaces, and brackets to catch all custom kit strings
+                // Tokenize by quotes, spaces, newlines, and brackets to catch all kits even if on one line
                 const rawTokens = msg.split(/["'\r\n\s,\/\[\]{}]+/);
                 for (let token of rawTokens) {
                     let cleanName = token.replace(/[*#\-]/g, '').trim();
                     const lower = cleanName.toLowerCase();
                     
-                    // Comprehensive filter to skip technical terms, commands, and formatting noise
+                    // Filter out system words and generic logging
                     const ignoreList = [
                         'list', 'available', 'kits', 'command', 'servervar', 'kit', 
                         'givetoplayer', 'true', 'false', 'null', 'adminwizard', 
@@ -41,7 +41,7 @@ async function fetchRceLiveKits(guildId) {
                     if (cleanName && 
                         cleanName.length >= 2 && 
                         cleanName.length < 25 && 
-                        isNaN(cleanName) && // Discards plain numbers
+                        isNaN(cleanName) && 
                         !ignoreList.includes(lower)) {
                         
                         if (!kitsFound.includes(cleanName)) {
@@ -55,6 +55,7 @@ async function fetchRceLiveKits(guildId) {
         ws.on('message', listener);
         ws.send(JSON.stringify({ Identifier: 9999, Message: "kit list", Name: "AdminWizard" }));
 
+        // Give it a slightly longer window to catch all streamed chunks from RCE
         setTimeout(() => {
             ws.off('message', listener);
             if (kitsFound.length === 0) kitsFound = ['Test1'];
@@ -270,7 +271,7 @@ module.exports = async (interaction, client) => {
                 });
             }
             const embed = new EmbedBuilder().setTitle(embedTitle).setDescription(leaderboardText || 'No data recorded yet.').setColor(embedColor).setTimestamp();
-            const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`lb_refresh_${category}`).setLabel('Refresh').setStyle(ButtonStyle.Secondary).setEmoji('🔄'));
+            const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`lb_refresh_${category}`).setLabel('Refresh Leaderboard').setStyle(ButtonStyle.Secondary).setEmoji('🔄'));
             return interaction.update({ content: null, embeds: [embed], components: [row] });
         }
         if (customId === 'admin_item_category_select') {
@@ -349,6 +350,7 @@ module.exports = async (interaction, client) => {
             return interaction.update({ content: '👤 **Select Target Player:**', components: [row], embeds: [] });
         }
 
+        // 👇 LIVE RCON KIT SCRAPE TRIGGER FOR RCE SERVER (`kit list`) 👇
         if (customId === 'ak_panel_kit') {
             await interaction.deferUpdate();
             let liveKits = await fetchRceLiveKits(interaction.guild.id);
@@ -368,7 +370,6 @@ module.exports = async (interaction, client) => {
             return interaction.editReply({ content: '📦 **Select Kit from RCE Server:**', components: [row], embeds: [] });
         }
 
-        // 👇 CORRECT RCE SYNTAX ORDER: PLAYER FIRST, THEN KIT NAME 👇
         if (customId === 'ak_panel_send') {
             const session = giveKitSessions.get(userId);
             if (!session || !session.targetUserId || !session.kitName) {
@@ -381,7 +382,7 @@ module.exports = async (interaction, client) => {
             }
 
             try {
-                // Official RCE Syntax: kit givetoplayer "kitname" "playername"
+                // 👇 OFFICIAL RCE SYNTAX: kit givetoplayer "kitname" "playername" 👇
                 await sendRconCommand(interaction.guild.id, `kit givetoplayer "${session.kitName}" "${targetUser.inGameName}"`);
                 
                 giveKitSessions.delete(userId);
