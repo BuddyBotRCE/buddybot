@@ -53,6 +53,11 @@ module.exports = async (interaction, client) => {
                 return await adminHandler(interaction, client);
             }
 
+            // 👇 ROUTE ACCOUNT LINKING MODALS 👇
+            if (customId === 'modal_link_account_global' || customId.startsWith('modal_link_account_')) {
+                return await adminHandler(interaction, client);
+            }
+
             // 👇 ROUTE SUGGESTION MODALS 👇
             if (
                 customId.startsWith('modal_sug_') || 
@@ -138,7 +143,9 @@ module.exports = async (interaction, client) => {
             customId === 'ak_panel_kit_select' ||
             customId === 'admin_kit_choice_select' || 
             customId.startsWith('admin_kit_target_') || 
-            customId === 'admin_kit_target_select'
+            customId === 'admin_kit_target_select' ||
+            customId === 'hub_link_account' ||
+            customId === 'select_link_server_target'
         ) {
             return await adminHandler(interaction, client);
         }
@@ -147,7 +154,6 @@ module.exports = async (interaction, client) => {
             return await loggingHandler(interaction, client);
         }
 
-        // 👇 ROUTE ALL SUGGESTION BUTTONS AND SELECT MENUS 👇
         if (
             customId.startsWith('sug_') || 
             customId.startsWith('btn_sug_') || 
