@@ -116,15 +116,17 @@ module.exports = async (interaction, client) => {
         // 🚦 2. COMPONENT ROUTING STATION (Buttons & Select Menus)
         // ====================================================================
 
-        // 👇 DIRECT ROUTE FOR LIVE ADMIN KIT BUTTONS & SELECT MENUS 👇
         if (
             customId === 'btn_admin_kit' || 
+            customId.startsWith('ak_panel_') ||
+            customId === 'ak_panel_kit_select' ||
             customId === 'admin_kit_choice_select' || 
             customId.startsWith('admin_kit_target_') || 
-            customId === 'admin_kit_target_select' ||
-            customId.startsWith('admin_kit_target_player_') ||
-            customId.startsWith('admin_kit_final_exec_')
+            customId === 'admin_kit_target_select'
         ) {
+            return await adminHandler(interaction, client);
+        }
+        {
             return await adminHandler(interaction, client);
         }
 
