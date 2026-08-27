@@ -24,28 +24,28 @@ async function fetchRceLiveKits(guildId) {
                 if (!parsed || !parsed.Message) return;
                 const msg = parsed.Message;
                 
-                // Layer 1: Split and clean line-by-line
-                const lines = msg.split(/\r?\n/);
-                for (let line of lines) {
-                    line = line.trim();
-                    if (line) {
-                        const tokens = line.split(/[\s,]+/);
-                        for (let token of tokens) {
-                            let cleanName = token.replace(/["'*#\-]/g, '').trim();
-                            const lower = cleanName.toLowerCase();
-                            const ignoreList = ['list', 'available', 'kits', 'command', 'servervar', 'kit', 'givetoplayer', 'true', 'false', 'null', 'adminwizard'];
-                            
-                            if (cleanName && 
-                                cleanName.length >= 2 && 
-                                cleanName.length < 30 && 
-                                !ignoreList.includes(lower) && 
-                                !cleanName.startsWith('{') && 
-                                !cleanName.startsWith('}')) {
-                                
-                                if (!kitsFound.includes(cleanName)) {
-                                    kitsFound.push(cleanName);
-                                }
-                            }
+                // Tokenize everything by quotes, newlines, spaces, and brackets to catch all custom kit strings
+                const rawTokens = msg.split(/["'\r\n\s,\/\[\]{}]+/);
+                for (let token of rawTokens) {
+                    let cleanName = token.replace(/[*#\-]/g, '').trim();
+                    const lower = cleanName.toLowerCase();
+                    
+                    // Comprehensive filter to skip technical terms, commands, and formatting noise
+                    const ignoreList = [
+                        'list', 'available', 'kits', 'command', 'servervar', 'kit', 
+                        'givetoplayer', 'true', 'false', 'null', 'adminwizard', 
+                        'players', 'player', 'server', 'oxide', 'plugin', 'version',
+                        'success', 'error', 'info', 'id', 'name', 'items', 'item'
+                    ];
+                    
+                    if (cleanName && 
+                        cleanName.length >= 2 && 
+                        cleanName.length < 25 && 
+                        isNaN(cleanName) && // Discards plain numbers
+                        !ignoreList.includes(lower)) {
+                        
+                        if (!kitsFound.includes(cleanName)) {
+                            kitsFound.push(cleanName);
                         }
                     }
                 }
