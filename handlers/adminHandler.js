@@ -159,7 +159,7 @@ module.exports = async (interaction, client) => {
     }
 
     if (interaction.isStringSelectMenu()) {
-        // 👇 HANDLES KIT SELECTION FROM THE DROPDOWN MENU POPULATED BY KIT MANAGER 👇
+        // 👇 HANDLES KIT SELECTION STRICTLY FROM KIT MANAGER DATABASE 👇
         if (customId === 'ak_panel_kit_select') {
             if (!giveKitSessions.has(userId)) giveKitSessions.set(userId, { targetUserId: null, kitName: null });
             const session = giveKitSessions.get(userId);
@@ -294,7 +294,7 @@ module.exports = async (interaction, client) => {
             return interaction.update({ content: '👤 **Select Target Player:**', components: [row], embeds: [] });
         }
 
-        // 👇 FETCHES KITS STRICTLY FROM THE BOT'S KIT MANAGER DATABASE TABLE 👇
+        // 👇 PULLS KITS DIRECTLY FROM THE DATABASE KIT MANAGER TABLE (`ServerKit`) 👇
         if (customId === 'ak_panel_kit') {
             const dbKits = await ServerKit.findAll({ where: { guildId: interaction.guild.id } });
             
@@ -329,6 +329,7 @@ module.exports = async (interaction, client) => {
             }
 
             try {
+                // Official Rust Console Edition command format
                 await sendRconCommand(interaction.guild.id, `kit givetoplayer "${targetUser.inGameName}" "${session.kitName}"`);
                 giveKitSessions.delete(userId);
                 return interaction.update({ content: `✅ Successfully gave kit **${session.kitName}** to **${targetUser.inGameName}** (<@${session.targetUserId}>)!`, components: [], embeds: [] });
@@ -392,7 +393,7 @@ module.exports = async (interaction, client) => {
             const servers = await GameServer.findAll({ where: { guildId: interaction.guild.id } });
             if (!servers || servers.length === 0) {
                 const modal = new ModalBuilder().setCustomId('modal_link_account_global').setTitle('Link Rust Account');
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ign').setLabel("Your exact in-ge name").setStyle(TextInputStyle.Short).setRequired(true)));
+                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ign').setLabel("Your exact in-game Rust name").setStyle(TextInputStyle.Short).setRequired(true)));
                 return interaction.showModal(modal);
             }
             const options = servers.map(s => ({ label: s.serverName, value: `link_server_${s.id}`, emoji: '🖥️' }));
