@@ -112,6 +112,23 @@ module.exports = async (interaction, client) => {
     const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
     const userId = interaction.user.id;
 
+    // --- TOP-LEVEL ROUTE FOR SERVER REMOVAL DROPDOWN ---
+    if (customId === 'select_multiserver_remove_target') {
+        try {
+            const serverId = selectedValue.replace('remove_server_', '');
+            const server = await GameServer.findByPk(serverId);
+            if (server) {
+                const serverName = server.serverName;
+                await server.destroy();
+                return await interaction.reply({ content: `✅ Successfully removed game server **${serverName}** from the database.`, flags: 64 });
+            }
+            return await interaction.reply({ content: `❌ Server not found or already deleted.`, flags: 64 });
+        } catch (err) {
+            console.error('[REMOVE SERVER ERROR]', err);
+            return await interaction.reply({ content: `❌ Database error while removing server.`, flags: 64 }).catch(() => {});
+        }
+    }
+
     if (
         selectedValue === 'setup_wipe' || 
         customId.startsWith('btn_wipe_') || 
@@ -148,18 +165,6 @@ module.exports = async (interaction, client) => {
                 new ButtonBuilder().setCustomId('rcon_quick_connect').setLabel('Connect RCON').setStyle(ButtonStyle.Primary).setEmoji('🔌')
             );
             return interaction.reply({ embeds: [embed], components: [row1], flags: 64 });
-        }
-        if (customId === 'select_multiserver_remove_target') {
-            const serverId = selectedValue.replace('remove_server_', '');
-            const server = await GameServer.findByPk(serverId);
-            if (server) {
-                const serverName = server.serverName;
-                await server.destroy();
-                return interaction.reply({ content: `✅ Successfully removed game server **${serverName}** from the database.`, flags: 64 });
-            }
-            return interaction.update({ content: `❌ Server not found or already deleted.`, components: [], embeds: [] }).catch(() => {
-                return interaction.reply({ content: `❌ Server not found or already deleted.`, flags: 64 });
-            });
         }
 
         if (selectedValue === 'setup_embed') {
@@ -463,11 +468,9 @@ module.exports = async (interaction, client) => {
             }
 
             try {
-                // If a specific multi-server was selected, send command to that server, else main guild config
                 if (session.serverId) {
                     const serverObj = await GameServer.findByPk(session.serverId);
                     if (serverObj) {
-                        // Send via specific server socket/manager if implemented, or sendRconCommand
                         await sendRconCommand(interaction.guild.id, `kit givetoplayer "${session.kitName}" "${targetUser.inGameName}"`);
                     }
                 } else {
