@@ -123,7 +123,8 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
         let bindList = '';
         for (const b of allBinds) {
             const typeEmoji = b.actionType === 'kit' ? '📦' : b.actionType === 'teleport' ? '🌀' : '♻️';
-            bindList += `${typeEmoji} **${b.name}** [Type: *${b.actionType.toUpperCase()}*] | Wheel: \`${b.emote || 'None'}\` | Cost: ${b.cost || 0} Scrap\n`;
+            // Cleaned up List Display
+            bindList += `${typeEmoji} **${b.name}** — Type: \`${b.actionType.toUpperCase()}\`\n`;
         }
 
         embed.addFields(
@@ -132,18 +133,26 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
         );
 
         components.push(new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('bind_create_kit').setLabel('Kit Bind').setStyle(ButtonStyle.Primary).setEmoji('📦'),
-            new ButtonBuilder().setCustomId('bind_create_teleport').setLabel('Teleport Bind').setStyle(ButtonStyle.Success).setEmoji('🌀'),
-            new ButtonBuilder().setCustomId('bind_create_recycler').setLabel('Recycler Bind').setStyle(ButtonStyle.Secondary).setEmoji('♻️'),
-            new ButtonBuilder().setCustomId('bind_clear_all').setLabel('Clear Binds').setStyle(ButtonStyle.Danger).setEmoji('🧹')
+            new ButtonBuilder().setCustomId('bind_create_kit').setLabel('New Kit Bind').setStyle(ButtonStyle.Primary).setEmoji('📦'),
+            new ButtonBuilder().setCustomId('bind_create_teleport').setLabel('New Teleport').setStyle(ButtonStyle.Success).setEmoji('🌀'),
+            new ButtonBuilder().setCustomId('bind_create_recycler').setLabel('New Recycler').setStyle(ButtonStyle.Secondary).setEmoji('♻️')
         ));
 
+        // Replaced "Clear All" with a specific dropdown to select & delete binds!
         if (allBinds.length > 0) {
-            const row2 = new ActionRowBuilder();
-            for (const b of allBinds.slice(0, 4)) {
-                row2.addComponents(new ButtonBuilder().setCustomId(`bind_load_${b.id}`).setLabel(b.name.substring(0, 20)).setStyle(ButtonStyle.Secondary).setEmoji('⭐'));
-            }
-            components.push(row2);
+            const selectOptions = allBinds.slice(0, 25).map(b => ({
+                label: b.name.substring(0, 100),
+                description: `Type: ${b.actionType.toUpperCase()} | Cost: ${b.cost || 0} Scrap`,
+                value: `editbind_${b.id}`,
+                emoji: b.actionType === 'kit' ? '📦' : b.actionType === 'teleport' ? '🌀' : '♻️'
+            }));
+
+            components.push(new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('bind_manage_select')
+                    .setPlaceholder('🛠️ Select a bind to Edit or Delete...')
+                    .addOptions(selectOptions)
+            ));
         }
     } 
     else if (session.view === 'bind') {
@@ -317,6 +326,13 @@ const bindHandler = async (interaction, client) => {
             return await renderBindPanel(interaction, `✨ Created new ${type} bind!`);
         }
 
+        if (customId === 'bind_manage_select' && interaction.isStringSelectMenu()) {
+            const selectedVal = interaction.values[0];
+            session.selectedBindId = parseInt(selectedVal.replace('editbind_', ''));
+            session.view = 'bind';
+            return await renderBindPanel(interaction);
+        }
+
         if (customId === 'bind_do_category' && interaction.isStringSelectMenu()) {
             session.selectedCategory = interaction.values[0];
             session.view = 'emote_picker';
@@ -338,7 +354,7 @@ const bindHandler = async (interaction, client) => {
 
         if (customId === 'bind_do_kit' && interaction.isStringSelectMenu()) {
             const kitName = interaction.values[0];
-            const command = `kit {player} "${kitName}"`;
+            const command = `kit "{player}" "${kitName}"`;
             await CustomBind.update({ targetValue: kitName, command }, { where: { id: session.selectedBindId } });
             session.view = 'bind';
             return await renderBindPanel(interaction, `📦 Bound to kit: **${kitName}**!`);
@@ -352,7 +368,7 @@ const bindHandler = async (interaction, client) => {
         }
 
         if (interaction.isModalSubmit()) {
-            if (customId === 'modal_bind_name') {
+            if (customId === 'bind_modal_name') {
                 const name = interaction.fields.getTextInputValue('b_name').trim() || "Custom Bind";
                 if (session.selectedBindId) {
                     await CustomBind.update({ name }, { where: { id: session.selectedBindId } });
@@ -360,9 +376,10 @@ const bindHandler = async (interaction, client) => {
                 return await renderBindPanel(interaction, `✅ Bind renamed successfully!`);
             }
 
-            if (customId === 'modal_bind_economy') {
+            if (customId === 'bind_modal_economy') {
                 let cost = parseInt(interaction.fields.getTextInputValue('b_cost'));
                 let cooldown = parseInt(interaction.fields.getTextInputValue('b_cd'));
+                
                 if (isNaN(cost) || cost < 0) cost = 0;
                 if (isNaN(cooldown) || cooldown < 0) cooldown = 0;
 
@@ -374,19 +391,6 @@ const bindHandler = async (interaction, client) => {
         }
 
         if (interaction.isButton()) {
-            
-            if (customId.startsWith('bind_load_')) {
-                session.selectedBindId = parseInt(customId.replace('bind_load_', ''));
-                session.view = 'bind';
-                return await renderBindPanel(interaction);
-            }
-
-            if (customId === 'bind_clear_all') {
-                await CustomBind.destroy({ where: { guildId: guildId } });
-                session.selectedBindId = null;
-                session.view = 'main';
-                return await renderBindPanel(interaction, `🧹 **All custom binds have been successfully cleared!**`);
-            }
 
             if (customId === 'bind_btn_back' || customId === 'bind_back_bind') {
                 session.view = 'bind';
@@ -422,14 +426,14 @@ const bindHandler = async (interaction, client) => {
 
             if (customId === 'bind_btn_name') {
                 const b = await CustomBind.findByPk(session.selectedBindId);
-                const modal = new ModalBuilder().setCustomId('modal_bind_name').setTitle(`Rename Bind`);
+                const modal = new ModalBuilder().setCustomId('bind_modal_name').setTitle(`Rename Bind`);
                 modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_name').setLabel("Bind Name").setStyle(TextInputStyle.Short).setValue(b.name || '').setRequired(true)));
                 return await interaction.showModal(modal);
             }
 
             if (customId === 'bind_btn_economy') {
                 const b = await CustomBind.findByPk(session.selectedBindId);
-                const modal = new ModalBuilder().setCustomId('modal_bind_economy').setTitle(`Configure Economy`);
+                const modal = new ModalBuilder().setCustomId('bind_modal_economy').setTitle(`Configure Economy`);
                 modal.addComponents(
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_cost').setLabel("Scrap Cost (0 for free)").setStyle(TextInputStyle.Short).setValue((b.cost || 0).toString()).setRequired(true)),
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_cd').setLabel("Cooldown in Seconds").setStyle(TextInputStyle.Short).setValue((b.cooldown || 0).toString()).setRequired(true))
@@ -465,7 +469,6 @@ const bindHandler = async (interaction, client) => {
                 
                 let newCommand = '';
                 if (bind.actionType === 'teleport') {
-                    // 👇 OFFICIAL RCE FORMAT 👇
                     newCommand = `global.teleportpos (${cX},${loweredY},${cZ}) "{player}"`;
                 } else if (bind.actionType === 'recycler') {
                     newCommand = `global.spawn recycler_static ${cX},${loweredY},${cZ}`;

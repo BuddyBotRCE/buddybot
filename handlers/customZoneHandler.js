@@ -319,15 +319,21 @@ const customZoneHandler = async (interaction, client) => {
                 return await renderCZPanel(interaction, `⚡ Zone is now **${willBeEnabled ? 'ENABLED & Ring Spawned' : 'DISABLED & Deleted'}** on the server!`);
             }
 
+            // 👇 THE FIX: Uses the correct Rust Console Edition command to delete from the server!
             if (customId === 'cz_btn_delete') {
                 const z = await PveZone.findByPk(session.selectedZoneId);
-                try {
-                    await sendRconCommand(guildId, `zone_remove "${z.name}"`, client);
-                } catch(e) {}
-                await z.destroy();
+                if (z) {
+                    try {
+                        await sendRconCommand(guildId, `zones.deletecustomzone "${z.name}"`, client);
+                    } catch(e) {
+                        console.error("Failed to execute RCON zone deletion", e);
+                    }
+                    await z.destroy();
+                }
+                
                 session.selectedZoneId = null;
                 session.view = 'main';
-                return await renderCZPanel(interaction, `💀 Zone completely deleted.`);
+                return await renderCZPanel(interaction, `💀 Zone completely deleted from bot database and live server.`);
             }
 
             if (customId === 'cz_btn_getpos') {

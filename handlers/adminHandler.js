@@ -1,12 +1,23 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelSelectMenuBuilder, UserSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType } = require('discord.js');
-const { GuildConfig, GameServer, UserEconomy, ReactionRole, PveZone } = require('../database/db');
+const { GuildConfig, GameServer, UserEconomy } = require('../database/db');
 const { connectRcon, sendRconCommand } = require('../utils/rconManager');
 const { RUST_CATEGORIES } = require('../utils/rustCatalog');
 const postEmbedHandler = require('./postEmbedHandler');
+const wipeHandler = require('./wipeHandler'); // Route to your new wipe handler
 
 module.exports = async (interaction, client) => {
     const customId = interaction.customId || '';
     const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
+
+    // 👇 Routes ALL Wipe logic directly to the wipeHandler.js file automatically
+    if (
+        selectedValue === 'setup_wipe' || 
+        customId.startsWith('btn_wipe_') || 
+        customId === 'select_wipe_custom' || 
+        customId.startsWith('modal_wipe_')
+    ) {
+        return await wipeHandler(interaction, client);
+    }
 
     if (customId === 'admin_menu_select') {
         await interaction.channel.messages.fetch({ limit: 10 }).then(messages => {
@@ -20,7 +31,6 @@ module.exports = async (interaction, client) => {
             return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
         }
 
-        // --- NEW POST EMBED BUILDER ROUTE ---
         if (selectedValue === 'setup_postembed') {
             return await postEmbedHandler(interaction, client);
         }
@@ -32,15 +42,13 @@ module.exports = async (interaction, client) => {
             const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_multiserver_add').setLabel('Add Game Server').setStyle(ButtonStyle.Success).setEmoji('➕'), new ButtonBuilder().setCustomId('rcon_quick_connect').setLabel('Connect RCON').setStyle(ButtonStyle.Primary).setEmoji('🔌'));
             return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
         }
-        if (selectedValue === 'setup_wipe') {
-            const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_wipe_full').setLabel('Full Wipe').setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId('btn_wipe_selective').setLabel('Selective Wipe').setStyle(ButtonStyle.Primary));
-            return interaction.reply({ content: '☢️ Server Wipe Manager', components: [row], flags: 64 });
-        }
+        
         if (selectedValue === 'setup_embed') {
             const modal = new ModalBuilder().setCustomId('modal_admin_embed').setTitle('Create Custom Embed');
             modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('channel_id').setLabel("Target Channel ID").setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel("Embed Title").setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('description').setLabel("Description (supports \\n)").setStyle(TextInputStyle.Paragraph).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('color').setLabel("Hex Color (e.g. #3498db)").setStyle(TextInputStyle.Short).setValue('#2b2d31').setRequired(false)));
             return interaction.showModal(modal);
         }
+        
         if (selectedValue === 'setup_ai') {
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
             const isEnabled = config?.aiEnabled !== false;
@@ -81,10 +89,12 @@ module.exports = async (interaction, client) => {
 
             return interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
         }
+        
         if (selectedValue === 'setup_rcon') {
             const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_rcon_setup').setLabel('Set Credentials').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('rcon_quick_connect').setLabel('Connect RCON').setStyle(ButtonStyle.Success));
             return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🌐 RCON Setup').setColor('#3498db')], components: [row], flags: 64 });
         }
+        
         if (selectedValue === 'admin_tools') {
             const row1 = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('btn_admin_item').setLabel('Give Any Item').setStyle(ButtonStyle.Success).setEmoji('🎁'),
@@ -97,6 +107,7 @@ module.exports = async (interaction, client) => {
             );
             return interaction.reply({ content: '🧰 **Live Admin Tools:** Choose an administrative action below:', components: [row1, row2], flags: 64 });
         }
+        
         if (selectedValue === 'setup_crosschat') {
             const row = new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_crosschat_channel').setPlaceholder('Select channel...').addChannelTypes(ChannelType.GuildText));
             return interaction.reply({ content: '💬 Select a text channel:', components: [row], flags: 64 });
@@ -117,6 +128,7 @@ module.exports = async (interaction, client) => {
             if (selectedValue === 'log_game') return interaction.reply({ content: '🎮 Select channel for **Game Feeds**:', components: [new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_log_game_channel').setPlaceholder('Select Game Feeds Channel...').addChannelTypes(ChannelType.GuildText))], flags: 64 });
             if (selectedValue === 'log_discord') return interaction.reply({ content: '💬 Select channel for **Discord Logs**:', components: [new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_log_discord_channel').setPlaceholder('Select Discord Logs Channel...').addChannelTypes(ChannelType.GuildText))], flags: 64 });
         }
+        
         if (customId === 'select_link_server_target') {
             const serverId = selectedValue.replace('link_server_', '');
             const server = await GameServer.findByPk(serverId);
@@ -178,33 +190,17 @@ module.exports = async (interaction, client) => {
             let defaultUrl = 'https://api.openai.com/v1'; 
             let defaultModel = 'gpt-4o-mini';
 
-            if (selectedValue === 'anthropic') { 
-                defaultUrl = 'https://api.anthropic.com/v1'; 
-                defaultModel = 'claude-3-7-sonnet'; 
-            } else if (selectedValue === 'gemini') { 
-                defaultUrl = 'https://generativelanguage.googleapis.com/v1beta/openai/'; 
-                defaultModel = 'gemini-2.5-flash'; 
-            } else if (selectedValue === 'deepseek') { 
-                defaultUrl = 'https://api.deepseek.com/v1'; 
-                defaultModel = 'deepseek-chat'; 
-            } else if (selectedValue === 'groq') { 
-                defaultUrl = 'https://api.groq.com/openai/v1'; 
-                defaultModel = 'llama-3.3-70b-versatile'; 
-            } else if (selectedValue === 'openrouter') { 
-                defaultUrl = 'https://openrouter.ai/api/v1'; 
-                defaultModel = 'anthropic/claude-3.7-sonnet'; 
-            } else if (selectedValue === 'custom') { 
-                defaultUrl = 'http://localhost:11434/v1'; 
-                defaultModel = 'llama3'; 
-            }
+            if (selectedValue === 'anthropic') { defaultUrl = 'https://api.anthropic.com/v1'; defaultModel = 'claude-3-7-sonnet'; }
+            else if (selectedValue === 'gemini') { defaultUrl = 'https://generativelanguage.googleapis.com/v1beta/openai/'; defaultModel = 'gemini-2.5-flash'; }
+            else if (selectedValue === 'deepseek') { defaultUrl = 'https://api.deepseek.com/v1'; defaultModel = 'deepseek-chat'; }
+            else if (selectedValue === 'groq') { defaultUrl = 'https://api.groq.com/openai/v1'; defaultModel = 'llama-3.3-70b-versatile'; }
+            else if (selectedValue === 'openrouter') { defaultUrl = 'https://openrouter.ai/api/v1'; defaultModel = 'anthropic/claude-3.7-sonnet'; }
+            else if (selectedValue === 'custom') { defaultUrl = 'http://localhost:11434/v1'; defaultModel = 'llama3'; }
 
             let [config] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
             await config.update({ aiProvider: selectedValue, aiBaseUrl: defaultUrl, aiModel: defaultModel });
 
-            const row2 = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('btn_ai_set_key').setLabel('Enter API Key & Model').setStyle(ButtonStyle.Primary).setEmoji('🔑')
-            );
-
+            const row2 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_ai_set_key').setLabel('Enter API Key & Model').setStyle(ButtonStyle.Primary).setEmoji('🔑'));
             return interaction.update({ content: `✅ AI Platform set to **${selectedValue.toUpperCase()}** (Default model: \`${defaultModel}\`)!\nNow click **Enter API Key & Model** to save your credentials.`, embeds: [], components: [row2] });
         }
     }
@@ -228,55 +224,30 @@ module.exports = async (interaction, client) => {
     }
 
     if (interaction.isButton()) {
-        // 1. Button click for Give Kit triggers kit dropdown selection
         if (customId === 'btn_admin_kit') {
             const kits = await ServerKit.findAll({ where: { guildId: interaction.guild.id } });
-            
-            // Fallback default list if no custom kits have been registered in the database yet
-            const kitOptions = kits.length > 0 
-                ? kits.slice(0, 25).map(k => ({ label: k.kitName, value: `givekit_select_${k.kitName}`, emoji: '📦' }))
-                : [
-                    { label: 'Starter Kit', value: 'givekit_select_starter', description: 'Basic tools and food', emoji: '📦' },
-                    { label: 'VIP Kit', value: 'givekit_select_vip', description: 'Advanced weapons and armor', emoji: '⭐' },
-                    { label: 'Builder Kit', value: 'givekit_select_builder', description: 'Stone, metal, and building tools', emoji: '🏗️' }
-                  ];
-
-            const row = new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder()
-                    .setCustomId('admin_kit_choice_select')
-                    .setPlaceholder('Step 1: Select which kit to give...')
-                    .addOptions(kitOptions)
-            );
+            const kitOptions = kits.length > 0 ? kits.slice(0, 25).map(k => ({ label: k.kitName, value: `givekit_select_${k.kitName}`, emoji: '📦' })) : [
+                { label: 'Starter Kit', value: 'givekit_select_starter', description: 'Basic tools and food', emoji: '📦' },
+                { label: 'VIP Kit', value: 'givekit_select_vip', description: 'Advanced weapons and armor', emoji: '⭐' },
+                { label: 'Builder Kit', value: 'givekit_select_builder', description: 'Stone, metal, and building tools', emoji: '🏗️' }
+            ];
+            const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('admin_kit_choice_select').setPlaceholder('Step 1: Select which kit to give...').addOptions(kitOptions));
             return interaction.reply({ content: '📦 **Admin Kit Wizard:** Select the kit you want to give:', components: [row], flags: 64 });
         }
-        // 2. Capture chosen kit, then ask for target player user select menu
         if (customId === 'admin_kit_choice_select') {
             const kitName = selectedValue.replace('givekit_select_', '');
-            const row = new ActionRowBuilder().addComponents(
-                new UserSelectMenuBuilder()
-                    .setCustomId(`admin_kit_target_${kitName}`)
-                    .setPlaceholder('Step 2: Select the player to receive this kit...')
-            );
+            const row = new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId(`admin_kit_target_${kitName}`).setPlaceholder('Step 2: Select the player to receive this kit...'));
             return interaction.update({ content: `📦 **Admin Kit Wizard:** Kit selected: **${kitName}**. Now select the target player:`, components: [row] });
         }
-
-        // 3. User select menu submitted -> Executes the RCON command
         if (customId.startsWith('admin_kit_target_')) {
             const kitName = customId.replace('admin_kit_target_', '');
             const targetUserId = interaction.values[0];
-            
             const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
-            if (!targetUser || !targetUser.inGameName) {
-                return interaction.reply({ content: `❌ This user has not linked an in-game Rust name yet!`, flags: 64 });
-            }
-
+            if (!targetUser || !targetUser.inGameName) return interaction.reply({ content: `❌ This user has not linked an in-game Rust name yet!`, flags: 64 });
             try {
-                // Sends standard Oxide/Carbon kit plugin command: kit.give "PlayerName" "KitName"
                 await sendRconCommand(interaction.guild.id, `kit.give "${targetUser.inGameName}" "${kitName}"`);
                 return interaction.update({ content: `✅ Successfully gave kit **${kitName}** to **${targetUser.inGameName}** (<@${targetUserId}>)!`, components: [] });
-            } catch (e) {
-                return interaction.update({ content: `❌ RCON Error giving kit: \`${e.message}\``, components: [] });
-            }
+            } catch (e) { return interaction.update({ content: `❌ RCON Error giving kit: \`${e.message}\``, components: [] }); }
         }
         if (customId === 'btn_admin_vip') {
             const modal = new ModalBuilder().setCustomId('modal_admin_vip_exec').setTitle('Grant VIP Status');
@@ -288,33 +259,14 @@ module.exports = async (interaction, client) => {
             modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ign').setLabel("Exact In-Game Name / SteamID").setStyle(TextInputStyle.Short).setRequired(true)));
             return interaction.showModal(modal);
         }
-        if (customId === 'btn_wipe_full') {
-            const modal = new ModalBuilder().setCustomId('modal_wipe_full').setTitle('Confirm FULL Wipe');
-            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('confirm_text').setLabel('Type WIPE to permanently delete everything').setStyle(TextInputStyle.Short).setRequired(true)));
-            return interaction.showModal(modal);
-        }
-        if (customId === 'btn_wipe_selective') {
-            const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('select_wipe_custom').setPlaceholder('Select data to wipe...').setMinValues(1).setMaxValues(4).addOptions([{ label: 'Economy & Banks', value: 'wipe_econ', emoji: '💰' }, { label: 'BuddyPass Progress', value: 'wipe_bp', emoji: '⭐' }, { label: 'Home Teleports', value: 'wipe_tp', emoji: '🏠' }, { label: 'PVE Zones', value: 'wipe_zones', emoji: '🏕️' }]));
-            return interaction.reply({ content: '🗑️ **Selective Wipe:** Choose exactly which databases to reset below:', components: [row], flags: 64 });
-        }
         if (customId === 'btn_rcon_setup') {
             const modal = new ModalBuilder().setCustomId('modal_setup_rcon').setTitle('Configure RCON Credentials');
-            modal.addComponents(
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_ip').setLabel("Server IP").setStyle(TextInputStyle.Short).setRequired(true)), 
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_port').setLabel("Port").setStyle(TextInputStyle.Short).setRequired(true)), 
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_pass').setLabel("Password").setStyle(TextInputStyle.Short).setRequired(true))
-            );
+            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_ip').setLabel("Server IP").setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_port').setLabel("Port").setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_pass').setLabel("Password").setStyle(TextInputStyle.Short).setRequired(true)));
             return interaction.showModal(modal);
         }
-
         if (customId === 'btn_multiserver_add') {
             const modal = new ModalBuilder().setCustomId('modal_multiserver_add').setTitle('Add Game Server');
-            modal.addComponents(
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('server_name').setLabel("Server Name (e.g. Main 2X)").setStyle(TextInputStyle.Short).setRequired(true)),
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_ip').setLabel("RCON IP Address").setStyle(TextInputStyle.Short).setRequired(true)),
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_port').setLabel("RCON Port").setStyle(TextInputStyle.Short).setRequired(true)),
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_pass').setLabel("RCON Password").setStyle(TextInputStyle.Short).setRequired(true))
-            );
+            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('server_name').setLabel("Server Name (e.g. Main 2X)").setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_ip').setLabel("RCON IP Address").setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_port').setLabel("RCON Port").setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_pass').setLabel("RCON Password").setStyle(TextInputStyle.Short).setRequired(true)));
             return interaction.showModal(modal);
         }
         if (customId === 'btn_automod_toggle') {
@@ -396,13 +348,9 @@ module.exports = async (interaction, client) => {
             await config.update({ aiEnabled: newState });
             return interaction.reply({ content: `✅ AI assistant has been turned **${newState ? 'ON 🟢' : 'OFF 🔴'}**!`, flags: 64 });
         }
-
         if (customId === 'btn_ai_premade') {
             const modal = new ModalBuilder().setCustomId('modal_ai_add_premade').setTitle('Add Premade AI Response');
-            modal.addComponents(
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('trigger_word').setLabel('Trigger Keyword/Phrase (e.g. wipe)').setStyle(TextInputStyle.Short).setRequired(true)),
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('response_text').setLabel('Bot Response').setStyle(TextInputStyle.Paragraph).setRequired(true))
-            );
+            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('trigger_word').setLabel('Trigger Keyword/Phrase (e.g. wipe)').setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('response_text').setLabel('Bot Response').setStyle(TextInputStyle.Paragraph).setRequired(true)));
             return interaction.showModal(modal);
         }
     }
@@ -411,22 +359,16 @@ module.exports = async (interaction, client) => {
         if (customId === 'modal_admin_vip_exec') {
             const target = interaction.fields.getTextInputValue('ign').trim();
             try {
-                // Adjust to your server's specific VIP group/permission command (e.g., oxide/carbon group or standard RCE permission)
                 await sendRconCommand(interaction.guild.id, `ownerid ${target} "VIP Status"`);
                 return interaction.reply({ content: `✅ Successfully granted VIP status to **${target}**!`, flags: 64 });
-            } catch (e) {
-                return interaction.reply({ content: `❌ RCON Error executing VIP command: \`${e.message}\``, flags: 64 });
-            }
+            } catch (e) { return interaction.reply({ content: `❌ RCON Error executing VIP command: \`${e.message}\``, flags: 64 }); }
         }
-
         if (customId === 'modal_admin_mod_exec') {
             const target = interaction.fields.getTextInputValue('ign').trim();
             try {
                 await sendRconCommand(interaction.guild.id, `moderatorid ${target} "Server Moderator"`);
                 return interaction.reply({ content: `✅ Successfully granted Moderator rights to **${target}**!`, flags: 64 });
-            } catch (e) {
-                return interaction.reply({ content: `❌ RCON Error executing Moderator command: \`${e.message}\``, flags: 64 });
-            }
+            } catch (e) { return interaction.reply({ content: `❌ RCON Error executing Moderator command: \`${e.message}\``, flags: 64 }); }
         }
         if (customId === 'modal_automod_config') {
             const action = interaction.fields.getTextInputValue('action').trim().toLowerCase();
@@ -438,14 +380,10 @@ module.exports = async (interaction, client) => {
         if (customId === 'modal_ai_add_premade') {
             const trigger = interaction.fields.getTextInputValue('trigger_word').trim();
             const responseText = interaction.fields.getTextInputValue('response_text').trim();
-
             let [config] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
-            let list = [];
-            try { list = JSON.parse(config.aiPremadeResponses || '[]'); } catch(e){}
-
+            let list = []; try { list = JSON.parse(config.aiPremadeResponses || '[]'); } catch(e){}
             list.push({ trigger, response: responseText });
             await config.update({ aiPremadeResponses: JSON.stringify(list) });
-
             return interaction.reply({ content: `✅ Successfully added premade response for trigger: **"${trigger}"**!`, flags: 64 });
         }
         if (customId === 'modal_ai_credentials') {
@@ -503,35 +441,5 @@ module.exports = async (interaction, client) => {
                 return interaction.reply({ content: `✅ Executed!`, flags: 64 });
             } catch(e) { return interaction.reply({ content: `❌ Error`, flags: 64 }); }
         }
-        if (customId === 'modal_wipe_full' || customId.startsWith('modal_wipe_sel_')) {
-            if (interaction.fields.getTextInputValue('confirm_text') !== 'WIPE') return interaction.reply({ content: '❌ Cancelled.', flags: 64 });
-            let updateData = {}; 
-            if (customId === 'modal_wipe_full') {
-                const allZones = await PveZone.findAll({ where: { guildId: interaction.guild.id } });
-                for (const z of allZones) { try { await sendRconCommand(interaction.guild.id, `zones.deletecustomzone "${z.zoneName}"`); } catch (e) {} }
-                await PveZone.destroy({ where: { guildId: interaction.guild.id } });
-                updateData = { wallet: 0, xp: 0, level: 1, homeX: null, homeY: null, homeZ: null, autoSupplyEnabled: false, autoEliteEnabled: false, autoTimedEnabled: false, supplySpawnCount: 1, eliteSpawnCount: 1, timedSpawnCount: 1 };
-                for (let i = 1; i <= 10; i++) {
-                    updateData[`supplySlot${i}X`] = null; updateData[`supplySlot${i}Y`] = null; updateData[`supplySlot${i}Z`] = null;
-                    updateData[`eliteSlot${i}X`] = null; updateData[`eliteSlot${i}Y`] = null; updateData[`eliteSlot${i}Z`] = null;
-                    updateData[`timedSlot${i}X`] = null; updateData[`timedSlot${i}Y`] = null; updateData[`timedSlot${i}Z`] = null;
-                }
-            } else {
-                const sel = customId.replace('modal_wipe_sel_', '').split('-');
-                if (sel.includes('wipe_econ')) updateData.wallet = 0;
-                if (sel.includes('wipe_bp')) { updateData.xp = 0; updateData.level = 1; }
-                if (sel.includes('wipe_tp')) { updateData.homeX = null; updateData.homeY = null; updateData.homeZ = null; }
-                if (sel.includes('wipe_zones')) {
-                    const selZones = await PveZone.findAll({ where: { guildId: interaction.guild.id } });
-                    for (const z of selZones) { try { await sendRconCommand(interaction.guild.id, `zones.deletecustomzone "${z.zoneName}"`); } catch (e) {} }
-                    await PveZone.destroy({ where: { guildId: interaction.guild.id } });
-                }
-            }
-            await GuildConfig.update(updateData, { where: { guildId: interaction.guild.id } });
-            await UserEconomy.update(updateData, { where: { guildId: interaction.guild.id } });
-            return interaction.reply({ content: `☢️ Server WIPED successfully! All auto event configurations cleared.` });
-        }
     }
 };
-
-module.exports;
