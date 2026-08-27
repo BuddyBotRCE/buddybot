@@ -112,10 +112,10 @@ async function connectRcon(guildId, client) {
                                     if (bind) {
                                         let command = '';
                                         if (bind.actionType === 'teleport') {
-                                            // 👇 OFFICIAL RCE FORMAT 👇
                                             command = `global.teleportpos (${posX},${posY},${posZ}) "{player}"`;
                                         } else if (bind.actionType === 'recycler') {
-                                            command = `global.spawn recycler_static ${posX},${posY},${posZ}`;
+                                            // 👇 FIXED RECYCLER SPAWN SYNTAX 👇
+                                            command = `spawn recycler_static (${posX},${posY},${posZ})`;
                                         }
                                         await bind.update({ command });
                                     }

@@ -3,13 +3,12 @@ const { GuildConfig, GameServer, UserEconomy } = require('../database/db');
 const { connectRcon, sendRconCommand } = require('../utils/rconManager');
 const { RUST_CATEGORIES } = require('../utils/rustCatalog');
 const postEmbedHandler = require('./postEmbedHandler');
-const wipeHandler = require('./wipeHandler'); // Route to your new wipe handler
+const wipeHandler = require('./wipeHandler'); 
 
 module.exports = async (interaction, client) => {
     const customId = interaction.customId || '';
     const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
 
-    // 👇 Routes ALL Wipe logic directly to the wipeHandler.js file automatically
     if (
         selectedValue === 'setup_wipe' || 
         customId.startsWith('btn_wipe_') || 
@@ -103,6 +102,7 @@ module.exports = async (interaction, client) => {
                 new ButtonBuilder().setCustomId('btn_admin_mod').setLabel('Add Moderator').setStyle(ButtonStyle.Secondary).setEmoji('🛡️')
             );
             const row2 = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('btn_admin_say').setLabel('Server Say').setStyle(ButtonStyle.Primary).setEmoji('📢'),
                 new ButtonBuilder().setCustomId('btn_admin_rcon').setLabel('Custom RCON Cmd').setStyle(ButtonStyle.Danger).setEmoji('⚡')
             );
             return interaction.reply({ content: '🧰 **Live Admin Tools:** Choose an administrative action below:', components: [row1, row2], flags: 64 });
@@ -123,6 +123,14 @@ module.exports = async (interaction, client) => {
     }
 
     if (interaction.isStringSelectMenu()) {
+        // 👇 COLOR SELECTION FOR SERVER SAY 👇
+        if (customId === 'admin_say_color_select') {
+            const selectedColor = selectedValue.replace('#', '');
+            const modal = new ModalBuilder().setCustomId(`modal_admin_say_${selectedColor}`).setTitle('Server Broadcast Message');
+            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('say_msg').setLabel("Type your message").setStyle(TextInputStyle.Paragraph).setRequired(true)));
+            return interaction.showModal(modal);
+        }
+
         if (customId === 'log_action_select') {
             if (selectedValue === 'log_admin') return interaction.reply({ content: '🛡️ Select channel for **Admin Logs**:', components: [new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_log_admin_channel').setPlaceholder('Select Admin Logs Channel...').addChannelTypes(ChannelType.GuildText))], flags: 64 });
             if (selectedValue === 'log_game') return interaction.reply({ content: '🎮 Select channel for **Game Feeds**:', components: [new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_log_game_channel').setPlaceholder('Select Game Feeds Channel...').addChannelTypes(ChannelType.GuildText))], flags: 64 });
@@ -224,6 +232,23 @@ module.exports = async (interaction, client) => {
     }
 
     if (interaction.isButton()) {
+        // 👇 TRIGGER FOR THE SERVER SAY BUTTON 👇
+        if (customId === 'btn_admin_say') {
+            const row = new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder().setCustomId('admin_say_color_select').setPlaceholder('Select Broadcast Color...')
+                .addOptions([
+                    { label: 'White (Default)', value: '#FFFFFF', emoji: '⚪' },
+                    { label: 'Red (Alert/Warning)', value: '#FF4C4C', emoji: '🔴' },
+                    { label: 'Green (Success/Event)', value: '#00FF00', emoji: '🟢' },
+                    { label: 'Blue (Info)', value: '#3498DB', emoji: '🔵' },
+                    { label: 'Yellow (Notice)', value: '#F1C40F', emoji: '🟡' },
+                    { label: 'Orange', value: '#E67E22', emoji: '🟠' },
+                    { label: 'Purple', value: '#9B59B6', emoji: '🟣' }
+                ])
+            );
+            return interaction.reply({ content: '📢 **Server Broadcast:** Select the color for your message:', components: [row], flags: 64 });
+        }
+
         if (customId === 'btn_admin_kit') {
             const kits = await ServerKit.findAll({ where: { guildId: interaction.guild.id } });
             const kitOptions = kits.length > 0 ? kits.slice(0, 25).map(k => ({ label: k.kitName, value: `givekit_select_${k.kitName}`, emoji: '📦' })) : [
@@ -356,6 +381,18 @@ module.exports = async (interaction, client) => {
     }
 
     if (interaction.isModalSubmit()) {
+        // 👇 EXECUTES THE COLORED SERVER SAY COMMAND 👇
+        if (customId.startsWith('modal_admin_say_')) {
+            const hexColor = '#' + customId.replace('modal_admin_say_', '');
+            const msg = interaction.fields.getTextInputValue('say_msg').replace(/"/g, "'"); 
+            try {
+                await sendRconCommand(interaction.guild.id, `say "<color=${hexColor}>${msg}</color>"`);
+                return interaction.reply({ content: `📢 **Broadcast sent successfully!**`, flags: 64 });
+            } catch(e) {
+                return interaction.reply({ content: `❌ Error sending broadcast: \`${e.message}\``, flags: 64 });
+            }
+        }
+
         if (customId === 'modal_admin_vip_exec') {
             const target = interaction.fields.getTextInputValue('ign').trim();
             try {

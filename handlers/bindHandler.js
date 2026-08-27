@@ -1,5 +1,5 @@
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, RoleSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } = require('discord.js');
-const { CustomBind, ServerKit } = require('../database/db');
+const { CustomBind } = require('../database/db');
 const { queueAdminPos } = require('../utils/rconManager'); 
 
 const bindSessions = new Map();
@@ -123,7 +123,6 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
         let bindList = '';
         for (const b of allBinds) {
             const typeEmoji = b.actionType === 'kit' ? '📦' : b.actionType === 'teleport' ? '🌀' : '♻️';
-            // Cleaned up List Display
             bindList += `${typeEmoji} **${b.name}** — Type: \`${b.actionType.toUpperCase()}\`\n`;
         }
 
@@ -138,7 +137,6 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
             new ButtonBuilder().setCustomId('bind_create_recycler').setLabel('New Recycler').setStyle(ButtonStyle.Secondary).setEmoji('♻️')
         ));
 
-        // Replaced "Clear All" with a specific dropdown to select & delete binds!
         if (allBinds.length > 0) {
             const selectOptions = allBinds.slice(0, 25).map(b => ({
                 label: b.name.substring(0, 100),
@@ -227,23 +225,6 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
 
         components.push(new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('bind_back_category').setLabel('Back to Categories').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
-        ));
-    }
-    else if (session.view === 'kit_picker') {
-        embed.setTitle('📦 Select In-Game Kit').setDescription('Choose which kit this bind will grant to players.');
-        const serverKits = await ServerKit.findAll({ where: { guildId } });
-
-        if (serverKits.length > 0) {
-            components.push(new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder().setCustomId('bind_do_kit').setPlaceholder('Select a server kit...')
-                    .addOptions(serverKits.slice(0, 25).map(k => ({ label: k.kitName, value: k.kitName, emoji: '📦' })))
-            ));
-        } else {
-            embed.addFields({ name: '⚠️ No Kits Found', value: 'Please create kits in your kit manager first.' });
-        }
-
-        components.push(new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('bind_back_bind').setLabel('Cancel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
         ));
     }
     else if (session.view === 'role_picker') {
@@ -352,14 +333,6 @@ const bindHandler = async (interaction, client) => {
             return await renderBindPanel(interaction, `💬 Quick-chat wheel trigger updated!`);
         }
 
-        if (customId === 'bind_do_kit' && interaction.isStringSelectMenu()) {
-            const kitName = interaction.values[0];
-            const command = `kit "{player}" "${kitName}"`;
-            await CustomBind.update({ targetValue: kitName, command }, { where: { id: session.selectedBindId } });
-            session.view = 'bind';
-            return await renderBindPanel(interaction, `📦 Bound to kit: **${kitName}**!`);
-        }
-
         if (customId === 'bind_do_role' && interaction.isRoleSelectMenu()) {
             const roleId = interaction.values[0];
             await CustomBind.update({ roleId }, { where: { id: session.selectedBindId } });
@@ -374,6 +347,16 @@ const bindHandler = async (interaction, client) => {
                     await CustomBind.update({ name }, { where: { id: session.selectedBindId } });
                 }
                 return await renderBindPanel(interaction, `✅ Bind renamed successfully!`);
+            }
+
+            // 👇 SAVES THE KIT TYPED BY THE USER IN THE TEXT BOX 👇
+            if (customId === 'modal_bind_kit') {
+                const kitName = interaction.fields.getTextInputValue('kit_name').trim();
+                const command = `kit.give "{player}" "${kitName}"`;
+                if (session.selectedBindId) {
+                    await CustomBind.update({ targetValue: kitName, command }, { where: { id: session.selectedBindId } });
+                }
+                return await renderBindPanel(interaction, `📦 Successfully bound to kit: **${kitName}**!`);
             }
 
             if (customId === 'bind_modal_economy') {
@@ -408,9 +391,14 @@ const bindHandler = async (interaction, client) => {
                 return await renderBindPanel(interaction);
             }
 
+            // 👇 THE FIX FOR THE DEAD KIT BUTTON 👇
             if (customId === 'bind_btn_kitselect') {
-                session.view = 'kit_picker';
-                return await renderBindPanel(interaction);
+                const b = await CustomBind.findByPk(session.selectedBindId);
+                const modal = new ModalBuilder().setCustomId('modal_bind_kit').setTitle(`Bind to Kit`);
+                modal.addComponents(new ActionRowBuilder().addComponents(
+                    new TextInputBuilder().setCustomId('kit_name').setLabel("Exact Kit Name (e.g. vip, starter)").setStyle(TextInputStyle.Short).setValue(b.targetValue || '').setRequired(true)
+                ));
+                return await interaction.showModal(modal);
             }
             
             if (customId === 'bind_btn_role') {
@@ -471,7 +459,8 @@ const bindHandler = async (interaction, client) => {
                 if (bind.actionType === 'teleport') {
                     newCommand = `global.teleportpos (${cX},${loweredY},${cZ}) "{player}"`;
                 } else if (bind.actionType === 'recycler') {
-                    newCommand = `global.spawn recycler_static ${cX},${loweredY},${cZ}`;
+                    // 👇 FIXED RECYCLER SPAWN SYNTAX FOR PLACE ON GROUND 👇
+                    newCommand = `spawn recycler_static (${cX},${loweredY},${cZ})`;
                 }
                 
                 await CustomBind.update({ command: newCommand }, { where: { id: session.selectedBindId } });
