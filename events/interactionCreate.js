@@ -49,7 +49,6 @@ module.exports = async (interaction, client) => {
         // 🚦 0. UNIVERSAL MODAL SUBMISSION ROUTER (Catch modals first)
         // ====================================================================
         if (interaction.isModalSubmit()) {
-            // 👇 DIRECT ROUTE FOR LIVE ADMIN KIT EXECUTION MODAL 👇
             if (customId.startsWith('modal_givekit_exec_')) {
                 return await adminHandler(interaction, client);
             }
@@ -126,9 +125,6 @@ module.exports = async (interaction, client) => {
         ) {
             return await adminHandler(interaction, client);
         }
-        {
-            return await adminHandler(interaction, client);
-        }
 
         if (customId.startsWith('btn_log_') || customId.startsWith('select_log_chan_')) {
             return await loggingHandler(interaction, client);
@@ -197,7 +193,6 @@ module.exports = async (interaction, client) => {
             return await bountyHandler(interaction, client);
         }
 
-        // 👇 PRIORITY CHECK FOR CUSTOM BINDS (MUST BE BEFORE GENERAL KIT CHECK) 👇
         if (customId.startsWith('bind_') || customId.startsWith('btn_bind_') || customId === 'bind_do_kit' || customId.includes('bind')) {
             return await bindHandler(interaction, client);
         } 

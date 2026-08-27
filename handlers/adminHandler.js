@@ -590,7 +590,7 @@ module.exports = async (interaction, client) => {
         if (customId === 'modal_admin_embed') {
             const channelId = interaction.fields.getTextInputValue('channel_id');
             const title = interaction.fields.getTextInputValue('title');
-            const description =interaction.fields.getTextInputValue('description');
+            const description = interaction.fields.getTextInputValue('description');
             const color = interaction.fields.getTextInputValue('color') || '#2b2d31';
             const targetChannel = interaction.guild.channels.cache.get(channelId);
             if (!targetChannel) return interaction.reply({ content: '❌ Invalid Channel ID provided.', flags: 64 });
