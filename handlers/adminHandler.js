@@ -232,18 +232,18 @@ module.exports = async (interaction, client) => {
             const targetUserId = interaction.values[0];
             const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
             if (!targetUser || !targetUser.inGameName) return interaction.reply({ content: `❌ This user has not linked their Rust account yet!`, flags: 64 });
-            
+
             // Strictly querying real kit manager entries from database
             const kits = await ServerKit.findAll({ where: { guildId: interaction.guild.id } });
-            
+
             if (!kits || kits.length === 0) {
                 return interaction.update({ content: `❌ **No kits found in your Kit Manager database!** Please configure your kits first.`, components: [] });
             }
 
-            const kitOptions = kits.slice(0, 25).map(k => ({ 
-                label: k.kitName.substring(0, 100), 
-                value: k.kitName, 
-                emoji: '📦' 
+            const kitOptions = kits.slice(0, 25).map(k => ({
+                label: k.kitName.substring(0, 100),
+                value: k.kitName,
+                emoji: '📦'
             }));
 
             const row = new ActionRowBuilder().addComponents(
@@ -253,22 +253,6 @@ module.exports = async (interaction, client) => {
                     .addOptions(kitOptions)
             );
             return interaction.update({ content: `📦 **Admin Kit Wizard:** Target player set to **${targetUser.inGameName}**. Now select the kit:`, components: [row] });
-        }
-
-        if (customId === 'admin_item_select_player') {
-            const targetUserId = interaction.values[0];
-            const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
-            if (!targetUser || !targetUser.inGameName) return interaction.reply({ content: `❌ This user has not linked their Rust account yet!`, flags: 64 });
-            const catOptions = Object.keys(RUST_CATEGORIES).map(catKey => ({ label: RUST_CATEGORIES[catKey].label, value: `admin_item_cat_${targetUserId}_${catKey}`, emoji: RUST_CATEGORIES[catKey].emoji }));
-            const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('admin_item_category_select').setPlaceholder('Step 2: Select item category...').addOptions(catOptions));
-            return interaction.update({ content: `🎁 **Admin Item Wizard:** Target player set to **${targetUser.inGameName}**. Now select an item category:`, components: [row] });
-        }
-        if (customId === 'select_give_item_target') {
-            const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.values[0] } });
-            if (!targetUser || !targetUser.inGameName) return interaction.reply({ content: `❌ User hasn't linked their Rust account!`, flags: 64 });
-            const modal = new ModalBuilder().setCustomId(`modal_give_item_${targetUser.inGameName}`).setTitle(`Give Item to ${targetUser.inGameName.substring(0, 20)}`);
-            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('item_name').setLabel("Item Shortname (e.g. rifle.ak)").setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('item_amount').setLabel("Amount").setStyle(TextInputStyle.Short).setRequired(true)));
-            return interaction.showModal(modal);
         }
     }
 
