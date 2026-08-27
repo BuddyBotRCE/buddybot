@@ -44,12 +44,11 @@ async function fetchRceLiveKits(guildId) {
         };
 
         ws.on('message', listener);
-        // Natively supported RCE command to list kits into console log output
         ws.send(JSON.stringify({ Identifier: 9999, Message: "kit list", Name: "AdminWizard" }));
 
         setTimeout(() => {
             ws.off('message', listener);
-            if (kitsFound.length === 0) kitsFound = ['Test1']; // Fallback to your known kit if packet stream is silent
+            if (kitsFound.length === 0) kitsFound = ['Test1'];
             resolve(kitsFound);
         }, 1500);
     });
@@ -341,7 +340,6 @@ module.exports = async (interaction, client) => {
             return interaction.update({ content: '👤 **Select Target Player:**', components: [row], embeds: [] });
         }
 
-        // 👇 LIVE RCON KIT SCRAPE TRIGGER FOR RCE SERVER (`kit list`) 👇
         if (customId === 'ak_panel_kit') {
             await interaction.deferUpdate();
             let liveKits = await fetchRceLiveKits(interaction.guild.id);
@@ -361,6 +359,7 @@ module.exports = async (interaction, client) => {
             return interaction.editReply({ content: '📦 **Select Kit from RCE Server:**', components: [row], embeds: [] });
         }
 
+        // 👇 CORRECT RCE SYNTAX ORDER: PLAYER FIRST, THEN KIT NAME 👇
         if (customId === 'ak_panel_send') {
             const session = giveKitSessions.get(userId);
             if (!session || !session.targetUserId || !session.kitName) {
@@ -493,6 +492,13 @@ module.exports = async (interaction, client) => {
     }
 
     if (interaction.isModalSubmit()) {
+        if (customId === 'ak_modal_kit_input') {
+            if (!giveKitSessions.has(userId)) giveKitSessions.set(userId, { targetUserId: null, kitName: null });
+            const session = giveKitSessions.get(userId);
+            session.kitName = interaction.fields.getTextInputValue('kit_name').trim();
+            return await renderGiveKitPanel(interaction, session, `📦 Kit name "**${session.kitName}**" saved to session!`);
+        }
+
         if (customId.startsWith('modal_admin_say_')) {
             const hexColor = '#' + customId.replace('modal_admin_say_', '');
             const msg = interaction.fields.getTextInputValue('say_msg').replace(/"/g, "'"); 
