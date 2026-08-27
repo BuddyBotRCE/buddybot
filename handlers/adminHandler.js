@@ -149,6 +149,16 @@ module.exports = async (interaction, client) => {
             );
             return interaction.reply({ embeds: [embed], components: [row1], flags: 64 });
         }
+        if (customId === 'select_multiserver_remove_target') {
+            const serverId = selectedValue.replace('remove_server_', '');
+            const server = await GameServer.findByPk(serverId);
+            if (server) {
+                const serverName = server.serverName;
+                await server.destroy();
+                return interaction.update({ content: `✅ Successfully removed game server **${serverName}** from the manager.`, components: [], embeds: [] });
+            }
+            return interaction.update({ content: `❌ Server not found or already deleted.`, components: [], embeds: [] });
+        }
         
         if (selectedValue === 'setup_embed') {
             const modal = new ModalBuilder().setCustomId('modal_admin_embed').setTitle('Create Custom Embed');
@@ -388,6 +398,17 @@ module.exports = async (interaction, client) => {
         if (customId === 'btn_admin_kit') {
             giveKitSessions.set(userId, { targetUserId: null, kitName: null, serverId: null });
             return await renderGiveKitPanel(interaction, giveKitSessions.get(userId));
+        }
+        if (customId === 'btn_multiserver_remove') {
+            const servers = await GameServer.findAll({ where: { guildId: interaction.guild.id } });
+            if (!servers || servers.length === 0) {
+                return interaction.reply({ content: '❌ No game servers to remove.', flags: 64 });
+            }
+            const options = servers.map(s => ({ label: s.serverName, value: `remove_server_${s.id}`, description: `${s.rconIp}:${s.rconPort}`, emoji: '🗑️' }));
+            const row = new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder().setCustomId('select_multiserver_remove_target').setPlaceholder('Select which server to remove...').addOptions(options)
+            );
+            return interaction.reply({ content: '🗑️ **Server Removal:** Select the game server you wish to delete from the database:', components: [row], flags: 64 });
         }
 
         if (customId === 'ak_panel_server') {
