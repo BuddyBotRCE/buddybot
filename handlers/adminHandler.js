@@ -141,8 +141,13 @@ module.exports = async (interaction, client) => {
             const servers = await GameServer.findAll({ where: { guildId: interaction.guild.id } });
             const serverList = servers.length ? servers.map(s => `• **${s.serverName}** (\`${s.rconIp}:${s.rconPort}\`)`).join('\n') : 'No game servers configured yet.';
             const embed = new EmbedBuilder().setTitle('🌐 RCON Connect & Server Manager').setDescription(`**Configured Servers:**\n${serverList}`).setColor('#3498db');
-            const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_multiserver_add').setLabel('Add Game Server').setStyle(ButtonStyle.Success).setEmoji('➕'), new ButtonBuilder().setCustomId('rcon_quick_connect').setLabel('Connect RCON').setStyle(ButtonStyle.Primary).setEmoji('🔌'));
-            return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+            
+            const row1 = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('btn_multiserver_add').setLabel('Add Game Server').setStyle(ButtonStyle.Success).setEmoji('➕'),
+                new ButtonBuilder().setCustomId('btn_multiserver_remove').setLabel('Remove Game Server').setStyle(ButtonStyle.Danger).setEmoji('🗑️').setDisabled(servers.length === 0),
+                new ButtonBuilder().setCustomId('rcon_quick_connect').setLabel('Connect RCON').setStyle(ButtonStyle.Primary).setEmoji('🔌')
+            );
+            return interaction.reply({ embeds: [embed], components: [row1], flags: 64 });
         }
         
         if (selectedValue === 'setup_embed') {
