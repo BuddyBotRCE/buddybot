@@ -526,7 +526,7 @@ module.exports = async (interaction, client) => {
             return interaction.reply({ content: `✅ Auto-Mod settings updated!\n• Punishment: \`${action}\`\n• Caps Limit: \`${caps}%\``, flags: 64 });
         }
         if (customId === 'modal_ai_add_premade') {
-            const trigger = interaction.fields.getTextInputValue('trigger_word'].trim();
+            const trigger = interaction.fields.getTextInputValue('trigger_word').trim();
             const responseText = interaction.fields.getTextInputValue('response_text').trim();
             let [config] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
             let list = []; try { list = JSON.parse(config.aiPremadeResponses || '[]'); } catch(e){}
