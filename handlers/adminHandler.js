@@ -376,7 +376,9 @@ module.exports = async (interaction, client) => {
             }
 
             try {
-                await sendRconCommand(interaction.guild.id, `kit givetoplayer "${targetUser.inGameName}" "${session.kitName}"`);
+                // Official RCE Syntax: kit givetoplayer "kitname" "playername"
+                await sendRconCommand(interaction.guild.id, `kit givetoplayer "${session.kitName}" "${targetUser.inGameName}"`);
+                
                 giveKitSessions.delete(userId);
                 return interaction.update({ content: `✅ Successfully gave kit **${session.kitName}** to **${targetUser.inGameName}** (<@${session.targetUserId}>)!`, components: [], embeds: [] });
             } catch (e) {
