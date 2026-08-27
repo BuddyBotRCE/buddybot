@@ -351,7 +351,8 @@ const bindHandler = async (interaction, client) => {
 
             if (customId === 'modal_bind_kit') {
                 const kitName = interaction.fields.getTextInputValue('kit_name').trim();
-                const command = `kit.give "{player}" "${kitName}"`;
+                // 👇 USES OFFICIAL RCE COMMUNITY SERVER KIT COMMAND 👇
+                const command = `kit givetoplayer "${kitName}" "{player}"`;
                 if (session.selectedBindId) {
                     await CustomBind.update({ targetValue: kitName, command }, { where: { id: session.selectedBindId } });
                 }
@@ -419,7 +420,7 @@ const bindHandler = async (interaction, client) => {
 
             if (customId === 'bind_btn_economy') {
                 const b = await CustomBind.findByPk(session.selectedBindId);
-                const modal = new ModalBuilder().setCustomId('bind_modal_economy').setTitle(`Configure Economy`);
+                const modal = new ModalBuilder().setCustomId('modal_bind_economy').setTitle(`Configure Economy`);
                 modal.addComponents(
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_cost').setLabel("Scrap Cost (0 for free)").setStyle(TextInputStyle.Short).setValue((b.cost || 0).toString()).setRequired(true)),
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_cd').setLabel("Cooldown in Seconds").setStyle(TextInputStyle.Short).setValue((b.cooldown || 0).toString()).setRequired(true))
