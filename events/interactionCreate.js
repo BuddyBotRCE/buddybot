@@ -57,8 +57,8 @@ module.exports = async (interaction, client) => {
             if (customId === 'modal_verify_email' || customId === 'modal_transfer_license') return await premiumHandler(interaction, client);
             if (customId === 'modal_setup_economy' || customId === 'modal_econ_interest' || customId === 'modal_hub_deposit' || customId === 'modal_hub_withdraw' || customId.startsWith('modal_admin_give_exec_') || customId.startsWith('modal_admin_take_exec_')) return await economyHandler(interaction, client);
             if (customId === 'modal_ae_settings' || customId.startsWith('modal_ae_')) return await autoEventsHandler(interaction, client);
-            // Inside interactionCreate.js (Modal Router section):
             if (customId === 'modal_casino_config') return await casinoHandler(interaction, client);
+            
             // 👇 COMBINED UNIFIED HUB MODALS 👇
             if (customId.startsWith('modal_emb_') || customId === 'modal_admin_embed' || customId.startsWith('modal_rr_') || customId === 'modal_edit_embed_prompt' || customId === 'modal_attach_rr_prompt') return await postEmbedHandler(interaction, client);
             
@@ -169,6 +169,11 @@ module.exports = async (interaction, client) => {
             }
         }
 
+        // 👇 HANDLE TICKET CATEGORY SELECT MENU 👇
+        if (interaction.isChannelSelectMenu() && customId === 'select_tk_category') {
+            return await ticketHandler(interaction, client);
+        }
+
         // 👇 COMBINED UNIFIED EMBED/RR ROUTING 👇
         if (customId === 'unified_embed_select' || customId.startsWith('btn_emb_') || customId.startsWith('select_emb_') || customId.startsWith('rr_') || customId.startsWith('select_rr_') || customId.startsWith('btn_rr_')) {
             return await postEmbedHandler(interaction, client);
@@ -182,12 +187,15 @@ module.exports = async (interaction, client) => {
         if (customId === 'hub_casino' || customId === 'casino_game_select' || customId.startsWith('modal_play_') || customId.includes('casino') || customId === 'btn_casino_settings') return await casinoHandler(interaction, client);
         
         if (customId === 'hub_buddypass_view' || customId.startsWith('bp_') || customId.includes('buddypass')) return await buddyPassHandler(interaction, client);
-        if (customId === 'ticket_create' || customId.startsWith('tk_') || customId.includes('ticket')) return await ticketHandler(interaction, client);
+        
+        // 👇 FIXED TICKET BUTTON & COMPONENT ROUTING 👇
+        if (customId === 'ticket_create' || customId === 'btn_tk_setcat' || customId.startsWith('tk_') || customId.includes('ticket')) return await ticketHandler(interaction, client);
+        
         if (customId.includes('sug_') || customId === 'btn_player_open_suggestion') return await suggestionHandler(interaction, client);
         if (customId === 'hub_leaderboards' || customId === 'hub_lb_select' || customId.startsWith('lb_refresh_')) return await adminHandler(interaction, client);
         if (customId === 'hub_vote_info') return await interaction.reply({ content: `🗳️ **Vote & Claim:** Link your vote tracking with your Rust server to automatically reward players with free currency or kits! (Configure via your voting site webhook).`, components: [], flags: 64 }).catch(()=>{});
         if (customId === 'btn_wipe_full' || customId === 'btn_wipe_selective' || customId === 'btn_wipe_cooldowns' || customId === 'select_wipe_custom') return await wipeHandler(interaction, client);
-        if (customId === 'btn_admin_kit' || customId.startsWith('ak_panel_') || customId === 'ak_panel_kit_select' || customId === 'admin_kit_choice_select' || customId.startsWith('admin_kit_target_') || customId.startsWith('admin_kit_target_select' ) || customId === 'hub_link_account' || customId === 'select_link_server_target') return await adminHandler(interaction, client);
+        if (customId === 'btn_admin_kit' || customId.startsWith('ak_panel_') || customId === 'ak_panel_kit_select' || customId.includes('admin_kit_choice') || customId.startsWith('admin_kit_target_') || customId.startsWith('admin_kit_target_select' ) || customId === 'hub_link_account' || customId === 'select_link_server_target') return await adminHandler(interaction, client);
         if (customId === 'toggle_tier_status' || customId === 'btn_manage_stripe' || customId === 'btn_transfer_license' || customId === 'btn_open_verify_modal') return await premiumHandler(interaction, client);
         if (customId.startsWith('btn_log_') || customId.startsWith('select_log_chan_')) return await loggingHandler(interaction, client);
         if (customId.startsWith('am_') || customId.startsWith('btn_am_')) return await autoModHandler(interaction, client);
