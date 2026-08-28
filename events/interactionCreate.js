@@ -178,8 +178,10 @@ module.exports = async (interaction, client) => {
             });
         }
         // Inside events/interactionCreate.js button routing section:
-if (customId === 'hub_pvp_areas') {
+        if (customId === 'hub_pvp_areas') {
     const { PveZone } = require('../database/db');
+    
+    // Fetch all zones where PvP is explicitly active and enabled
     const activePvpZones = await PveZone.findAll({ 
         where: { 
             guildId: interaction.guild.id, 
@@ -188,10 +190,11 @@ if (customId === 'hub_pvp_areas') {
         } 
     });
 
-    let pvpText = '### ⚔️ Active PvP Areas & Hotspots\n\n\`None currently active — Safe PvE map.\`';
-    if (activePvpZones.length > 0) {
-        pvpText = '### ⚔️ Active PvP Areas & Hotspots\n\n' + 
-            activePvpZones.map(z => `• **${z.name || 'Custom Zone'}** (Radius: \`${z.radius || 50}m\`)`).join('\n');
+    let pvpText = '### ⚔️ Live Active PvP Areas & Monuments\n\n\`All areas are currently Safe PvE (No active PvP zones).\`';
+    
+    if (activePvpZones && activePvpZones.length > 0) {
+        pvpText = '### ⚔️ Live Active PvP Areas & Monuments\n\n' + 
+            activePvpZones.map(z => `• 🔴 **${z.name || 'Custom Zone'}** — Radius: \`${z.radius || 50}m\``).join('\n');
     }
 
     return interaction.reply({ content: pvpText, flags: 64 });
