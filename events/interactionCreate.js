@@ -166,9 +166,16 @@ module.exports = async (interaction, client) => {
         // 🚦 4. BUTTONS & COMPONENT ROUTING
         // ====================================================================
         
-        // Home TP Buttons
+        // Home TP Buttons & Player Panel Home Info
         if (customId === 'hometp_btn_settings' || customId === 'admin_menu_back') {
             return await homeTpHandler(interaction, client);
+        }
+
+        if (customId === 'hub_hometp_info') {
+            return interaction.reply({ 
+                content: `🏠 **Home Teleport Hub Guide:**\n• Use the in-game quick-chat wheel and select **"Can I have a key"** to anchor your home respawn location.\n• Use the quick-chat wheel and select **"Retreat"** to teleport straight back home (subject to role requirements & cooldowns)!`, 
+                flags: 64 
+            });
         }
 
         // Player Hub & Core Modules
