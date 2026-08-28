@@ -353,7 +353,10 @@ module.exports = async (interaction, client) => {
             const targetUserId = cleanVal.substring(0, firstUnderscore);
             const shortname = cleanVal.substring(firstUnderscore + 1);
             const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
-            const modal = new ModalBuilder().setCustomId(`modal_admin_give_item_exec_${targetUserId}_${shortname}`).setTitle(`Give ${shortname} to ${targetUser ? targetUser.inGameName.substring(0, 20) : 'Player'}`);
+            
+            // Build the exact target ID so we can extract it cleanly upon modal submit
+            const exactModalId = `modal_admin_give_item_exec_${targetUserId}_${shortname}`;
+            const modal = new ModalBuilder().setCustomId(exactModalId).setTitle(`Give ${shortname} to ${targetUser ? targetUser.inGameName.substring(0, 20) : 'Player'}`);
             modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel("Enter Amount to Send").setStyle(TextInputStyle.Short).setValue('1').setRequired(true)));
             return interaction.showModal(modal);
         }
@@ -438,7 +441,8 @@ module.exports = async (interaction, client) => {
         }
 
         if (customId === 'ak_panel_kit') {
-            await interaction.deferUpdate();
+            const loadingPayload = { content: '⏳ Fetching live kits from server...', components: [], embeds: [], flags: 64 };
+            await interaction.update(loadingPayload);
             let liveKits = await fetchRceLiveKits(interaction.guild.id);
 
             const kitOptions = liveKits.slice(0, 25).map(k => ({
@@ -669,13 +673,49 @@ module.exports = async (interaction, client) => {
             const serverInfo = serverId ? ` to this server` : '';
             return interaction.reply({ content: `✅ Successfully linked your Discord account to **${ign}**${serverInfo}!\nYou can now use the shop, kits, and teleports.`, flags: 64 });
         }
+        
+        // 👇 HERE IS THE REWRITTEN AND FIXED "GIVE ITEM" SUBMISSION LOGIC 👇
         if (customId.startsWith('modal_admin_give_item_exec_')) {
             try {
                 const targetServer = await resolveTargetServer(interaction.guild.id, null, userId);
-                await sendRconCommand(targetServer.guildId, `inventory.giveto "${customId.replace('modal_admin_give_item_exec_', '').split('_')[0]}" ${interaction.fields.getTextInputValue('item_name') || customId.split('_').pop()} ${interaction.fields.getTextInputValue('amount') || 1}`);
-                return interaction.reply({ content: `✅ Item successfully sent on **${targetServer.serverName}**!`, flags: 64 });
-            } catch(e) { return interaction.reply({ content: `❌ Error sending item: ${e.message}`, flags: 64 }); }
+                
+                // Extract Discord User ID and Item Shortname from CustomID
+                const cleanId = customId.replace('modal_admin_give_item_exec_', '');
+                const firstUnderscore = cleanId.indexOf('_');
+                const targetUserId = cleanId.substring(0, firstUnderscore);
+                const shortname = cleanId.substring(firstUnderscore + 1);
+
+                // Safely read the only field on this modal: 'amount'
+                const amount = interaction.fields.getTextInputValue('amount') || '1';
+
+                // Look up the player's inGameName (Because Rust commands require strings, not Discord IDs)
+                const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
+                
+                if (!targetUser || !targetUser.inGameName) {
+                    return interaction.reply({ content: `❌ This player has not linked their Rust account!`, flags: 64 });
+                }
+
+                await sendRconCommand(targetServer.guildId, `inventory.giveto "${targetUser.inGameName}" ${shortname} ${amount}`);
+                
+                return interaction.reply({ content: `✅ Successfully gave **${amount}x ${shortname}** to **${targetUser.inGameName}** on **${targetServer.serverName}**!`, flags: 64 });
+            } catch(e) { 
+                return interaction.reply({ content: `❌ Error sending item: ${e.message}`, flags: 64 }); 
+            }
         }
+        
+        // Catch-all for legacy 'give_item' flow
+        if (customId.startsWith('modal_give_item_')) {
+            try {
+                const inGameName = customId.replace('modal_give_item_', '');
+                const shortname = interaction.fields.getTextInputValue('item_name');
+                const amount = interaction.fields.getTextInputValue('item_amount');
+                const targetServer = await resolveTargetServer(interaction.guild.id, null, userId);
+                
+                await sendRconCommand(targetServer.guildId, `inventory.giveto "${inGameName}" ${shortname} ${amount}`);
+                return interaction.reply({ content: `✅ Item **${shortname}** successfully sent to **${inGameName}** on **${targetServer.serverName}**!`, flags: 64 });
+            } catch(e) { return interaction.reply({ content: `❌ Error: ${e.message}`, flags: 64 }); }
+        }
+
         if (customId === 'modal_multiserver_add') {
             const serverName = interaction.fields.getTextInputValue('server_name').trim();
             const rconIp = interaction.fields.getTextInputValue('rcon_ip').trim();

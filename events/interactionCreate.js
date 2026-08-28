@@ -49,36 +49,12 @@ module.exports = async (interaction, client) => {
         // 🚦 0. UNIVERSAL MODAL SUBMISSION ROUTER (Catch modals first)
         // ====================================================================
         if (interaction.isModalSubmit()) {
-            if (customId.startsWith('modal_givekit_exec_')) {
-                return await adminHandler(interaction, client);
-            }
-
-            // 👇 ROUTE SHOP MODALS (Multiplier, Custom Items, Quantities) 👇
-            if (customId === 'modal_shop_multiplier' || customId === 'modal_shop_custom' || customId.startsWith('modal_buy_qty_')) {
-                return await shopHandler(interaction, client);
-            }
-
-            // 👇 ROUTE WIPE & COOLDOWN CLEARANCE MODALS 👇
-            if (customId === 'modal_wipe_full' || customId.startsWith('modal_wipe_sel_') || customId === 'modal_wipe_cooldowns') {
-                return await wipeHandler(interaction, client);
-            }
-
-            // 👇 ROUTE ACCOUNT LINKING MODALS 👇
-            if (customId === 'modal_link_account_global' || customId.startsWith('modal_link_account_')) {
-                return await adminHandler(interaction, client);
-            }
-
-            // 👇 ROUTE SUGGESTION MODALS 👇
-            if (customId.startsWith('modal_sug_') || customId === 'modal_player_submit_suggestion' || customId.startsWith('modal_sug_decline_reason_')) {
-                return await suggestionHandler(interaction, client);
-            }
-
-            // 👇 ROUTE PREMIUM / STRIPE MODALS 👇
-            if (customId === 'modal_verify_email' || customId === 'modal_transfer_license') {
-                return await premiumHandler(interaction, client);
-            }
-
-            // 👇 ROUTE ECONOMY & BANK MODALS 👇
+            if (customId.startsWith('modal_givekit_exec_')) return await adminHandler(interaction, client);
+            if (customId === 'modal_shop_multiplier' || customId === 'modal_shop_custom' || customId.startsWith('modal_buy_qty_')) return await shopHandler(interaction, client);
+            if (customId === 'modal_wipe_full' || customId.startsWith('modal_wipe_sel_') || customId === 'modal_wipe_cooldowns') return await wipeHandler(interaction, client);
+            if (customId === 'modal_link_account_global' || customId.startsWith('modal_link_account_')) return await adminHandler(interaction, client);
+            if (customId.startsWith('modal_sug_') || customId === 'modal_player_submit_suggestion' || customId.startsWith('modal_sug_decline_reason_')) return await suggestionHandler(interaction, client);
+            if (customId === 'modal_verify_email' || customId === 'modal_transfer_license') return await premiumHandler(interaction, client);
             if (
                 customId === 'modal_setup_economy' || 
                 customId === 'modal_econ_interest' || 
@@ -86,9 +62,7 @@ module.exports = async (interaction, client) => {
                 customId === 'modal_hub_withdraw' || 
                 customId.startsWith('modal_admin_give_exec_') || 
                 customId.startsWith('modal_admin_take_exec_')
-            ) {
-                return await economyHandler(interaction, client);
-            }
+            ) return await economyHandler(interaction, client);
 
             if (customId === 'modal_ae_settings' || customId.startsWith('modal_ae_')) return await autoEventsHandler(interaction, client);
             if (customId.startsWith('modal_emb_') || customId === 'modal_admin_embed') return await postEmbedHandler(interaction, client);
@@ -133,12 +107,8 @@ module.exports = async (interaction, client) => {
         // 🚦 2. COMPONENT ROUTING STATION (Buttons & Select Menus)
         // ====================================================================
 
-        // 👇 ROUTE CLANS 👇
-        if (customId === 'hub_clans' || customId.includes('clan') || customId.includes('bank')) {
-            return await clanHandler(interaction, client);
-        }
+        if (customId === 'hub_clans' || customId.includes('clan') || customId.includes('bank')) return await clanHandler(interaction, client);
 
-        // 👇 PERFECTED ECONOMY & BANK ROUTING 👇
         if (
             customId === 'hub_economy_menu' || 
             customId === 'hub_balance' || 
@@ -150,41 +120,20 @@ module.exports = async (interaction, client) => {
             customId === 'btn_admin_take' || 
             customId === 'select_admin_give_target' || 
             customId === 'select_admin_take_target'
-        ) {
-            return await economyHandler(interaction, client);
-        }
+        ) return await economyHandler(interaction, client);
 
-        if (customId === 'hub_shop_menu' || customId === 'hub_shop_browse' || customId === 'hub_shop_pricelist' || customId.startsWith('player_shop_') || customId.includes('shop')) {
-            return await shopHandler(interaction, client);
-        }
-
-        if (customId === 'hub_casino' || customId === 'casino_game_select' || customId.startsWith('modal_play_') || customId.includes('casino')) {
-            return await casinoHandler(interaction, client);
-        }
-
-        if (customId === 'hub_buddypass_view' || customId.startsWith('bp_') || customId.includes('buddypass')) {
-            return await buddyPassHandler(interaction, client);
-        }
-
-        if (customId === 'ticket_create' || customId.startsWith('tk_') || customId.includes('ticket')) {
-            return await ticketHandler(interaction, client);
-        }
-
-        if (customId === 'btn_player_open_suggestion' || customId.startsWith('sug_')) {
-            return await suggestionHandler(interaction, client);
-        }
-
-        if (customId === 'hub_leaderboards' || customId === 'hub_lb_select' || customId.startsWith('lb_refresh_')) {
-            return await adminHandler(interaction, client);
-        }
-
+        if (customId === 'hub_shop_menu' || customId === 'hub_shop_browse' || customId === 'hub_shop_pricelist' || customId.startsWith('player_shop_') || customId.includes('shop')) return await shopHandler(interaction, client);
+        if (customId === 'hub_casino' || customId === 'casino_game_select' || customId.startsWith('modal_play_') || customId.includes('casino')) return await casinoHandler(interaction, client);
+        if (customId === 'hub_buddypass_view' || customId.startsWith('bp_') || customId.includes('buddypass')) return await buddyPassHandler(interaction, client);
+        if (customId === 'ticket_create' || customId.startsWith('tk_') || customId.includes('ticket')) return await ticketHandler(interaction, client);
+        if (customId.includes('sug_') || customId === 'btn_player_open_suggestion') return await suggestionHandler(interaction, client);
+        if (customId === 'hub_leaderboards' || customId === 'hub_lb_select' || customId.startsWith('lb_refresh_')) return await adminHandler(interaction, client);
+        
         if (customId === 'hub_vote_info') {
             return await interaction.reply({ content: `🗳️ **Vote & Claim:** Link your vote tracking with your Rust server to automatically reward players with free currency or kits! (Configure via your voting site webhook).`, components: [], flags: 64 }).catch(()=>{});
         }
 
-        if (customId === 'btn_wipe_full' || customId === 'btn_wipe_selective' || customId === 'btn_wipe_cooldowns' || customId === 'select_wipe_custom') {
-            return await wipeHandler(interaction, client);
-        }
+        if (customId === 'btn_wipe_full' || customId === 'btn_wipe_selective' || customId === 'btn_wipe_cooldowns' || customId === 'select_wipe_custom') return await wipeHandler(interaction, client);
 
         if (
             customId === 'btn_admin_kit' || 
@@ -195,32 +144,20 @@ module.exports = async (interaction, client) => {
             customId === 'admin_kit_target_select' ||
             customId === 'hub_link_account' ||
             customId === 'select_link_server_target'
-        ) {
-            return await adminHandler(interaction, client);
-        }
+        ) return await adminHandler(interaction, client);
 
-        // 👇 PERFECTED PREMIUM / STRIPE ROUTING 👇
-        if (
-            customId === 'toggle_tier_status' || 
-            customId === 'btn_manage_stripe' || 
-            customId === 'btn_transfer_license' || 
-            customId === 'btn_open_verify_modal'
-        ) {
-            return await premiumHandler(interaction, client);
-        }
-
+        if (customId === 'toggle_tier_status' || customId === 'btn_manage_stripe' || customId === 'btn_transfer_license' || customId === 'btn_open_verify_modal') return await premiumHandler(interaction, client);
         if (customId.startsWith('btn_log_') || customId.startsWith('select_log_chan_')) return await loggingHandler(interaction, client);
         if (customId.startsWith('am_') || customId.startsWith('btn_am_')) return await autoModHandler(interaction, client);
         if (customId.startsWith('cz_') || customId.startsWith('btn_cz_') || customId === 'select_custom_zone' || customId.includes('pve') || customId.includes('zone')) return await customZoneHandler(interaction, client);
         if (customId.startsWith('rr_') || customId.startsWith('select_rr_') || customId.startsWith('btn_rr_') || customId.includes('reaction') || customId.includes('verify') || customId.includes('verification')) return await reactionRoleHandler(interaction, client);
         if (customId.startsWith('btn_emb_') || customId === 'select_emb_target_channel' || customId === 'select_emb_template') return await postEmbedHandler(interaction, client);
         if (customId.startsWith('ae_') || customId === 'btn_finalize_tpl_aeslot') return await autoEventsHandler(interaction, client);
-        if (customId.startsWith('ga_') || customId.includes('giveaway')) return await giveawayHandler(interaction, client);
+        if (customId.includes('ga_') || customId.includes('giveaway')) return await giveawayHandler(interaction, client);
         if (customId.includes('bounty') || customId.includes('bounties')) return await bountyHandler(interaction, client);
         if (customId.startsWith('bind_') || customId.startsWith('btn_bind_') || customId === 'bind_do_kit' || customId.includes('bind')) return await bindHandler(interaction, client);
         if (customId.includes('kit') && !customId.includes('ticket')) return await kitHandler(interaction, client);
 
-        // Fallback for uncaught buttons
         return await adminHandler(interaction, client);
 
     } catch (error) {
