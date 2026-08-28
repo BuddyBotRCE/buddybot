@@ -5,15 +5,6 @@ const { RUST_CATEGORIES } = require('../utils/rustCatalog');
 const { Op } = require('sequelize');
 
 module.exports = async (interaction, client) => {
-    // 🛑 ONLY DEFER BUTTONS & SELECT MENUS (EXCLUDE MODAL SUBMISSIONS & MODAL TRIGGERS)
-    if (!interaction.isModalSubmit() && !interaction.replied && !interaction.deferred) {
-        // Only defer if it's not a button or select menu trying to open a modal
-        const customIdCheck = interaction.customId || '';
-        if (customIdCheck !== 'shop_multiplier' && customIdCheck !== 'shop_add_custom' && customIdCheck !== 'player_shop_buy_select') {
-            await interaction.deferUpdate().catch(() => {});
-        }
-    }
-
     const customId = interaction.customId || '';
     const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
 
@@ -52,6 +43,8 @@ module.exports = async (interaction, client) => {
 
         if (interaction.replied || interaction.deferred) {
             return await interaction.editReply({ embeds: [embed], components: [row], content: null });
+        } else if (interaction.isStringSelectMenu() || interaction.isButton()) {
+            return await interaction.update({ embeds: [embed], components: [row], content: null });
         } else {
             return await interaction.reply({ embeds: [embed], components: [row], flags: 64 });
         }
@@ -70,7 +63,7 @@ module.exports = async (interaction, client) => {
                 return { label: `${RUST_CATEGORIES[catKey].label} (${count} active)`, value: `shop_cat_${catKey}`, emoji: RUST_CATEGORIES[catKey].emoji };
             });
             const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('shop_catalog_category').setPlaceholder('Choose a Rust category...').addOptions(catOptions));
-            return interaction.editReply({ content: '📦 Select a category to open the multi-select item checklist:', components: [row], embeds: [] });
+            return interaction.update({ content: '📦 Select a category to open the multi-select item checklist:', components: [row], embeds: [] });
         }
         if (selectedValue === 'shop_add_custom') {
             const cleanModal = new ModalBuilder().setCustomId('modal_shop_custom').setTitle('Add Custom Shop Item');
@@ -118,7 +111,7 @@ module.exports = async (interaction, client) => {
                 .setMaxValues(itemOptions.length)
                 .addOptions(itemOptions)
         );
-        return interaction.editReply({ content: `📦 **${categoryData.label}**: Check multiple items below. Items already in store are safely ignored to prevent duplicates:`, components: [row] });
+        return interaction.update({ content: `📦 **${categoryData.label}**: Check multiple items below. Items already in store are safely ignored to prevent duplicates:`, components: [row] });
     }
 
     if (customId === 'shop_catalog_multi_select') {
@@ -157,7 +150,7 @@ module.exports = async (interaction, client) => {
     if (customId.startsWith('shop_role_')) {
         const itemId = customId.replace('shop_role_', '');
         await ShopItem.update({ requiredRoleId: interaction.values[0] }, { where: { id: itemId } });
-        return interaction.editReply({ content: `✅ Item role restriction updated successfully!`, components: [] });
+        return interaction.update({ content: `✅ Item role restriction updated successfully!`, components: [] });
     }
 
     // --- PLAYER SHOP ---
@@ -167,7 +160,7 @@ module.exports = async (interaction, client) => {
             new ButtonBuilder().setCustomId('hub_shop_browse').setLabel('Browse Store (Categories)').setStyle(ButtonStyle.Primary).setEmoji('🛍️'),
             new ButtonBuilder().setCustomId('hub_shop_pricelist').setLabel('Live Price List').setStyle(ButtonStyle.Secondary).setEmoji('📋')
         );
-        return interaction.editReply({ embeds: [embed], components: [row], content: null });
+        return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
     }
 
     if (customId === 'hub_shop_browse') {
@@ -180,7 +173,7 @@ module.exports = async (interaction, client) => {
         catOptions.push({ label: `Custom / Server Items (${customCount} items)`, value: 'custom', emoji: '✨' });
 
         const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('player_shop_cat_select').setPlaceholder('Choose a shop category...').addOptions(catOptions));
-        return interaction.editReply({ content: '🛒 **Server Shop Categories:** Select a category below to view items and make purchases:', components: [row] });
+        return interaction.reply({ content: '🛒 **Server Shop Categories:** Select a category below to view items and make purchases:', components: [row], flags: 64 });
     }
 
     if (customId === 'player_shop_cat_select') {
@@ -191,20 +184,20 @@ module.exports = async (interaction, client) => {
         const multiplier = (config?.shopMultiplier || 100) / 100;
         const availableItems = dbItems.filter(i => i.category === catKey || (catKey === 'custom' && i.category === 'custom'));
 
-        if (availableItems.length === 0) return interaction.editReply({ content: `❌ No items currently available in **${categoryData?.label || 'Custom'}**.`, components: [] });
+        if (availableItems.length === 0) return interaction.update({ content: `❌ No items currently available in **${categoryData?.label || 'Custom'}**.`, components: [] });
 
         const options = availableItems.map(i => {
             const finalPrice = Math.round(i.price * multiplier);
             return { label: i.name, description: `Price: ${finalPrice} Scrap`, value: `buy_item_${i.id}` };
         });
         const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('player_shop_buy_select').setPlaceholder('Select item to buy...').addOptions(options));
-        return interaction.editReply({ content: `🛒 **${categoryData?.label || 'Shop'}**: Select an item to purchase:`, components: [row] });
+        return interaction.update({ content: `🛒 **${categoryData?.label || 'Shop'}**: Select an item to purchase:`, components: [row] });
     }
 
     if (customId === 'player_shop_buy_select') {
         const itemId = selectedValue.replace('buy_item_', '');
         const shopItem = await ShopItem.findByPk(itemId);
-        if (!shopItem) return interaction.editReply({ content: '❌ Item not found.', components: [] });
+        if (!shopItem) return interaction.reply({ content: '❌ Item not found.', flags: 64 });
         
         const modal = new ModalBuilder().setCustomId(`modal_buy_qty_${itemId}`).setTitle(`Buy: ${shopItem.name}`);
         modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('quantity').setLabel("How many would you like to buy?").setStyle(TextInputStyle.Short).setValue('1').setRequired(true)));
@@ -218,7 +211,7 @@ module.exports = async (interaction, client) => {
         const multiplier = (config?.shopMultiplier || 100) / 100;
 
         if (dbItems.length === 0) {
-            return interaction.editReply({ content: '❌ There are currently no items for sale in the shop.', embeds: [], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('hub_shop_menu').setLabel('Go Back').setStyle(ButtonStyle.Secondary).setEmoji('🔙'))] });
+            return interaction.update({ content: '❌ There are currently no items for sale in the shop.', embeds: [], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('hub_shop_menu').setLabel('Go Back').setStyle(ButtonStyle.Secondary).setEmoji('🔙'))] });
         }
 
         const embed = new EmbedBuilder().setTitle('📋 Categorized Store Price List').setDescription('Here are all items currently available for purchase:').setColor('#3498db').setFooter({ text: 'Prices reflect real-time multipliers.' });
@@ -248,7 +241,7 @@ module.exports = async (interaction, client) => {
             embed.addFields({ name: '✨ Custom / Server Items', value: customListText, inline: false });
         }
 
-        return interaction.editReply({ embeds: [embed], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('hub_shop_menu').setLabel('Go Back').setStyle(ButtonStyle.Secondary).setEmoji('🔙'))] });
+        return interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('hub_shop_menu').setLabel('Go Back').setStyle(ButtonStyle.Secondary).setEmoji('🔙'))] });
     }
 
     if (interaction.isModalSubmit()) {
