@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, PermissionFlagsBits } = require('discord.js');
-const { GuildConfig } = require('../database/db');
+const { GuildConfig } = require('../../database/db');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -29,7 +29,7 @@ module.exports = {
             .setDescription('Configure your server modules, automated systems, shops, and community tools using the categories below.\n\n• **Dropdown 1:** Basic Systems & Upgrades\n• **Dropdown 2:** ⭐ Premium & Advanced Modules')
             .setColor('#2b2d31');
 
-        // DROPDOWN 1: BASIC SYSTEMS (Now includes Custom Zones & Server Wipe)
+        // DROPDOWN 1: BASIC SYSTEMS
         const row1 = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder().setCustomId('admin_menu_select').setPlaceholder('⚙️ Basic Systems & Upgrades...')
                 .addOptions([
@@ -43,13 +43,12 @@ module.exports = {
                     { label: 'Cross-Chat', value: 'setup_crosschat', emoji: '💬' },
                     { label: 'Admin & Mod Roles', value: 'setup_server_roles', description: 'Set bot admin/mod roles', emoji: '👑' },
                     { label: 'Logging System', value: 'setup_logging', emoji: '📊' },
-                    // 👈 MOVED OVER TO BASIC
                     { label: 'Custom Zones Builder', value: 'setup_custom_zones', description: 'Create and manage map zones', emoji: '🗺️' },
                     { label: 'Server Wipe Panel', value: 'setup_wipe', emoji: '☢️' }
                 ])
         );
 
-        // DROPDOWN 2: PREMIUM & ADVANCED SECTION (Now includes Suggestions, Giveaways, Embeds & Reactions)
+        // DROPDOWN 2: PREMIUM & ADVANCED SECTION
         const row2 = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder().setCustomId('admin_menu_select_2').setPlaceholder('⭐ Premium & Advanced Features...')
                 .addOptions([
@@ -62,7 +61,6 @@ module.exports = {
                     { label: 'ORP Manager', value: 'setup_orp', emoji: '🛡️' },
                     { label: 'AI Integration Setup', value: 'setup_ai', emoji: '🤖' },
                     { label: 'Premium Status & License', value: 'setup_tier', emoji: '⭐' },
-                    // 👈 MOVED OVER TO PREMIUM
                     { label: 'Embeds & Reaction Roles', value: 'setup_embeds_roles', description: 'Announcements, Verifications, & Roles', emoji: '🎨' },
                     { label: 'Giveaways Manager', value: 'setup_giveaways', emoji: '🎉' },
                     { label: 'Suggestions System', value: 'setup_suggestions', emoji: '💡' }
