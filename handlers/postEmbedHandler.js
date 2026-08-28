@@ -230,20 +230,34 @@ module.exports = async (interaction, client) => {
                 }
             }
 
+            // 👇 THE FIX FOR VERIFICATION PERMISSION CRASHES 👇
             if (interaction.isButton() && customId.startsWith('rr_toggle_')) {
                 const rrData = await ReactionRole.findByPk(customId.replace('rr_toggle_', ''));
                 if (!rrData) return await interaction.reply({ content: '❌ This role configuration no longer exists.', flags: 64 });
+                
                 const role = interaction.guild.roles.cache.get(rrData.roleId);
                 if (!role) return await interaction.reply({ content: '❌ The assigned role no longer exists on this server.', flags: 64 });
 
                 const member = interaction.member;
-                if (rrData.buttonStyle === 'Success') {
-                    if (member.roles.cache.has(role.id)) return await interaction.reply({ content: `✅ You are already verified!`, flags: 64 });
-                    await member.roles.add(role);
-                    return await interaction.reply({ content: `✅ Verified! You have been assigned the **${role.name}** role.`, flags: 64 });
-                } else {
-                    if (member.roles.cache.has(role.id)) { await member.roles.remove(role); return await interaction.reply({ content: `❌ Removed role **${role.name}** from you.`, flags: 64 }); }
-                    else { await member.roles.add(role); return await interaction.reply({ content: `✅ Added role **${role.name}** to you!`, flags: 64 }); }
+                
+                try {
+                    if (rrData.buttonStyle === 'Success') {
+                        if (member.roles.cache.has(role.id)) return await interaction.reply({ content: `✅ You are already verified!`, flags: 64 });
+                        await member.roles.add(role);
+                        return await interaction.reply({ content: `✅ Verified! You have been assigned the **${role.name}** role.`, flags: 64 });
+                    } else {
+                        if (member.roles.cache.has(role.id)) { 
+                            await member.roles.remove(role); 
+                            return await interaction.reply({ content: `❌ Removed role **${role.name}** from you.`, flags: 64 }); 
+                        } else { 
+                            await member.roles.add(role); 
+                            return await interaction.reply({ content: `✅ Added role **${role.name}** to you!`, flags: 64 }); 
+                        }
+                    }
+                } catch (e) {
+                    console.error('[ROLE ASSIGNMENT ERROR]', e);
+                    // Explicitly catch Discord Role Hierarchy errors
+                    return await interaction.reply({ content: `❌ **Failed to assign role.**\nMake sure the **BuddyBot role** is placed strictly **higher** than the **${role.name}** role in your Server Settings!`, flags: 64 });
                 }
             }
             return;
@@ -272,18 +286,10 @@ module.exports = async (interaction, client) => {
                     components.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('select_emb_template').setPlaceholder('⚡ Load Pre-Made Rust Template...').addOptions([{ label: '🪓 Wipe Announcement', value: 'wipe' }, { label: '📜 Server Rules', value: 'rules' }, { label: '🛒 Store & VIP', value: 'store' }, { label: '🗳️ Vote & Rewards', value: 'vote' }])));
                 }
                 
-                // 👇 NEW DROPDOWN COLOR PICKER REPLACING THE BUTTON 👇
                 components.push(new ActionRowBuilder().addComponents(
                     new StringSelectMenuBuilder().setCustomId('select_emb_color').setPlaceholder('🎨 Select Embed Color...')
                     .addOptions([
-                        { label: 'Red (Hostile / Alert)', value: '#e74c3c', emoji: '🔴' },
-                        { label: 'Green (Safe / Success)', value: '#2ecc71', emoji: '🟢' },
-                        { label: 'Blue (Neutral / Info)', value: '#3498db', emoji: '🔵' },
-                        { label: 'Yellow (Warning)', value: '#f1c40f', emoji: '🟡' },
-                        { label: 'Orange (Event)', value: '#e67e22', emoji: '🟠' },
-                        { label: 'Purple (Premium)', value: '#9b59b6', emoji: '🟣' },
-                        { label: 'Black / Dark (Sleek)', value: '#2b2d31', emoji: '⚫' },
-                        { label: 'White (Clean)', value: '#ffffff', emoji: '⚪' }
+                        { label: 'Red (Hostile / Alert)', value: '#e74c3c', emoji: '🔴' }, { label: 'Green (Safe / Success)', value: '#2ecc71', emoji: '🟢' }, { label: 'Blue (Neutral / Info)', value: '#3498db', emoji: '🔵' }, { label: 'Yellow (Warning)', value: '#f1c40f', emoji: '🟡' }, { label: 'Orange (Event)', value: '#e67e22', emoji: '🟠' }, { label: 'Purple (Premium)', value: '#9b59b6', emoji: '🟣' }, { label: 'Black / Dark (Sleek)', value: '#2b2d31', emoji: '⚫' }, { label: 'White (Clean)', value: '#ffffff', emoji: '⚪' }
                     ])
                 ));
 
@@ -312,7 +318,6 @@ module.exports = async (interaction, client) => {
                 }
             }
 
-            // 👇 HANDLES THE NEW COLOR DROPDOWN 👇
             if (interaction.isStringSelectMenu() && customId === 'select_emb_color') {
                 embSession.color = selectedValue;
                 embedSessions.set(guildId, embSession);
