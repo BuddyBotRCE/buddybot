@@ -1,12 +1,31 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, PermissionFlagsBits } = require('discord.js');
+const { GuildConfig } = require('../database/db');
 
 module.exports = {
+    // 1. Removed strict native Administrator default check so custom roles can access it
     data: new SlashCommandBuilder()
         .setName('adminpanel')
-        .setDescription('Opens the Admin Dashboard')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+        .setDescription('Opens the Admin Dashboard'),
         
     async execute(interaction) {
+        const guildId = interaction.guild.id;
+        const member = interaction.member;
+
+        // 2. Check if user has native Administrator, server owner, OR your custom Bot Admin/Mod roles
+        const config = await GuildConfig.findOne({ where: { guildId } });
+        const isOwner = interaction.guild.ownerId === member.id;
+        const isNativeAdmin = member.permissions.has(PermissionFlagsBits.Administrator);
+        
+        const hasCustomAdminRole = config?.adminRoleId && member.roles.cache.has(config.adminRoleId);
+        const hasCustomModRole = config?.modRoleId && member.roles.cache.has(config.modRoleId);
+
+        if (!isOwner && !isNativeAdmin && !hasCustomAdminRole && !hasCustomModRole) {
+            return await interaction.reply({ 
+                content: '❌ **Access Denied:** You do not have the required Administrator or Moderator role to open the admin panel.', 
+                flags: 64 
+            });
+        }
+
         const adminEmbed = new EmbedBuilder()
             .setTitle('🛠️ Admin Panel & Dashboard')
             .setDescription('Configure your server modules, automated systems, shops, and community tools using the categories below.\n\n• **Dropdown 1:** Basic Systems & Premium Upgrades\n• **Dropdown 2:** ⭐ Premium & Advanced Modules')
@@ -16,7 +35,6 @@ module.exports = {
         const row1 = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder().setCustomId('admin_menu_select').setPlaceholder('⚙️ Basic Systems & Upgrades...')
                 .addOptions([
-                    // 👇 ADDED BUY PREMIUM OPTION TO BASIC PANEL 👇
                     { label: '⭐ Buy / Upgrade to Premium', value: 'setup_tier', description: 'Unlock all advanced modules and features', emoji: '⭐' },
                     { label: 'RCON & Servers', value: 'setup_multiserver', emoji: '🌐' },
                     { label: 'Live Admin Tools', value: 'admin_tools', emoji: '🧰' },
