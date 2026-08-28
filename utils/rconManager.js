@@ -170,7 +170,7 @@ async function connectRcon(guildId, client, targetServerId = null) {
                                     }
                                 } catch (error) {}
                             }
-                            // C. AUTO EVENT
+                            // C. AUTO EVENT (Matches your exact unedited autoEventsHandler methods)
                             else if (setupData.type === 'auto_event') {
                                 try {
                                     const autoEventsHandler = require('../handlers/autoEventsHandler');
