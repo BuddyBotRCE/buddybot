@@ -27,7 +27,7 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
 
         for (const key of Object.keys(TYPE_INFO)) {
             const ev = allEvents.find(e => e.eventType === key);
-            if (ev && ev.isEnabled) activeList += `🟢 **${ev.name}**\n`;
+            if (ev && ev.isEnabled) activeList += `🟢 **${ev.name}** (Every ${ev.interval || 60}m)\n`;
             else if (ev && !ev.isEnabled) inactiveList += `🔴 **${ev.name}** (Disabled)\n`;
             else inactiveList += `⚫ **${TYPE_INFO[key].name}** (*Not Setup*)\n`;
         }
@@ -35,7 +35,7 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
         embed.addFields(
             { name: '🟢 Active Events', value: activeList || "*No events active.*", inline: false },
             { name: '🔴 Inactive / Unconfigured', value: inactiveList || "*All set up!*", inline: false },
-            { name: '🛠️ Manage', value: "👇 **Click an event below to open its positions and settings.**", inline: false }
+            { name: '🛠️ Manage', value: "👇 **Click an event below to open its timer, positions, and settings.**", inline: false }
         );
 
         const row1 = new ActionRowBuilder();
@@ -87,12 +87,12 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
             : '*No positions saved. Click "Add Player Pos" below.*';
 
         embed.addFields(
-            { name: `📊 Event Details`, value: `**Quantity:** Spawns ${activeEvent.amount}\n**Status:** ${activeEvent.isEnabled ? '🟢 ENABLED' : '🔴 DISABLED'}` },
+            { name: `📊 Event Details`, value: `**Quantity:** Spawns ${activeEvent.amount}\n**Timer Interval:** Every **${activeEvent.interval || 60} minutes**\n**Status:** ${activeEvent.isEnabled ? '🟢 ENABLED' : '🔴 DISABLED'}` },
             { name: `📍 Saved Spawn Locations`, value: locList }
         );
 
         components.push(new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('ae_btn_settings').setLabel('Name & Qty').setStyle(ButtonStyle.Primary).setEmoji('📝'),
+            new ButtonBuilder().setCustomId('ae_btn_settings').setLabel('Name, Qty & Timer').setStyle(ButtonStyle.Primary).setEmoji('📝'),
             new ButtonBuilder().setCustomId('ae_btn_getpos').setLabel('Add Player Pos').setStyle(ButtonStyle.Success).setEmoji('📍'),
             new ButtonBuilder().setCustomId('ae_btn_undopos').setLabel('Clear Last Pos').setStyle(ButtonStyle.Secondary).setEmoji('⏪').setDisabled(eventLocs.length === 0),
             new ButtonBuilder().setCustomId('ae_btn_test').setLabel('Test Event').setStyle(ButtonStyle.Primary).setEmoji('🚀').setDisabled(eventLocs.length === 0)
@@ -154,15 +154,18 @@ const autoEventsHandler = async (interaction, client) => {
             return await renderAEPanel(interaction);
         }
 
+        // 👇 UPDATED MODAL SUBMISSION TO READ TIMER INTERVAL 👇
         if (interaction.isModalSubmit() && customId === 'modal_ae_settings') {
             const newName = interaction.fields.getTextInputValue('ev_name').trim() || "Custom Event";
-            let amount = parseInt(interaction.fields.getTextInputValue('ev_qty'));
+            let amount = parseInt(interaction.fields.getTextInputValue('ev_qty')) || 1;
+            let interval = parseInt(interaction.fields.getTextInputValue('ev_interval')) || 60;
             if (isNaN(amount) || amount < 1) amount = 1;
+            if (isNaN(interval) || interval < 1) interval = 60;
 
             if (session.selectedEventId) {
-                await AutoEvent.update({ name: newName, amount, interval: 60 }, { where: { id: session.selectedEventId } });
+                await AutoEvent.update({ name: newName, amount, interval }, { where: { id: session.selectedEventId } });
             }
-            return await renderAEPanel(interaction, `✅ Event Name and Quantity saved!`);
+            return await renderAEPanel(interaction, `✅ Event Settings saved (Timer set to every ${interval} mins)!`);
         }
 
         if (interaction.isStringSelectMenu()) {
@@ -217,12 +220,14 @@ const autoEventsHandler = async (interaction, client) => {
                 return await renderAEPanel(interaction);
             }
 
+            // 👇 UPDATED MODAL POPUP TO INCLUDE TIMER INPUT FIELD 👇
             if (customId === 'ae_btn_settings') {
                 const ev = await AutoEvent.findByPk(session.selectedEventId);
-                const modal = new ModalBuilder().setCustomId('modal_ae_settings').setTitle(`Edit Event Name & Amount`);
+                const modal = new ModalBuilder().setCustomId('modal_ae_settings').setTitle(`Edit Event Settings`);
                 modal.addComponents(
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ev_name').setLabel("Event Name").setStyle(TextInputStyle.Short).setValue(ev.name || 'Custom Event').setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ev_qty').setLabel("Quantity of items to spawn").setStyle(TextInputStyle.Short).setValue((ev.amount || 1).toString()).setRequired(true))
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ev_qty').setLabel("Quantity to Spawn").setStyle(TextInputStyle.Short).setValue((ev.amount || 1).toString()).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ev_interval').setLabel("Clock Interval (in Minutes)").setStyle(TextInputStyle.Short).setValue((ev.interval || 60).toString()).setRequired(true))
                 );
                 return await interaction.showModal(modal);
             }
