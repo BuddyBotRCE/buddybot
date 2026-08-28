@@ -177,6 +177,25 @@ module.exports = async (interaction, client) => {
                 flags: 64 
             });
         }
+        // Inside events/interactionCreate.js button routing section:
+if (customId === 'hub_pvp_areas') {
+    const { PveZone } = require('../database/db');
+    const activePvpZones = await PveZone.findAll({ 
+        where: { 
+            guildId: interaction.guild.id, 
+            isEnabled: true, 
+            pvp: true 
+        } 
+    });
+
+    let pvpText = '### ⚔️ Active PvP Areas & Hotspots\n\n\`None currently active — Safe PvE map.\`';
+    if (activePvpZones.length > 0) {
+        pvpText = '### ⚔️ Active PvP Areas & Hotspots\n\n' + 
+            activePvpZones.map(z => `• **${z.name || 'Custom Zone'}** (Radius: \`${z.radius || 50}m\`)`).join('\n');
+    }
+
+    return interaction.reply({ content: pvpText, flags: 64 });
+}
 
         // Player Hub & Core Modules
         if (customId === 'hub_link_account' || customId === 'select_link_server_target' || customId === 'hub_leaderboards' || customId === 'hub_lb_select' || customId.startsWith('lb_refresh_') || customId === 'btn_admin_kit' || customId.startsWith('ak_panel_') || customId === 'ak_panel_kit_select' || customId.includes('admin_kit_choice') || customId.startsWith('admin_kit_target_') || customId.startsWith('admin_kit_target_select')) {

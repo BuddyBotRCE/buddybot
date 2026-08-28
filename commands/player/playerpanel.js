@@ -56,7 +56,8 @@ module.exports = {
         const row2 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('hub_economy_menu').setLabel('Economy & Bank').setStyle(ButtonStyle.Success).setEmoji('🏦'),
             new ButtonBuilder().setCustomId('hub_casino').setLabel('Casino').setStyle(ButtonStyle.Danger).setEmoji('🎰'),
-            new ButtonBuilder().setCustomId('hub_buddypass_view').setLabel('BuddyPass').setStyle(ButtonStyle.Primary).setEmoji('⭐')
+            new ButtonBuilder().setCustomId('hub_buddypass_view').setLabel('BuddyPass').setStyle(ButtonStyle.Primary).setEmoji('⭐'),
+            new ButtonBuilder().setCustomId('hub_pvp_areas').setLabel('PvP Areas').setStyle(ButtonStyle.Danger).setEmoji('⚔️')
         );
 
         const row3 = new ActionRowBuilder().addComponents(
