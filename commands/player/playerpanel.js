@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { GuildConfig, UserEconomy, BuddyPassChallenge } = require('../../database/db');
+const { GuildConfig, UserEconomy, PveZone } = require('../../database/db');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -22,12 +22,26 @@ module.exports = {
         const currentXp = user.xp || 0;
         const requiredXp = currentLevel * 100;
 
+        const activePvpZones = await PveZone.findAll({ 
+            where: { 
+                guildId: guildId, 
+                isEnabled: true, 
+                pvp: true 
+            } 
+        });
+
+        let pvpAreasText = '`None currently active (Safe PvE)`';
+        if (activePvpZones.length > 0) {
+            pvpAreasText = activePvpZones.map(z => `• **${z.name || 'Custom Zone'}** (${z.radius || 50}m radius)`).join('\n');
+        }
+
         const embed = new EmbedBuilder()
             .setTitle(`🎮 ${interaction.guild.name} — Player Hub`)
             .setDescription(`Welcome to the community hub! Manage your Rust account, access banking, check your progression, play casino minigames, view leaderboards, manage your Clan, browse the store, or open a support token.`)
             .addFields(
                 { name: '⭐ BuddyPass Status', value: `• **Level:** ${currentLevel}\n• **XP:** ${currentXp} / ${requiredXp}`, inline: true },
-                { name: '💰 Balances', value: `• **Wallet:** ${user.wallet || 0} ${currency}\n• **Bank:** ${user.bank || 0} ${currency}`, inline: true }
+                { name: '💰 Balances', value: `• **Wallet:** ${user.wallet || 0} ${currency}\n• **Bank:** ${user.bank || 0} ${currency}`, inline: true },
+                { name: '⚔️ Active PvP Areas & Monuments', value: pvpAreasText, inline: false }
             )
             .setColor('#3498db')
             .setTimestamp();

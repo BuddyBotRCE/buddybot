@@ -136,7 +136,6 @@ const AutoEventLocation = sequelize.define('AutoEventLocation', { id: { type: Da
 
 const CustomEmbed = sequelize.define('CustomEmbed', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, templateName: { type: DataTypes.STRING, defaultValue: 'Custom Announcement' }, title: { type: DataTypes.STRING, defaultValue: '📢 Server Announcement' }, description: { type: DataTypes.TEXT, allowNull: true }, color: { type: DataTypes.STRING, defaultValue: '#3498db' }, thumbnailUrl: { type: DataTypes.STRING, allowNull: true }, imageUrl: { type: DataTypes.STRING, allowNull: true }, footerText: { type: DataTypes.STRING, allowNull: true } });
 
-// 👇 ADDED HOME TELEPORT DATABASE MODELS 👇
 const HomeTeleportConfig = sequelize.define('HomeTeleportConfig', {
     guildId: { type: DataTypes.STRING, allowNull: false, unique: true },
     requiredRoleId: { type: DataTypes.STRING, allowNull: true },

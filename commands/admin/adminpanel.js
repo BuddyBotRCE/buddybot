@@ -29,7 +29,6 @@ module.exports = {
             .setDescription('Configure your server modules, automated systems, shops, and community tools using the categories below.\n\n• **Dropdown 1:** Basic Systems & Upgrades\n• **Dropdown 2:** ⭐ Premium & Advanced Modules')
             .setColor('#2b2d31');
 
-        // DROPDOWN 1: BASIC SYSTEMS
         const row1 = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder().setCustomId('admin_menu_select').setPlaceholder('⚙️ Basic Systems & Upgrades...')
                 .addOptions([
@@ -48,7 +47,6 @@ module.exports = {
                 ])
         );
 
-        // DROPDOWN 2: PREMIUM & ADVANCED SECTION
         const row2 = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder().setCustomId('admin_menu_select_2').setPlaceholder('⭐ Premium & Advanced Features...')
                 .addOptions([
@@ -64,7 +62,6 @@ module.exports = {
                     { label: 'Embeds & Reaction Roles', value: 'setup_embeds_roles', description: 'Announcements, Verifications, & Roles', emoji: '🎨' },
                     { label: 'Giveaways Manager', value: 'setup_giveaways', emoji: '🎉' },
                     { label: 'Suggestions System', value: 'setup_suggestions', emoji: '💡' },
-                    // 👇 ADDED HOME TELEPORT TO PREMIUM PANEL 👇
                     { label: 'Home Teleport System', value: 'setup_hometp', description: 'Configure emote retreat teleports', emoji: '🏠' }
                 ])
         );
