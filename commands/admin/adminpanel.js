@@ -2,7 +2,6 @@ const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBui
 const { GuildConfig } = require('../database/db');
 
 module.exports = {
-    // 1. Removed strict native Administrator default check so custom roles can access it
     data: new SlashCommandBuilder()
         .setName('adminpanel')
         .setDescription('Opens the Admin Dashboard'),
@@ -11,7 +10,6 @@ module.exports = {
         const guildId = interaction.guild.id;
         const member = interaction.member;
 
-        // 2. Check if user has native Administrator, server owner, OR your custom Bot Admin/Mod roles
         const config = await GuildConfig.findOne({ where: { guildId } });
         const isOwner = interaction.guild.ownerId === member.id;
         const isNativeAdmin = member.permissions.has(PermissionFlagsBits.Administrator);
@@ -28,10 +26,10 @@ module.exports = {
 
         const adminEmbed = new EmbedBuilder()
             .setTitle('🛠️ Admin Panel & Dashboard')
-            .setDescription('Configure your server modules, automated systems, shops, and community tools using the categories below.\n\n• **Dropdown 1:** Basic Systems & Premium Upgrades\n• **Dropdown 2:** ⭐ Premium & Advanced Modules')
+            .setDescription('Configure your server modules, automated systems, shops, and community tools using the categories below.\n\n• **Dropdown 1:** Basic Systems & Upgrades\n• **Dropdown 2:** ⭐ Premium & Advanced Modules')
             .setColor('#2b2d31');
 
-        // DROPDOWN 1: BASIC SYSTEMS & UPGRADE BUTTON
+        // DROPDOWN 1: BASIC SYSTEMS (Now includes Custom Zones & Server Wipe)
         const row1 = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder().setCustomId('admin_menu_select').setPlaceholder('⚙️ Basic Systems & Upgrades...')
                 .addOptions([
@@ -42,16 +40,16 @@ module.exports = {
                     { label: 'Economy Manager', value: 'setup_economy', emoji: '💰' },
                     { label: 'Minigames Casino', value: 'setup_minigames', emoji: '🎰' },
                     { label: 'Ticket System', value: 'setup_tickets', emoji: '🎫' },
-                    { label: 'Giveaways Manager', value: 'setup_giveaways', emoji: '🎉' },
                     { label: 'Cross-Chat', value: 'setup_crosschat', emoji: '💬' },
-                    { label: 'Embeds & Reaction Roles', value: 'setup_embeds_roles', description: 'Announcements, Verifications, & Roles', emoji: '🎨' },
                     { label: 'Admin & Mod Roles', value: 'setup_server_roles', description: 'Set bot admin/mod roles', emoji: '👑' },
-                    { label: 'Suggestions System', value: 'setup_suggestions', emoji: '💡' },
-                    { label: 'Logging System', value: 'setup_logging', emoji: '📊' }
+                    { label: 'Logging System', value: 'setup_logging', emoji: '📊' },
+                    // 👈 MOVED OVER TO BASIC
+                    { label: 'Custom Zones Builder', value: 'setup_custom_zones', description: 'Create and manage map zones', emoji: '🗺️' },
+                    { label: 'Server Wipe Panel', value: 'setup_wipe', emoji: '☢️' }
                 ])
         );
 
-        // DROPDOWN 2: PREMIUM & ADVANCED SECTION
+        // DROPDOWN 2: PREMIUM & ADVANCED SECTION (Now includes Suggestions, Giveaways, Embeds & Reactions)
         const row2 = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder().setCustomId('admin_menu_select_2').setPlaceholder('⭐ Premium & Advanced Features...')
                 .addOptions([
@@ -60,12 +58,14 @@ module.exports = {
                     { label: 'BuddyPass Manager', value: 'setup_buddypass', emoji: '⭐' },
                     { label: 'Clan System Manager', value: 'setup_clans', emoji: '🛡️' },
                     { label: 'Bounties System', value: 'setup_bounties', emoji: '🎯' },
-                    { label: 'Custom Zones Builder', value: 'setup_custom_zones', description: 'Create and manage map zones', emoji: '🗺️' },
                     { label: 'Custom Binds', value: 'setup_binds', emoji: '🗣️' },
                     { label: 'ORP Manager', value: 'setup_orp', emoji: '🛡️' },
                     { label: 'AI Integration Setup', value: 'setup_ai', emoji: '🤖' },
-                    { label: 'Server Wipe Panel', value: 'setup_wipe', emoji: '☢️' },
-                    { label: 'Premium Status & License', value: 'setup_tier', emoji: '⭐' }
+                    { label: 'Premium Status & License', value: 'setup_tier', emoji: '⭐' },
+                    // 👈 MOVED OVER TO PREMIUM
+                    { label: 'Embeds & Reaction Roles', value: 'setup_embeds_roles', description: 'Announcements, Verifications, & Roles', emoji: '🎨' },
+                    { label: 'Giveaways Manager', value: 'setup_giveaways', emoji: '🎉' },
+                    { label: 'Suggestions System', value: 'setup_suggestions', emoji: '💡' }
                 ])
         );
 
