@@ -9,13 +9,15 @@ module.exports = {
     async execute(interaction) {
         const adminEmbed = new EmbedBuilder()
             .setTitle('🛠️ Admin Panel & Dashboard')
-            .setDescription('Configure your server modules, automated systems, shops, and community tools using the categories below.\n\n• **Dropdown 1:** Basic Community & Server Systems\n• **Dropdown 2:** ⭐ Premium & Advanced Modules')
+            .setDescription('Configure your server modules, automated systems, shops, and community tools using the categories below.\n\n• **Dropdown 1:** Basic Systems & Premium Upgrades\n• **Dropdown 2:** ⭐ Premium & Advanced Modules')
             .setColor('#2b2d31');
 
-        // DROPDOWN 1: BASIC SYSTEMS
+        // DROPDOWN 1: BASIC SYSTEMS & UPGRADE BUTTON
         const row1 = new ActionRowBuilder().addComponents(
-            new StringSelectMenuBuilder().setCustomId('admin_menu_select').setPlaceholder('⚙️ Basic Systems & Tools...')
+            new StringSelectMenuBuilder().setCustomId('admin_menu_select').setPlaceholder('⚙️ Basic Systems & Upgrades...')
                 .addOptions([
+                    // 👇 ADDED BUY PREMIUM OPTION TO BASIC PANEL 👇
+                    { label: '⭐ Buy / Upgrade to Premium', value: 'setup_tier', description: 'Unlock all advanced modules and features', emoji: '⭐' },
                     { label: 'RCON & Servers', value: 'setup_multiserver', emoji: '🌐' },
                     { label: 'Live Admin Tools', value: 'admin_tools', emoji: '🧰' },
                     { label: 'Shop & Store Manager', value: 'setup_shop', emoji: '🛒' },
