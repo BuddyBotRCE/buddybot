@@ -24,7 +24,7 @@ const kitHandler = require(handlerPath('kitHandler'));
 const bindHandler = require(handlerPath('bindHandler'));
 const adminHandler = require(handlerPath('adminHandler'));
 const loggingHandler = require(handlerPath('loggingHandler'));
-const postEmbedHandler = require(handlerPath('postEmbedHandler')); // Now handles Reaction Roles too
+const postEmbedHandler = require(handlerPath('postEmbedHandler'));
 const customZoneHandler = require(handlerPath('customZoneHandler'));
 const autoModHandler = require(handlerPath('autoModHandler'));
 const wipeHandler = require(handlerPath('wipeHandler')); 
@@ -58,8 +58,8 @@ module.exports = async (interaction, client) => {
             if (customId === 'modal_setup_economy' || customId === 'modal_econ_interest' || customId === 'modal_hub_deposit' || customId === 'modal_hub_withdraw' || customId.startsWith('modal_admin_give_exec_') || customId.startsWith('modal_admin_take_exec_')) return await economyHandler(interaction, client);
             if (customId === 'modal_ae_settings' || customId.startsWith('modal_ae_')) return await autoEventsHandler(interaction, client);
             
-            // 👇 MODALS FOR COMBINED EMBED/RR HANDLER 👇
-            if (customId.startsWith('modal_emb_') || customId === 'modal_admin_embed' || customId.startsWith('modal_rr_')) return await postEmbedHandler(interaction, client);
+            // 👇 COMBINED UNIFIED HUB MODALS 👇
+            if (customId.startsWith('modal_emb_') || customId === 'modal_admin_embed' || customId.startsWith('modal_rr_') || customId === 'modal_edit_embed_prompt' || customId === 'modal_attach_rr_prompt') return await postEmbedHandler(interaction, client);
             
             if (customId.startsWith('modal_am_') || customId === 'modal_automod_config') return await autoModHandler(interaction, client);
             if (customId.startsWith('modal_cz_')) return await customZoneHandler(interaction, client);
@@ -74,14 +74,20 @@ module.exports = async (interaction, client) => {
         // 🚦 1. ADMIN MENU ROUTER
         // ====================================================================
         if (customId === 'admin_menu_select') {
+            // 👇 UPDATED UNIFIED HUB SELECTION 👇
             if (selectedValue === 'setup_embeds_roles') {
-                const embed = new EmbedBuilder().setTitle('🎨 Embeds & Interactive Panels').setDescription('Choose what type of panel or announcement you want to build and deploy to your server.').setColor('#9b59b6');
+                const embed = new EmbedBuilder()
+                    .setTitle('🎨 Embeds & Interactive Panels')
+                    .setDescription('Choose what type of panel or announcement you want to build and deploy to your server.')
+                    .setColor('#9b59b6');
                 const row = new ActionRowBuilder().addComponents(
                     new StringSelectMenuBuilder().setCustomId('unified_embed_select').setPlaceholder('Select panel type...')
                     .addOptions([
-                        { label: 'Post Custom Announcement', value: 'setup_postembed', description: 'Create rich embeds and templates', emoji: '📢' },
-                        { label: 'Create Reaction Role Panel', value: 'create_reaction_panel', description: 'Interactive button role claimer', emoji: '🎭' },
-                        { label: 'Create Verification Panel', value: 'create_verification_panel', description: 'Gatekeep server with verify button', emoji: '🔐' }
+                        { label: 'Create New Embed', value: 'setup_postembed', description: 'Create and send a new announcement', emoji: '📢' },
+                        { label: 'Edit Existing Embed', value: 'edit_postembed', description: 'Edit an embed already in chat', emoji: '✏️' },
+                        { label: 'Create Reaction Panel', value: 'create_reaction_panel', description: 'Send a new role claimer', emoji: '🎭' },
+                        { label: 'Create Verification Panel', value: 'create_verification_panel', description: 'Send a new verify button', emoji: '🔐' },
+                        { label: 'Attach Roles to Message', value: 'attach_reaction_panel', description: 'Add buttons to an existing message', emoji: '📎' }
                     ])
                 );
                 return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
@@ -102,6 +108,7 @@ module.exports = async (interaction, client) => {
             if (selectedValue === 'setup_kits') return await kitHandler(interaction, client);
             if (selectedValue === 'setup_logging' || selectedValue.includes('log')) return await loggingHandler(interaction, client);
             if (selectedValue === 'setup_binds') return await bindHandler(interaction, client);
+            if (selectedValue === 'setup_orp') return await adminHandler(interaction, client);
             if (selectedValue.includes('pve') || selectedValue.includes('zone') || selectedValue === 'setup_custom_zones') return await customZoneHandler(interaction, client);
             if (selectedValue === 'setup_automod') return await autoModHandler(interaction, client);
             
