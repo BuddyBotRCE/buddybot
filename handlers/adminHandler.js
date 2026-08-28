@@ -112,7 +112,6 @@ module.exports = async (interaction, client) => {
     const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
     const userId = interaction.user.id;
 
-    // --- TOP-LEVEL ROUTE FOR SERVER REMOVAL DROPDOWN ---
     if (customId === 'select_multiserver_remove_target') {
         try {
             const serverId = selectedValue.replace('remove_server_', '');
@@ -138,22 +137,21 @@ module.exports = async (interaction, client) => {
         return await wipeHandler(interaction, client);
     }
 
-    if (customId === 'admin_menu_select' || customId === 'admin_menu_select_2') {
+    if (customId === 'admin_menu_select') {
         await interaction.channel.messages.fetch({ limit: 10 }).then(messages => {
             const prompts = messages.filter(m => m.content.includes('Grabbing coordinates') || m.content.includes('Stand at your desired'));
             for (const [_, msg] of prompts) { msg.delete().catch(() => {}); }
         });
 
-        if (selectedValue === 'setup_logging') {
-            const embed = new EmbedBuilder().setTitle('📊 Server Logging Manager').setDescription('Route different types of logs to specific channels.').setColor('#3498db');
-            const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('log_action_select').setPlaceholder('Select a log channel to configure...').addOptions([{ label: 'Set Admin Logs Channel', value: 'log_admin', emoji: '🛡️' }, { label: 'Set Game Feeds Channel', value: 'log_game', emoji: '🎮' }, { label: 'Set Discord Logs Channel', value: 'log_discord', emoji: '💬' }]));
-            return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+        // 👇 FIX: Route ORP correctly 👇
+        if (selectedValue === 'setup_orp') {
+            const embed = new EmbedBuilder()
+                .setTitle('🛡️ ORP Manager (Offline Raid Protection)')
+                .setDescription('ORP systems are actively being upgraded to v2.0.\n\nPlease check back in the next update to configure offline raid protection zones.')
+                .setColor('#e67e22');
+            return interaction.reply({ embeds: [embed], flags: 64 });
         }
 
-        if (selectedValue === 'setup_postembed') {
-            return await postEmbedHandler(interaction, client);
-        }
-        
         if (selectedValue === 'setup_multiserver') {
             const servers = await GameServer.findAll({ where: { guildId: interaction.guild.id } });
             const serverList = servers.length ? servers.map(s => `• **${s.serverName}** (\`${s.rconIp}:${s.rconPort}\`)`).join('\n') : 'No game servers configured yet.';
@@ -166,17 +164,10 @@ module.exports = async (interaction, client) => {
             );
             return interaction.reply({ embeds: [embed], components: [row1], flags: 64 });
         }
-
-        if (selectedValue === 'setup_embed') {
-            const modal = new ModalBuilder().setCustomId('modal_admin_embed').setTitle('Create Custom Embed');
-            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('channel_id').setLabel("Target Channel ID").setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel("Embed Title").setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('description').setLabel("Description (supports \\n)").setStyle(TextInputStyle.Paragraph).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('color').setLabel("Hex Color (e.g. #3498db)").setStyle(TextInputStyle.Short).setValue('#2b2d31').setRequired(false)));
-            return interaction.showModal(modal);
-        }
         
         if (selectedValue === 'setup_ai') {
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
             const isEnabled = config?.aiEnabled !== false;
-            
             let premadeCount = 0;
             try { premadeCount = JSON.parse(config?.aiPremadeResponses || '[]').length; } catch(e){}
 
@@ -253,10 +244,6 @@ module.exports = async (interaction, client) => {
 
     if (interaction.isChannelSelectMenu()) {
         if (customId === 'select_crosschat_channel') { await GuildConfig.upsert({ guildId: interaction.guild.id, crossChatChannelId: interaction.values[0] }); return interaction.update({ content: `✅ Cross-Chat linked!`, components: [] }); }
-        if (customId === 'select_killfeed_channel') { await GuildConfig.upsert({ guildId: interaction.guild.id, killfeedChannelId: interaction.values[0] }); return interaction.update({ content: `✅ Killfeed channel successfully linked!`, components: [] }); }
-        if (customId === 'select_log_admin_channel') { await GuildConfig.upsert({ guildId: interaction.guild.id, logAdminChannelId: interaction.values[0] }); return interaction.update({ content: `✅ Admin Logs channel linked!`, components: [] }); }
-        if (customId === 'select_log_game_channel') { await GuildConfig.upsert({ guildId: interaction.guild.id, logGameChannelId: interaction.values[0] }); return interaction.update({ content: `✅ Game Feeds channel linked!`, components: [] }); }
-        if (customId === 'select_log_discord_channel') { await GuildConfig.upsert({ guildId: interaction.guild.id, logDiscordChannelId: interaction.values[0] }); return interaction.update({ content: `✅ Discord Logs channel linked!`, components: [] }); }
     }
 
     if (interaction.isStringSelectMenu()) {
@@ -293,12 +280,6 @@ module.exports = async (interaction, client) => {
             modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('say_msg').setLabel("Type your message").setStyle(TextInputStyle.Paragraph).setRequired(true)));
             return interaction.showModal(modal);
         }
-
-        if (customId === 'log_action_select') {
-            if (selectedValue === 'log_admin') return interaction.reply({ content: '🛡️ Select channel for **Admin Logs**:', components: [new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_log_admin_channel').setPlaceholder('Select Admin Logs Channel...').addChannelTypes(ChannelType.GuildText))], flags: 64 });
-            if (selectedValue === 'log_game') return interaction.reply({ content: '🎮 Select channel for **Game Feeds**:', components: [new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_log_game_channel').setPlaceholder('Select Game Feeds Channel...').addChannelTypes(ChannelType.GuildText))], flags: 64 });
-            if (selectedValue === 'log_discord') return interaction.reply({ content: '💬 Select channel for **Discord Logs**:', components: [new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_log_discord_channel').setPlaceholder('Select Discord Logs Channel...').addChannelTypes(ChannelType.GuildText))], flags: 64 });
-        }
         
         if (customId === 'select_link_server_target') {
             const serverId = selectedValue.replace('link_server_', '');
@@ -307,6 +288,7 @@ module.exports = async (interaction, client) => {
             modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ign').setLabel("Your exact in-game Rust name").setStyle(TextInputStyle.Short).setRequired(true)));
             return interaction.showModal(modal);
         }
+        
         if (customId === 'hub_lb_select') {
             const category = selectedValue;
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
@@ -347,6 +329,8 @@ module.exports = async (interaction, client) => {
             const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('admin_item_final_select').setPlaceholder(`Step 3: Choose item from ${categoryData.label}...`).addOptions(itemOptions));
             return interaction.update({ content: `🎁 **Admin Item Wizard:** Choose the exact item from **${categoryData.label}**:`, components: [row] });
         }
+        
+        // 👇 FIX: Generates exact modal ID so the submit handler can extract it cleanly 👇
         if (customId === 'admin_item_final_select') {
             const cleanVal = selectedValue.replace('admin_give_final_', '');
             const firstUnderscore = cleanVal.indexOf('_');
@@ -354,12 +338,12 @@ module.exports = async (interaction, client) => {
             const shortname = cleanVal.substring(firstUnderscore + 1);
             const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
             
-            // Build the exact target ID so we can extract it cleanly upon modal submit
             const exactModalId = `modal_admin_give_item_exec_${targetUserId}_${shortname}`;
-            const modal = new ModalBuilder().setCustomId(exactModalId).setTitle(`Give ${shortname} to ${targetUser ? targetUser.inGameName.substring(0, 20) : 'Player'}`);
+            const modal = new ModalBuilder().setCustomId(exactModalId).setTitle(`Give ${shortname.substring(0,10)} to ${targetUser ? targetUser.inGameName.substring(0, 10) : 'Player'}`);
             modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel("Enter Amount to Send").setStyle(TextInputStyle.Short).setValue('1').setRequired(true)));
             return interaction.showModal(modal);
         }
+        
         if (customId === 'select_ai_provider') {
             let defaultUrl = 'https://api.openai.com/v1'; 
             let defaultModel = 'gpt-4o-mini';
@@ -394,13 +378,6 @@ module.exports = async (interaction, client) => {
             const catOptions = Object.keys(RUST_CATEGORIES).map(catKey => ({ label: RUST_CATEGORIES[catKey].label, value: `admin_item_cat_${targetUserId}_${catKey}`, emoji: RUST_CATEGORIES[catKey].emoji }));
             const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('admin_item_category_select').setPlaceholder('Step 2: Select item category...').addOptions(catOptions));
             return interaction.update({ content: `🎁 **Admin Item Wizard:** Target player set to **${targetUser.inGameName}**. Now select an item category:`, components: [row] });
-        }
-        if (customId === 'select_give_item_target') {
-            const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.values[0] } });
-            if (!targetUser || !targetUser.inGameName) return interaction.reply({ content: `❌ User hasn't linked their Rust account!`, flags: 64 });
-            const modal = new ModalBuilder().setCustomId(`modal_give_item_${targetUser.inGameName}`).setTitle(`Give Item to ${targetUser.inGameName.substring(0, 20)}`);
-            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('item_name').setLabel("Item Shortname (e.g. rifle.ak)").setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('item_amount').setLabel("Amount").setStyle(TextInputStyle.Short).setRequired(true)));
-            return interaction.showModal(modal);
         }
     }
 

@@ -26,8 +26,6 @@ const bindHandler = require('../handlers/bindHandler');
 const adminHandler = require(handlerPath('adminHandler'));
 const loggingHandler = require(handlerPath('loggingHandler'));
 const postEmbedHandler = require(handlerPath('postEmbedHandler'));
-
-// --- NEW MODULES ---
 const customZoneHandler = require(handlerPath('customZoneHandler'));
 const reactionRoleHandler = require(handlerPath('reactionRoleHandler'));
 const autoModHandler = require(handlerPath('autoModHandler'));
@@ -35,6 +33,13 @@ const wipeHandler = require(handlerPath('wipeHandler'));
 
 module.exports = async (interaction, client) => {
     try {
+        // 🚨 THE HOLY GRAIL FIX FOR DROPDOWN 2 🚨
+        // This intercepts the 2nd dropdown and aliases it, which instantly fixes 
+        // ALL 10 handler files without having to rewrite them manually.
+        if (interaction.customId === 'admin_menu_select_2') {
+            Object.defineProperty(interaction, 'customId', { value: 'admin_menu_select', writable: true, configurable: true });
+        }
+
         // --- CHAT COMMANDS ---
         if (interaction.isChatInputCommand()) {
             const command = client.commands.get(interaction.commandName);
@@ -46,7 +51,7 @@ module.exports = async (interaction, client) => {
         const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
 
         // ====================================================================
-        // 🚦 0. UNIVERSAL MODAL SUBMISSION ROUTER (Catch modals first)
+        // 🚦 0. UNIVERSAL MODAL SUBMISSION ROUTER
         // ====================================================================
         if (interaction.isModalSubmit()) {
             if (customId.startsWith('modal_givekit_exec_')) return await adminHandler(interaction, client);
@@ -79,7 +84,7 @@ module.exports = async (interaction, client) => {
         // ====================================================================
         // 🚦 1. ADMIN MENU ROUTER
         // ====================================================================
-        if (customId === 'admin_menu_select' || customId === 'admin_menu_select_2') {
+        if (customId === 'admin_menu_select') {
             if (selectedValue === 'setup_wipe') return await wipeHandler(interaction, client);
             if (selectedValue === 'setup_autoevents') return await autoEventsHandler(interaction, client);
             if (selectedValue === 'setup_economy') return await economyHandler(interaction, client);
@@ -96,7 +101,7 @@ module.exports = async (interaction, client) => {
             if (selectedValue === 'setup_logging' || selectedValue.includes('log')) return await loggingHandler(interaction, client);
             if (selectedValue === 'setup_binds') return await bindHandler(interaction, client);
             if (selectedValue === 'setup_postembed' || selectedValue.includes('embed')) return await postEmbedHandler(interaction, client);
-            if (selectedValue.includes('pve') || selectedValue.includes('zone')) return await customZoneHandler(interaction, client);
+            if (selectedValue.includes('pve') || selectedValue.includes('zone') || selectedValue === 'setup_custom_zones') return await customZoneHandler(interaction, client);
             if (selectedValue === 'setup_reactionroles' || selectedValue === 'setup_verification') return await reactionRoleHandler(interaction, client); 
             if (selectedValue === 'setup_automod') return await autoModHandler(interaction, client);
             
@@ -106,7 +111,6 @@ module.exports = async (interaction, client) => {
         // ====================================================================
         // 🚦 2. COMPONENT ROUTING STATION (Buttons & Select Menus)
         // ====================================================================
-
         if (customId === 'hub_clans' || customId.includes('clan') || customId.includes('bank')) return await clanHandler(interaction, client);
 
         if (
