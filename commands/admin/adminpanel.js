@@ -12,7 +12,6 @@ module.exports = {
             .setDescription('Configure your server modules, automated systems, shops, and community tools using the categories below.')
             .setColor('#2b2d31');
 
-        // Row 1: Core Server, Economy & Gameplay Systems
         const row1 = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder().setCustomId('admin_menu_select').setPlaceholder('⚙️ Core Server & Economy Systems...')
                 .addOptions([
@@ -30,7 +29,6 @@ module.exports = {
                 ])
         );
 
-        // Row 2: Community, Moderation & Automation Systems
         const row2 = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder().setCustomId('admin_menu_select_2').setPlaceholder('🛡️ Community, Moderation & Utility...')
                 .addOptions([
@@ -40,7 +38,8 @@ module.exports = {
                     { label: 'Giveaways Manager', value: 'setup_giveaways', emoji: '🎉' },
                     { label: 'Cross-Chat', value: 'setup_crosschat', emoji: '💬' },
                     { label: 'ORP Manager', value: 'setup_orp', emoji: '🛡️' },
-                    { label: 'Post Custom Embed', value: 'setup_postembed', description: 'Create announcements with templates', emoji: '📢' },
+                    // 👇 NEW COMBINED HUB OPTION 👇
+                    { label: 'Embeds & Reaction Roles', value: 'setup_embeds_roles', description: 'Announcements, Verifications, & Roles', emoji: '🎨' },
                     { label: 'AI Integration Setup', value: 'setup_ai', emoji: '🤖' },
                     { label: 'Logging System', value: 'setup_logging', emoji: '📊' },
                     { label: 'Suggestions System', value: 'setup_suggestions', emoji: '💡' },
