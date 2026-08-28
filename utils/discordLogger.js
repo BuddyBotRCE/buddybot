@@ -2,7 +2,6 @@ const { EmbedBuilder } = require('discord.js');
 const { GuildConfig } = require('../database/db');
 
 module.exports = (client) => {
-    // Helper to send logs to the correct routed channel
     async function sendLog(guild, type, embed) {
         try {
             if (!guild) return;
@@ -22,7 +21,6 @@ module.exports = (client) => {
         }
     }
 
-    // 1. Message Deleted
     client.on('messageDelete', async (message) => {
         if (!message.guild || message.author?.bot) return;
         const embed = new EmbedBuilder()
@@ -33,7 +31,6 @@ module.exports = (client) => {
         await sendLog(message.guild, 'discord', embed);
     });
 
-    // 2. Message Edited
     client.on('messageUpdate', async (oldMessage, newMessage) => {
         if (!oldMessage.guild || oldMessage.author?.bot) return;
         if (oldMessage.content === newMessage.content) return; 
@@ -50,7 +47,6 @@ module.exports = (client) => {
         await sendLog(oldMessage.guild, 'discord', embed);
     });
 
-    // 3. Voice Channel Logs (Join, Leave, Move)
     client.on('voiceStateUpdate', async (oldState, newState) => {
         if (!oldState.guild) return;
         const member = newState.member || oldState.member;
@@ -70,7 +66,6 @@ module.exports = (client) => {
         }
     });
 
-    // 4. Member Joined
     client.on('guildMemberAdd', async (member) => {
         const accountAge = Math.floor(member.user.createdTimestamp / 1000);
         const embed = new EmbedBuilder()
@@ -82,7 +77,6 @@ module.exports = (client) => {
         await sendLog(member.guild, 'discord', embed);
     });
 
-    // 5. Member Left / Kicked
     client.on('guildMemberRemove', async (member) => {
         const embed = new EmbedBuilder()
             .setTitle('🚪 Member Left')
@@ -93,7 +87,6 @@ module.exports = (client) => {
         await sendLog(member.guild, 'discord', embed);
     });
     
-    // 6. Member Banned (Discord)
     client.on('guildBanAdd', async (ban) => {
         const embed = new EmbedBuilder()
             .setTitle('🔨 User Banned (Discord)')

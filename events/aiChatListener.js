@@ -8,35 +8,27 @@ module.exports = (client) => {
         const config = await GuildConfig.findOne({ where: { guildId: message.guild.id } });
         if (!config || config.aiEnabled === false) return;
 
-        // Check if bot is mentioned
         const isMentioned = message.mentions.has(client.user);
         if (!isMentioned) return;
 
-        // Clean user text by removing the bot mention tag
         const cleanContent = message.content.replace(`<@${client.user.id}>`, '').replace(`<@!${client.user.id}>`, '').trim();
         const lowerContent = cleanContent.toLowerCase();
 
-        // 1. Check for Admin Premade / Canned Responses first
         try {
             const premadeList = JSON.parse(config.aiPremadeResponses || '[]');
             const matchedPreset = premadeList.find(p => lowerContent.includes(p.trigger.toLowerCase()));
-            if (matchedPreset) {
-                return await message.reply(matchedPreset.response);
-            }
+            if (matchedPreset) return await message.reply(matchedPreset.response);
         } catch (e) {}
 
-        // 2. If no API key is configured, fallback politely
         if (!config.aiApiKey) {
             return await message.reply('⚠️ The server administrator has not configured an AI API key yet!');
         }
 
-        // 3. Query the configured LLM API with full diagnostic error catching
         try {
             await message.channel.sendTyping();
 
             const baseUrl = config.aiBaseUrl || 'https://api.openai.com/v1';
             const modelName = config.aiModel || 'gpt-4o-mini';
-            
             const endpoint = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
             
             console.log(`[AI DEBUG] Querying Provider endpoint: ${endpoint} with model: ${modelName}`);

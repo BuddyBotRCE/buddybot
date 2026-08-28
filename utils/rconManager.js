@@ -1,6 +1,6 @@
 const WebSocket = require('ws');
 const { GuildConfig, GameServer, UserEconomy, CustomBind, BindCooldown, ActiveBounty, BountyCooldown } = require('../database/db');
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const { EmbedBuilder } = require('discord.js');
 
 const activeConnections = new Map();
 const adminPosQueue = new Map(); 
@@ -21,49 +21,35 @@ function registerEventParser(rconMock, emit) {
 async function connectRcon(guildId, client, targetServerId = null) {
     let rconIp, rconPort, rconPassword;
 
-    // 1. If a specific multi-server ID was provided, use its credentials first
     if (targetServerId) {
         const specificServer = await GameServer.findByPk(targetServerId);
         if (specificServer && specificServer.rconIp && specificServer.rconPort && specificServer.rconPassword) {
-            rconIp = specificServer.rconIp;
-            rconPort = specificServer.rconPort;
-            rconPassword = specificServer.rconPassword;
+            rconIp = specificServer.rconIp; rconPort = specificServer.rconPort; rconPassword = specificServer.rconPassword;
         }
     }
 
-    // 2. If not found yet, check the first available server in the Multi-Server table
     if (!rconIp || !rconPort || !rconPassword) {
         const firstGameServer = await GameServer.findOne({ where: { guildId: guildId } });
         if (firstGameServer && firstGameServer.rconIp && firstGameServer.rconPort && firstGameServer.rconPassword) {
-            rconIp = firstGameServer.rconIp;
-            rconPort = firstGameServer.rconPort;
-            rconPassword = firstGameServer.rconPassword;
+            rconIp = firstGameServer.rconIp; rconPort = firstGameServer.rconPort; rconPassword = firstGameServer.rconPassword;
         }
     }
 
-    // 3. Last resort: check the main GuildConfig table
     if (!rconIp || !rconPort || !rconPassword) {
         const config = await GuildConfig.findOne({ where: { guildId: guildId } });
         if (config && config.rconIp && config.rconPort && config.rconPassword) {
-            rconIp = config.rconIp;
-            rconPort = config.rconPort;
-            rconPassword = config.rconPassword;
+            rconIp = config.rconIp; rconPort = config.rconPort; rconPassword = config.rconPassword;
         }
     }
 
-    // Final check: if everything is empty, throw the error
     if (!rconIp || !rconPort || !rconPassword) {
         throw new Error("Missing RCON credentials for this server! Please add a game server or configure them using the RCON setup panel.");
     }
     
-    // Return existing open connection if available
     if (activeConnections.has(guildId)) {
         const existingWs = activeConnections.get(guildId);
-        if (existingWs.readyState === WebSocket.OPEN) {
-            return "Already connected!";
-        } else {
-            activeConnections.delete(guildId);
-        }
+        if (existingWs.readyState === WebSocket.OPEN) return "Already connected!";
+        else activeConnections.delete(guildId);
     }
 
     return new Promise((resolve, reject) => {
@@ -81,9 +67,7 @@ async function connectRcon(guildId, client, targetServerId = null) {
             resolve("Connection established successfully!");
         });
 
-        ws.on('close', () => {
-            activeConnections.delete(guildId);
-        });
+        ws.on('close', () => activeConnections.delete(guildId));
 
         ws.on('error', (err) => {
             clearTimeout(timeout);
@@ -132,9 +116,7 @@ async function connectRcon(guildId, client, targetServerId = null) {
                 const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
                 const guild = client ? client.guilds.cache.get(guildId) : null;
 
-                // ==========================================
-                // 1. ADVANCED POSITION INTERCEPTOR
-                // ==========================================
+                // 1. POSITION INTERCEPTOR
                 if (adminPosQueue.size > 0) {
                     for (const [adminId, setupData] of adminPosQueue.entries()) {
                         let posX, posY, posZ;
@@ -152,9 +134,7 @@ async function connectRcon(guildId, client, targetServerId = null) {
                             const matches = msg.match(/-?\d+(\.\d+)?/g);
                             if (matches && matches.length >= 3) {
                                 const len = matches.length;
-                                posX = parseFloat(matches[len-3]).toFixed(2);
-                                posY = parseFloat(matches[len-2]).toFixed(2);
-                                posZ = parseFloat(matches[len-1]).toFixed(2);
+                                posX = parseFloat(matches[len-3]).toFixed(2); posY = parseFloat(matches[len-2]).toFixed(2); posZ = parseFloat(matches[len-1]).toFixed(2);
                                 foundPos = true;
                             }
                         }
@@ -167,21 +147,13 @@ async function connectRcon(guildId, client, targetServerId = null) {
                                     const bind = await CustomBind.findByPk(setupData.targetId);
                                     if (bind) {
                                         let command = '';
-                                        if (bind.actionType === 'teleport') {
-                                            command = `global.teleportpos (${posX},${posY},${posZ}) "{player}"`;
-                                        } else if (bind.actionType === 'recycler') {
-                                            command = `spawn recycler_static (${posX},${posY},${posZ})`;
-                                        }
+                                        if (bind.actionType === 'teleport') command = `global.teleportpos (${posX},${posY},${posZ}) "{player}"`;
+                                        else if (bind.actionType === 'recycler') command = `spawn recycler_static (${posX},${posY},${posZ})`;
                                         await bind.update({ command });
                                     }
-
                                     const bindHandler = require('../handlers/bindHandler');
                                     if (bindHandler && bindHandler.refreshPanelViaInteraction) {
-                                        await bindHandler.refreshPanelViaInteraction(
-                                            setupData.interaction, 
-                                            `✅ **Position Captured Automatically!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``,
-                                            setupData.targetId
-                                        );
+                                        await bindHandler.refreshPanelViaInteraction(setupData.interaction, `✅ **Position Captured Automatically!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``, setupData.targetId);
                                     }
                                 } catch (error) {}
                             }
@@ -192,9 +164,7 @@ async function connectRcon(guildId, client, targetServerId = null) {
                     }
                 }
 
-                // ==========================================
-                // 2. LIVE GAME FEEDS & AUDIT LOGS
-                // ==========================================
+                // 2. LIVE GAME FEEDS
                 if (currentConfig && guild) {
                     if (/(giving |spawned |teleport|kick |ban |inventory\.giveto)/i.test(msg)) {
                         if (currentConfig.logAdminChannelId) {
@@ -204,9 +174,7 @@ async function connectRcon(guildId, client, targetServerId = null) {
                     }
                 }
 
-                // ==========================================
                 // 3. KILLFEED & BOUNTIES
-                // ==========================================
                 if ((msgLower.includes('killed') || msgLower.includes('murdered') || msgLower.includes('suicide') || msgLower.includes('died') || msgLower.includes('slain')) && !msg.includes('[Killfeed]')) {
                     await sendRconCommand(guildId, `say "[Killfeed] ${msg}"`, client);
                     let killerDb = null;
@@ -229,9 +197,7 @@ async function connectRcon(guildId, client, targetServerId = null) {
                     }
                 }
 
-                // ==========================================
-                // 4. ABSOLUTE DIRECT MATCH QUICK-CHAT CATCHER
-                // ==========================================
+                // 4. CUSTOM BINDS IN-GAME CATCHER
                 const serverBinds = await CustomBind.findAll({ where: { guildId: guildId } });
                 if (serverBinds.length === 0) return;
 
@@ -239,7 +205,6 @@ async function connectRcon(guildId, client, targetServerId = null) {
 
                 for (const bind of serverBinds) {
                     if (!bind.targetValue) continue;
-
                     const phrase = bind.targetValue.toLowerCase();
 
                     if (msgLower.includes(phrase)) {
@@ -263,9 +228,7 @@ async function connectRcon(guildId, client, targetServerId = null) {
                             const finalCommandString = bind.command.replace(/{player}/gi, matchedPlayer.inGameName);
                             const commands = finalCommandString.split('\n');
                             for (const cmd of commands) {
-                                if (cmd.trim() !== '') {
-                                    await sendRconCommand(guildId, cmd.trim(), client);
-                                }
+                                if (cmd.trim() !== '') await sendRconCommand(guildId, cmd.trim(), client);
                             }
                             break; 
                         }
@@ -286,13 +249,11 @@ async function sendRconCommand(guildId, commandStr, client = null, serverId = nu
             await connectRcon(guildId, client || global.discordClient, serverId); 
             ws = activeConnections.get(guildId);
         } catch (e) {
-            console.error("[RCON CONNECTION FAILED]", e.message);
             throw e;
         }
     }
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-        throw new Error("Not connected to RCON.");
-    }
+    if (!ws || ws.readyState !== WebSocket.OPEN) throw new Error("Not connected to RCON.");
+    
     ws.send(JSON.stringify({ Identifier: 1, Message: commandStr, Name: "BuddyBot" }));
     return true;
 }
@@ -367,11 +328,7 @@ async function fetchServerKits(guildId) {
     return new Promise(async (resolve, reject) => {
         const ws = activeConnections.get(guildId);
         if (!ws || ws.readyState !== WebSocket.OPEN) {
-            try {
-                await connectRcon(guildId, global.discordClient);
-            } catch (e) {
-                return reject(new Error("Not connected to RCON."));
-            }
+            try { await connectRcon(guildId, global.discordClient); } catch (e) { return reject(new Error("Not connected to RCON.")); }
         }
         
         let foundKits = [];
@@ -385,9 +342,7 @@ async function fetchServerKits(guildId) {
                     const lines = msg.split('\n');
                     for (const line of lines) {
                         const clean = line.trim();
-                        if (clean && !clean.toLowerCase().includes('list')) {
-                            foundKits.push(clean);
-                        }
+                        if (clean && !clean.toLowerCase().includes('list')) foundKits.push(clean);
                     }
                 }
             } catch (e) {}
@@ -395,7 +350,6 @@ async function fetchServerKits(guildId) {
 
         const activeWs = activeConnections.get(guildId);
         activeWs.on('message', tempListener);
-
         activeWs.send(JSON.stringify({ Identifier: 999, Message: "kit.list", Name: "BuddyBot" }));
 
         setTimeout(() => {
