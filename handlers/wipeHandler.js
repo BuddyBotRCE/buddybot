@@ -3,11 +3,6 @@ const { GuildConfig, UserEconomy, PveZone, CustomBind, ShopCooldown, BindCooldow
 const { sendRconCommand } = require('../utils/rconManager');
 
 module.exports = async (interaction, client) => {
-    // 🛑 INSTANTLY DEFER NON-MODAL INTERACTIONS TO PREVENT 3-SECOND TIMEOUTS
-    if (!interaction.isModalSubmit() && !interaction.replied && !interaction.deferred) {
-        await interaction.deferUpdate().catch(() => {});
-    }
-
     const customId = interaction.customId || '';
 
     try {
@@ -27,7 +22,7 @@ module.exports = async (interaction, client) => {
                 new ButtonBuilder().setCustomId('btn_wipe_cooldowns').setLabel('Clear All Cooldowns').setStyle(ButtonStyle.Secondary).setEmoji('⏳')
             );
 
-            return interaction.editReply({ embeds: [embed], components: [row1, row2], content: null });
+            return interaction.update({ embeds: [embed], components: [row1, row2], content: null });
         }
 
         // 2. Button Handlers
@@ -47,7 +42,7 @@ module.exports = async (interaction, client) => {
                         { label: 'Custom Binds (Wheel)', value: 'wipe_binds', emoji: '🗣️' }
                     ])
                 );
-                return interaction.editReply({ content: '🗑️ **Selective Wipe:** Choose exactly which databases to reset below:', components: [row] });
+                return interaction.update({ content: '🗑️ **Selective Wipe:** Choose exactly which databases to reset below:', components: [row] });
             }
             if (customId === 'btn_wipe_cooldowns') {
                 const modal = new ModalBuilder().setCustomId('modal_wipe_cooldowns').setTitle('Confirm Clear All Cooldowns');

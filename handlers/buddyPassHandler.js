@@ -2,11 +2,6 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelect
 const { GuildConfig, BuddyPassChallenge, BuddyPassReward, UserEconomy } = require('../database/db');
 
 module.exports = async (interaction, client) => {
-    // 🛑 INSTANTLY DEFER NON-MODAL INTERACTIONS TO PREVENT 3-SECOND TIMEOUTS
-    if (!interaction.isModalSubmit() && !interaction.replied && !interaction.deferred) {
-        await interaction.deferUpdate().catch(() => {});
-    }
-
     const customId = interaction.customId || '';
     const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
 
@@ -27,7 +22,7 @@ module.exports = async (interaction, client) => {
             new ButtonBuilder().setCustomId('bp_add_custom').setLabel('Add Custom Challenge').setStyle(ButtonStyle.Secondary).setEmoji('➕'),
             new ButtonBuilder().setCustomId('bp_set_reward').setLabel('Set Level Reward (1-50)').setStyle(ButtonStyle.Danger).setEmoji('🎁')
         );
-        return interaction.editReply({ embeds: [embed], components: [row], content: null });
+        return interaction.update({ embeds: [embed], components: [row], content: null });
     }
 
     if (customId === 'bp_reward_dropdown_select') {
@@ -47,7 +42,7 @@ module.exports = async (interaction, client) => {
         }
 
         await BuddyPassReward.upsert({ guildId: interaction.guild.id, level, rewardType, rewardValue });
-        return interaction.editReply({ content: `✅ Successfully assigned reward for **Level ${level}**: **${rewardType.toUpperCase()} (${rewardValue})**!`, components: [] });
+        return interaction.update({ content: `✅ Successfully assigned reward for **Level ${level}**: **${rewardType.toUpperCase()} (${rewardValue})**!`, components: [] });
     }
 
     // --- BUTTON CLICKS ---
@@ -68,7 +63,7 @@ module.exports = async (interaction, client) => {
                 .setColor('#f39c12')
                 .setTimestamp();
 
-            return interaction.editReply({ embeds: [embed], content: null });
+            return interaction.reply({ embeds: [embed], flags: 64 });
         }
 
         if (customId === 'bp_set_xp') {
@@ -86,7 +81,7 @@ module.exports = async (interaction, client) => {
             for (const d of defaults) {
                 await BuddyPassChallenge.findOrCreate({ where: { guildId: interaction.guild.id, title: d.title }, defaults: d });
             }
-            return interaction.editReply({ content: `✅ Loaded preloaded challenges successfully!` });
+            return interaction.reply({ content: `✅ Loaded preloaded challenges successfully!`, flags: 64 });
         }
 
         if (customId === 'bp_add_custom') {

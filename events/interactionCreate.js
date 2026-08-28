@@ -37,11 +37,6 @@ module.exports = async (interaction, client) => {
     console.log(`[INTERACTION DEBUG] Type: ${interaction.type} | CustomID: ${interaction.customId || 'N/A'} | Command: ${interaction.commandName || 'N/A'}`);
     
     try {
-        // 🛑 INSTANT DEFER FOR NON-MODAL/NON-COMMAND COMPONENTS TO PREVENT 3S TIMEOUTS
-        if (!interaction.isChatInputCommand() && !interaction.isModalSubmit() && !interaction.replied && !interaction.deferred) {
-            await interaction.deferUpdate().catch(() => {});
-        }
-
         // --- CHAT COMMANDS ---
         if (interaction.isChatInputCommand()) {
             const command = client.commands.get(interaction.commandName);
@@ -196,7 +191,7 @@ module.exports = async (interaction, client) => {
         }
 
         if (customId === 'hub_vote_info') {
-            return await interaction.editReply({ content: `🗳️ **Vote & Claim:** Link your vote tracking with your Rust server to automatically reward players with free currency or kits! (Configure via your voting site webhook).`, components: [] }).catch(()=>{});
+            return await interaction.reply({ content: `🗳️ **Vote & Claim:** Link your vote tracking with your Rust server to automatically reward players with free currency or kits! (Configure via your voting site webhook).`, components: [], flags: 64 }).catch(()=>{});
         }
 
         // 👇 ROUTE WIPE & COOLDOWN BUTTONS 👇
