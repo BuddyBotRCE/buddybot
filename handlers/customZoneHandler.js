@@ -72,28 +72,24 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
             { name: `🎯 Center Coordinates`, value: posText, inline: false }
         );
 
-        // Row 1: Core Config & Shape
         components.push(new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('cz_btn_settings').setLabel('Name & Size').setStyle(ButtonStyle.Primary).setEmoji('📝'),
             new ButtonBuilder().setCustomId('cz_btn_shape').setLabel(`Shape: ${activeZone.shape === 'box' ? 'Box' : 'Sphere'}`).setStyle(ButtonStyle.Secondary).setEmoji('🔷'),
             new ButtonBuilder().setCustomId('cz_btn_color_menu').setLabel('Select Color').setStyle(ButtonStyle.Primary).setEmoji('🎨')
         ));
 
-        // Row 2: Location & Messages
         components.push(new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('cz_btn_messages').setLabel('Set Messages').setStyle(ButtonStyle.Primary).setEmoji('💬'),
             new ButtonBuilder().setCustomId('cz_btn_getpos').setLabel('Set Zone Center').setStyle(ButtonStyle.Success).setEmoji('📍'),
             new ButtonBuilder().setCustomId('cz_btn_visible').setLabel(activeZone.visible ? 'Map Visible' : 'Map Hidden').setStyle(activeZone.visible ? ButtonStyle.Success : ButtonStyle.Secondary).setEmoji('👁️')
         ));
 
-        // Row 3: Rule Flags
         components.push(new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('cz_btn_pvp').setLabel(`PvP: ${activeZone.pvp ? 'ON' : 'OFF'}`).setStyle(activeZone.pvp ? ButtonStyle.Success : ButtonStyle.Danger).setEmoji('⚔️'),
             new ButtonBuilder().setCustomId('cz_btn_pve').setLabel(`PvE: ${activeZone.pve ? 'ON' : 'OFF'}`).setStyle(activeZone.pve ? ButtonStyle.Success : ButtonStyle.Danger).setEmoji('🐻'),
             new ButtonBuilder().setCustomId('cz_btn_build').setLabel(`Build: ${activeZone.build ? 'ON' : 'OFF'}`).setStyle(activeZone.build ? ButtonStyle.Success : ButtonStyle.Danger).setEmoji('🔨')
         ));
 
-        // Row 4: Power & Nav
         components.push(new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('cz_btn_toggle').setLabel(activeZone.isEnabled ? 'Disable Zone' : 'Enable Zone').setStyle(activeZone.isEnabled ? ButtonStyle.Secondary : ButtonStyle.Success).setEmoji('⚡'),
             new ButtonBuilder().setCustomId('cz_btn_delete').setLabel('Delete').setStyle(ButtonStyle.Danger).setEmoji('💀'),
@@ -266,7 +262,6 @@ const customZoneHandler = async (interaction, client) => {
                 return await renderCZPanel(interaction, `👁️ Map Visibility is now **${!z.visible ? 'VISIBLE' : 'HIDDEN'}**!`);
             }
 
-            // ⚡ TOGGLE ZONE & FIRE NATIVE RUST CONSOLE EDITION COMMANDS
             if (customId === 'cz_btn_toggle') {
                 const z = await PveZone.findByPk(session.selectedZoneId);
                 const willBeEnabled = !z.isEnabled;
@@ -274,7 +269,6 @@ const customZoneHandler = async (interaction, client) => {
 
                 try {
                     if (willBeEnabled && z.posX && z.posZ) {
-                        // 1. Format color string for RCE e.g. (255,0,0) from hex
                         let rgbColor = "(255,0,0)";
                         if (z.color && z.color.startsWith('#')) {
                             const hex = z.color.replace('#', '');
@@ -285,7 +279,6 @@ const customZoneHandler = async (interaction, client) => {
                         }
 
                         const shapeType = z.shape === 'box' ? 'Box' : 'Sphere';
-                        // For sphere, size is just radius. For box, it uses radius for width/height/depth
                         const sizeParam = z.shape === 'box' ? `(${z.radius},${z.radius},${z.radius})` : `${z.radius}`;
                         const pvpVal = z.pvp ? 1 : 0;
                         const pveVal = z.pve ? 1 : 0;
@@ -293,12 +286,9 @@ const customZoneHandler = async (interaction, client) => {
                         const buildVal = z.build ? 1 : 0;
                         const showAreaVal = z.visible ? 1 : 0;
 
-                        // 2. Execute Native RCE Creation Command
-                        // Format: zones.createcustomzone "Name" (x,y,z) rotation Shape Size PvP? NpcDmg? Radiation BuildDmg? Build?
                         const createCmd = `zones.createcustomzone "${z.name}" (${z.posX},${z.posY || 35},${z.posZ}) 0 ${shapeType} ${sizeParam} ${pvpVal} ${pveVal} 0 ${buildDmgVal} ${buildVal}`;
                         await sendRconCommand(guildId, createCmd, client);
 
-                        // 3. Apply Visual Area Ring & Color & Messages via editcustomzone
                         await sendRconCommand(guildId, `zones.editcustomzone "${z.name}" "showarea" "${showAreaVal}"`, client);
                         await sendRconCommand(guildId, `zones.editcustomzone "${z.name}" "color" "${rgbColor}"`, client);
 
@@ -309,7 +299,6 @@ const customZoneHandler = async (interaction, client) => {
                             await sendRconCommand(guildId, `zones.editcustomzone "${z.name}" "leavemessage" "${z.exitMessage}"`, client);
                         }
                     } else if (!willBeEnabled) {
-                        // Remove native RCE zone
                         await sendRconCommand(guildId, `zones.deletecustomzone "${z.name}"`, client);
                     }
                 } catch (err) {
@@ -319,15 +308,12 @@ const customZoneHandler = async (interaction, client) => {
                 return await renderCZPanel(interaction, `⚡ Zone is now **${willBeEnabled ? 'ENABLED & Ring Spawned' : 'DISABLED & Deleted'}** on the server!`);
             }
 
-            // 👇 THE FIX: Uses the correct Rust Console Edition command to delete from the server!
             if (customId === 'cz_btn_delete') {
                 const z = await PveZone.findByPk(session.selectedZoneId);
                 if (z) {
                     try {
                         await sendRconCommand(guildId, `zones.deletecustomzone "${z.name}"`, client);
-                    } catch(e) {
-                        console.error("Failed to execute RCON zone deletion", e);
-                    }
+                    } catch(e) {}
                     await z.destroy();
                 }
                 
@@ -374,9 +360,7 @@ customZoneHandler.refreshPanelViaInteraction = async (interaction, messageOverri
 
         const payload = await buildPanelPayload(guildId, messageOverride);
         await interaction.editReply(payload);
-    } catch (e) {
-        console.error("Failed to live-refresh Custom Zone panel:", e);
-    }
+    } catch (e) {}
 };
 
 module.exports = customZoneHandler;

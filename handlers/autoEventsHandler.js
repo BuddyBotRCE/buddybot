@@ -4,7 +4,6 @@ const { sendRconCommand, queueAdminPos } = require('../utils/rconManager');
 
 const aeSessions = new Map();
 
-// Exactly the 5 fixed events mapped to their in-game prefabs
 const TYPE_INFO = { 
     hackable: { name: 'Timed Crates', emoji: '💻', prefab: 'codelockedhackablecrate' }, 
     supply: { name: 'Supply Drops', emoji: '✈️', prefab: 'supply_drop' }, 
@@ -13,9 +12,6 @@ const TYPE_INFO = {
     cargo: { name: 'Docked Cargo', emoji: '🚢', prefab: 'cargoshipdynamic1' }
 };
 
-// =======================================================
-// LAYOUT BUILDER (Decoupled so RCON can refresh it!)
-// =======================================================
 const buildPanelPayload = async (guildId, messageOverride = '') => {
     if (!aeSessions.has(guildId)) aeSessions.set(guildId, { selectedEventId: null, view: 'main' });
     const session = aeSessions.get(guildId);
@@ -124,7 +120,6 @@ async function safeRespond(interaction, payload) {
 
 const autoEventsHandler = async (interaction, client) => {
     try {
-        // 🛡️ SECURITY BARRIER
         const member = interaction.member;
         const isOwner = interaction.guild?.ownerId === member.id;
         const isAdminPerm = member.permissions.has(PermissionsBitField.Flags.Administrator);
@@ -154,9 +149,6 @@ const autoEventsHandler = async (interaction, client) => {
             await safeRespond(inter, payload);
         };
 
-        // =======================================================
-        // INTERACTION ROUTING LOGIC
-        // =======================================================
         if (customId === 'admin_menu_select') {
             session.view = 'main';
             return await renderAEPanel(interaction);
@@ -241,13 +233,9 @@ const autoEventsHandler = async (interaction, client) => {
                 return await renderAEPanel(interaction, `⏪ Removed the last saved position.`);
             }
 
-            // 🎯 HERE IS THE MAGIC LIVE-LINK
             if (customId === 'ae_btn_getpos') {
-                // 1. Visually update the panel IMMEDIATELY to show it is loading
                 const loadingPayload = await buildPanelPayload(guildId, '⏳ **Extracting your position from the server...**');
                 await interaction.update(loadingPayload);
-                
-                // 2. Hand the interaction object over to the RCON scanner
                 await queueAdminPos(interaction, 'auto_event', session.selectedEventId);
                 return;
             }
@@ -276,9 +264,6 @@ const autoEventsHandler = async (interaction, client) => {
     }
 };
 
-// ==========================================
-// RCON AUTO-SAVE RECEIVER
-// ==========================================
 autoEventsHandler.autoSaveLocation = async (guildId, x, y, z, eventId) => {
     if (!eventId) return;
 
@@ -295,7 +280,6 @@ autoEventsHandler.autoSaveLocation = async (guildId, x, y, z, eventId) => {
     });
 };
 
-// LIVE UPDATE HOOK FOR RCON MANAGER
 autoEventsHandler.refreshPanelViaInteraction = async (interaction, messageOverride) => {
     try {
         const payload = await buildPanelPayload(interaction.guild.id, messageOverride);

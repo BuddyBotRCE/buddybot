@@ -1,10 +1,8 @@
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { GuildConfig } = require('../database/db');
 
-// In-memory session manager
 const amSessions = new Map();
 
-// Configuration for our modules to keep code clean
 const AM_MODULES = {
     caps: { name: '🔠 Anti-Caps', dbPrefix: 'amCaps', hasLimit: true, limitLabel: 'Max Caps % (e.g. 70)' },
     spam: { name: '📢 Anti-Spam', dbPrefix: 'amSpam', hasLimit: true, limitLabel: 'Max msgs per 5s (e.g. 5)' },
@@ -31,17 +29,14 @@ module.exports = async (interaction, client) => {
         let selectedValue = '';
         if (interaction.isStringSelectMenu()) selectedValue = interaction.values[0] || '';
 
-        // --- 1. INITIALIZE SESSION AT THE VERY TOP ---
         if (!amSessions.has(guildId)) {
             amSessions.set(guildId, { selectedModule: null, selectedAction: 'delete' });
         }
         const session = amSessions.get(guildId);
 
-        // --- 2. RENDER HELPER FUNCTION ---
         const renderAutoModPanel = async (inter, messageOverride = '') => {
             let [config] = await GuildConfig.findOrCreate({ where: { guildId: inter.guild.id } });
 
-            // Generate live status board
             let statusBoard = '';
             for (const [key, data] of Object.entries(AM_MODULES)) {
                 const isEnabled = config[`${data.dbPrefix}Enabled`];
@@ -92,15 +87,13 @@ module.exports = async (interaction, client) => {
             }
         };
 
-        // --- 3. ENTRY FROM ADMIN PANEL ---
         if (customId === 'admin_menu_select' && selectedValue === 'setup_automod') {
-            session.selectedModule = null; // Clear out any old selections
+            session.selectedModule = null; 
             session.selectedAction = 'delete';
             amSessions.set(guildId, session);
             return await renderAutoModPanel(interaction);
         }
 
-        // --- HANDLE DROPDOWNS ---
         if (interaction.isStringSelectMenu()) {
             if (customId === 'am_module_select') {
                 session.selectedModule = selectedValue;
@@ -114,7 +107,6 @@ module.exports = async (interaction, client) => {
             }
         }
 
-        // --- HANDLE BUTTONS ---
         if (interaction.isButton()) {
             if (customId === 'btn_am_back') {
                 return await interaction.update({ content: '🔙 Closed Auto-Mod setup. Type `/adminpanel` to return to the main menu.', embeds: [], components: [] });
@@ -141,7 +133,6 @@ module.exports = async (interaction, client) => {
                 
                 const modal = new ModalBuilder().setCustomId(`modal_am_limit_${session.selectedModule}`).setTitle(`Configure ${modData.name}`);
                 
-                // If it's the banned words list, we use a paragraph, otherwise a short text input
                 const isWords = session.selectedModule === 'words';
                 const currentVal = isWords ? (config.amWordsList || '') : (config[`${modData.dbPrefix}Limit`] || '');
 
@@ -158,7 +149,6 @@ module.exports = async (interaction, client) => {
             }
         }
 
-        // --- HANDLE MODAL SUBMISSION ---
         if (interaction.isModalSubmit() && customId.startsWith('modal_am_limit_')) {
             const moduleKey = customId.replace('modal_am_limit_', '');
             const modData = AM_MODULES[moduleKey];
@@ -166,9 +156,9 @@ module.exports = async (interaction, client) => {
             
             let updateObj = {};
             if (moduleKey === 'words') {
-                updateObj.amWordsList = rawValue.toLowerCase(); // Save words list
+                updateObj.amWordsList = rawValue.toLowerCase(); 
             } else {
-                updateObj[`${modData.dbPrefix}Limit`] = parseInt(rawValue) || 0; // Save numeric limit
+                updateObj[`${modData.dbPrefix}Limit`] = parseInt(rawValue) || 0; 
             }
 
             await GuildConfig.update(updateObj, { where: { guildId } });

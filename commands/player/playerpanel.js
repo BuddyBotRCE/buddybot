@@ -13,7 +13,6 @@ module.exports = {
         const config = await GuildConfig.findOne({ where: { guildId } });
         const currency = config?.economyCurrency || 'Scrap';
 
-        // Fetch player economy / BuddyPass level data
         const [user] = await UserEconomy.findOrCreate({
             where: { guildId, userId },
             defaults: { wallet: 0, bank: 0, level: 1, xp: 0 }
@@ -51,7 +50,6 @@ module.exports = {
             new ButtonBuilder().setCustomId('ticket_create').setLabel('Open Ticket').setStyle(ButtonStyle.Secondary).setEmoji('🎫')
         );
 
-        // Added the Make a Suggestion button row here
         const suggestionButtonRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId('btn_player_open_suggestion')
@@ -60,7 +58,6 @@ module.exports = {
                 .setEmoji('💡')
         );
 
-        // Include row3 and suggestionButtonRow in components array (Discord allows up to 5 action rows)
         return interaction.reply({ embeds: [embed], components: [row1, row2, row3, suggestionButtonRow], flags: 64 });
     }
 };

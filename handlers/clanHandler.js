@@ -62,7 +62,6 @@ module.exports = async (interaction, client) => {
         const customId = interaction.customId || '';
         const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
 
-        // --- ADMIN SETUP HUB ---
         if (customId === 'admin_menu_select' && selectedValue === 'setup_clans') {
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
             const activeClans = await Clan.count({ where: { guildId: interaction.guild.id } });
@@ -80,7 +79,6 @@ module.exports = async (interaction, client) => {
             return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
         }
 
-        // --- BUTTON CLICKS ---
         if (interaction.isButton()) {
             if (customId === 'btn_clan_settings') {
                 const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
@@ -124,7 +122,6 @@ module.exports = async (interaction, client) => {
                 return interaction.showModal(modal);
             }
 
-            // --- SPECIFIC BANK ACTION BUTTONS (CHECKED FIRST) ---
             if (customId === 'clan_modal_dep' || customId === 'clan_modal_with') {
                 const action = customId === 'clan_modal_dep' ? 'deposit' : 'withdraw';
                 const modal = new ModalBuilder().setCustomId(`modal_clan_bank_${action}`).setTitle(`Clan Bank - ${action.toUpperCase()}`);
@@ -132,7 +129,6 @@ module.exports = async (interaction, client) => {
                 return interaction.showModal(modal);
             }
 
-            // --- GENERAL BANK MENU ---
             if (customId.startsWith('btn_clan_bank_')) {
                 const memberData = await ClanMember.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
                 const clan = await Clan.findByPk(memberData.clanId);
@@ -153,7 +149,6 @@ module.exports = async (interaction, client) => {
                 return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
             }
 
-            // --- MANAGE MEMBERS ---
             if (customId.startsWith('btn_clan_manage_')) {
                 const memberData = await ClanMember.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
                 const members = await ClanMember.findAll({ where: { clanId: memberData.clanId } });
@@ -169,7 +164,6 @@ module.exports = async (interaction, client) => {
                 return interaction.reply({ embeds: [embed], components: row ? [row] : [], flags: 64 });
             }
 
-            // --- CLAN WARS ---
             if (customId.startsWith('btn_clan_wars_')) {
                 const embed = new EmbedBuilder()
                     .setTitle('⚔️ Clan Wars Hub')
@@ -221,7 +215,6 @@ module.exports = async (interaction, client) => {
             }
         }
 
-        // --- SELECT MENUS ---
         if (interaction.isUserSelectMenu()) {
             if (customId === 'select_clan_invite_target') {
                 const targetUserId = interaction.values[0];
@@ -240,7 +233,6 @@ module.exports = async (interaction, client) => {
             }
         }
 
-        // --- MODAL SUBMISSIONS ---
         if (interaction.isModalSubmit()) {
             if (customId === 'modal_clan_config') {
                 const cost = parseInt(interaction.fields.getTextInputValue('cost')) || 1000;

@@ -5,9 +5,6 @@ module.exports = async (interaction, client) => {
     const customId = interaction.customId;
     const value = interaction.isStringSelectMenu() ? interaction.values[0] : null;
 
-    // ==========================================
-    // 1. ADMIN MENU: ECONOMY SETUP PANEL
-    // ==========================================
     if (customId === 'admin_menu_select' && value === 'setup_economy') {
         const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
         const currencyName = config?.economyCurrency || 'Scrap';
@@ -26,9 +23,6 @@ module.exports = async (interaction, client) => {
         return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
     }
 
-    // ==========================================
-    // 2. BUTTON CLICKS
-    // ==========================================
     if (interaction.isButton()) {
         if (customId === 'btn_econ_name') {
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
@@ -105,9 +99,6 @@ module.exports = async (interaction, client) => {
         }
     }
 
-    // ==========================================
-    // 3. USER SELECT MENUS
-    // ==========================================
     if (interaction.isUserSelectMenu()) {
         if (customId === 'select_admin_give_target') {
             const targetUserId = interaction.values[0];
@@ -127,9 +118,6 @@ module.exports = async (interaction, client) => {
         }
     }
 
-    // ==========================================
-    // 4. MODAL SUBMISSIONS
-    // ==========================================
     if (interaction.isModalSubmit()) {
         if (customId === 'modal_setup_economy') {
             const newName = interaction.fields.getTextInputValue('currency_name').trim();

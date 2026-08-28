@@ -53,7 +53,6 @@ module.exports = async (interaction, client) => {
             let targetChannelId = null;
 
             try {
-                // 1. If they pasted a Message Link
                 if (input.includes('discord.com/channels/')) {
                     const parts = input.split('/');
                     targetChannelId = parts[parts.length - 2];
@@ -61,11 +60,8 @@ module.exports = async (interaction, client) => {
                     const channel = await interaction.guild.channels.fetch(targetChannelId).catch(()=>null);
                     if (channel) msg = await channel.messages.fetch(mId).catch(()=>null);
                 } else {
-                    // 2. If they just pasted an ID, try current channel first
                     msg = await interaction.channel.messages.fetch(input).catch(()=>null);
                     targetChannelId = interaction.channelId;
-                    
-                    // 3. Fallback: Search all text channels for the ID
                     if (!msg) {
                         const channels = interaction.guild.channels.cache.filter(c => c.isTextBased());
                         for (const [id, channel] of channels) {
@@ -77,7 +73,6 @@ module.exports = async (interaction, client) => {
 
                 if (!msg) return interaction.reply({ content: '❌ Could not find that message. Try pasting the full Message Link instead.', flags: 64 });
 
-                // Route to Edit Embed Setup
                 if (customId === 'modal_edit_embed_prompt') {
                     if (!msg.embeds.length) return interaction.reply({ content: '❌ That message has no embeds to edit.', flags: 64 });
                     
@@ -92,10 +87,8 @@ module.exports = async (interaction, client) => {
                     embSession.editMode = true;
                     embSession.targetChannelId = targetChannelId;
                     embSession.targetMessageId = msg.id;
-                    
                     embedSessions.set(guildId, embSession);
                 } 
-                // Route to Attach Reaction Roles Setup
                 else if (customId === 'modal_attach_rr_prompt') {
                     const rrSession = rrSetupSessions.get(guildId) || { channelId: null, description: null, panelMode: 'toggle' };
                     rrSession.panelMode = 'attach';
@@ -103,7 +96,6 @@ module.exports = async (interaction, client) => {
                     rrSession.targetMessageId = msg.id;
                     rrSetupSessions.set(guildId, rrSession);
                 }
-
                 await interaction.deferUpdate().catch(()=>{}); 
             } catch (e) {
                 return interaction.reply({ content: '❌ An error occurred trying to fetch that message.', flags: 64 });
@@ -124,7 +116,6 @@ module.exports = async (interaction, client) => {
                 const targetChText = targetChannelId ? `<#${targetChannelId}>` : '❌ Not Selected Yet';
                 const customText = rrSession.description;
                 const customTextStatus = customText ? `✅ Loaded (${customText.length} chars)` : '❌ Using Default Text';
-                
                 const isVerify = rrSession.panelMode === 'verify';
                 const isAttach = rrSession.panelMode === 'attach';
                 
@@ -138,7 +129,6 @@ module.exports = async (interaction, client) => {
                     .setColor(isVerify ? '#2ecc71' : (isAttach ? '#f1c40f' : '#3498db'));
 
                 const components = [];
-
                 if (!isAttach) components.push(new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_rr_channel').setPlaceholder(targetChannelId ? `📂 Target Channel Selected` : '📂 1. Select Target Channel for Panel...').addChannelTypes(ChannelType.GuildText)));
                 
                 components.push(new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder().setCustomId('select_rr_role').setPlaceholder('🏷️ 2. Select Role to Add to Panel...')));
@@ -153,13 +143,10 @@ module.exports = async (interaction, client) => {
                 return await inter.editReply(payload).catch(() => inter.followUp(payload));
             };
 
-            if (customId === 'unified_embed_select' || customId === 'modal_attach_rr_prompt') {
-                return await renderSetupPanel(interaction);
-            }
+            if (customId === 'unified_embed_select' || customId === 'modal_attach_rr_prompt') return await renderSetupPanel(interaction);
 
             if (interaction.isChannelSelectMenu() && customId === 'select_rr_channel') {
-                rrSession.channelId = selectedValue;
-                rrSetupSessions.set(guildId, rrSession);
+                rrSession.channelId = selectedValue; rrSetupSessions.set(guildId, rrSession);
                 return await renderSetupPanel(interaction, `✅ Target channel successfully set to <#${selectedValue}>!`);
             }
 
@@ -285,13 +272,28 @@ module.exports = async (interaction, client) => {
                     components.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('select_emb_template').setPlaceholder('⚡ Load Pre-Made Rust Template...').addOptions([{ label: '🪓 Wipe Announcement', value: 'wipe' }, { label: '📜 Server Rules', value: 'rules' }, { label: '🛒 Store & VIP', value: 'store' }, { label: '🗳️ Vote & Rewards', value: 'vote' }])));
                 }
                 
-                components.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_emb_title').setLabel('Title').setStyle(ButtonStyle.Primary).setEmoji('✏️'), new ButtonBuilder().setCustomId('btn_emb_desc').setLabel('Description').setStyle(ButtonStyle.Primary).setEmoji('📝'), new ButtonBuilder().setCustomId('btn_emb_color').setLabel('Color').setStyle(ButtonStyle.Secondary).setEmoji('🎨'), new ButtonBuilder().setCustomId('btn_emb_thumb').setLabel('Thumbnail').setStyle(ButtonStyle.Secondary).setEmoji('🖼️'), new ButtonBuilder().setCustomId('btn_emb_image').setLabel('Banner Image').setStyle(ButtonStyle.Secondary).setEmoji('🌟')));
+                // 👇 NEW DROPDOWN COLOR PICKER REPLACING THE BUTTON 👇
+                components.push(new ActionRowBuilder().addComponents(
+                    new StringSelectMenuBuilder().setCustomId('select_emb_color').setPlaceholder('🎨 Select Embed Color...')
+                    .addOptions([
+                        { label: 'Red (Hostile / Alert)', value: '#e74c3c', emoji: '🔴' },
+                        { label: 'Green (Safe / Success)', value: '#2ecc71', emoji: '🟢' },
+                        { label: 'Blue (Neutral / Info)', value: '#3498db', emoji: '🔵' },
+                        { label: 'Yellow (Warning)', value: '#f1c40f', emoji: '🟡' },
+                        { label: 'Orange (Event)', value: '#e67e22', emoji: '🟠' },
+                        { label: 'Purple (Premium)', value: '#9b59b6', emoji: '🟣' },
+                        { label: 'Black / Dark (Sleek)', value: '#2b2d31', emoji: '⚫' },
+                        { label: 'White (Clean)', value: '#ffffff', emoji: '⚪' }
+                    ])
+                ));
+
+                components.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_emb_title').setLabel('Title').setStyle(ButtonStyle.Primary).setEmoji('✏️'), new ButtonBuilder().setCustomId('btn_emb_desc').setLabel('Description').setStyle(ButtonStyle.Primary).setEmoji('📝'), new ButtonBuilder().setCustomId('btn_emb_thumb').setLabel('Thumbnail').setStyle(ButtonStyle.Secondary).setEmoji('🖼️'), new ButtonBuilder().setCustomId('btn_emb_image').setLabel('Banner Image').setStyle(ButtonStyle.Secondary).setEmoji('🌟'), new ButtonBuilder().setCustomId('btn_emb_footer').setLabel('Footer Text').setStyle(ButtonStyle.Secondary).setEmoji('📌')));
                 
                 const pubBtn = embSession.editMode 
                     ? new ButtonBuilder().setCustomId('btn_emb_publish_edit').setLabel('Save Edits to Message').setStyle(ButtonStyle.Success).setEmoji('💾')
                     : new ButtonBuilder().setCustomId('btn_emb_publish').setLabel('Select Channel & Post').setStyle(ButtonStyle.Success).setEmoji('🚀');
 
-                components.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_emb_footer').setLabel('Footer Text').setStyle(ButtonStyle.Secondary).setEmoji('📌'), pubBtn));
+                components.push(new ActionRowBuilder().addComponents(pubBtn));
 
                 const payload = { embeds: [configEmbed, previewEmbed], components, flags: 64 };
                 if (inter.isRepliable() && !inter.replied && !inter.deferred) return await inter.reply(payload);
@@ -310,16 +312,22 @@ module.exports = async (interaction, client) => {
                 }
             }
 
+            // 👇 HANDLES THE NEW COLOR DROPDOWN 👇
+            if (interaction.isStringSelectMenu() && customId === 'select_emb_color') {
+                embSession.color = selectedValue;
+                embedSessions.set(guildId, embSession);
+                await interaction.deferUpdate();
+                return await renderBuilder(interaction, `🎨 Embed color updated!`);
+            }
+
             if (interaction.isButton()) {
                 if (customId === 'btn_emb_title') { const modal = new ModalBuilder().setCustomId('modal_emb_title').setTitle('Set Embed Title'); modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('val').setLabel('Title Text').setStyle(TextInputStyle.Short).setValue(embSession.title).setRequired(true))); return await interaction.showModal(modal); }
                 if (customId === 'btn_emb_desc') { const modal = new ModalBuilder().setCustomId('modal_emb_desc').setTitle('Set Embed Description'); modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('val').setLabel('Description').setStyle(TextInputStyle.Paragraph).setValue(embSession.description).setRequired(true))); return await interaction.showModal(modal); }
-                if (customId === 'btn_emb_color') { const modal = new ModalBuilder().setCustomId('modal_emb_color').setTitle('Set Embed Color'); modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('val').setLabel('Hex Code (e.g. #e74c3c)').setStyle(TextInputStyle.Short).setValue(embSession.color).setRequired(true))); return await interaction.showModal(modal); }
                 if (customId === 'btn_emb_thumb') { const modal = new ModalBuilder().setCustomId('modal_emb_thumb').setTitle('Set Thumbnail URL'); modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('val').setLabel('Corner Thumbnail Image URL').setStyle(TextInputStyle.Short).setValue(embSession.thumbnailUrl || '').setRequired(false))); return await interaction.showModal(modal); }
                 if (customId === 'btn_emb_image') { const modal = new ModalBuilder().setCustomId('modal_emb_image').setTitle('Set Banner Image URL'); modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('val').setLabel('Large Banner Image URL').setStyle(TextInputStyle.Short).setValue(embSession.imageUrl || '').setRequired(false))); return await interaction.showModal(modal); }
                 if (customId === 'btn_emb_footer') { const modal = new ModalBuilder().setCustomId('modal_emb_footer').setTitle('Set Footer Text'); modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('val').setLabel('Footer Text').setStyle(TextInputStyle.Short).setValue(embSession.footerText || '').setRequired(false))); return await interaction.showModal(modal); }
                 if (customId === 'btn_emb_publish') return await interaction.reply({ content: '📢 Select the Discord channel where you want to post this embed:', components: [new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_emb_target_channel').setPlaceholder('Select channel to post announcement...').setChannelTypes([0]))], flags: 64 });
                 
-                // SAVING EDITS TO AN EXISTING MESSAGE
                 if (customId === 'btn_emb_publish_edit') {
                     const channel = interaction.guild.channels.cache.get(embSession.targetChannelId);
                     const msg = await channel.messages.fetch(embSession.targetMessageId).catch(()=>null);
@@ -356,7 +364,6 @@ module.exports = async (interaction, client) => {
                 const val = interaction.fields.getTextInputValue('val');
                 if (customId === 'modal_emb_title') embSession.title = val;
                 if (customId === 'modal_emb_desc') embSession.description = val;
-                if (customId === 'modal_emb_color') embSession.color = val;
                 if (customId === 'modal_emb_thumb') embSession.thumbnailUrl = val;
                 if (customId === 'modal_emb_image') embSession.imageUrl = val;
                 if (customId === 'modal_emb_footer') embSession.footerText = val;

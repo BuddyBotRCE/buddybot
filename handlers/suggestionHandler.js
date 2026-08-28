@@ -87,9 +87,6 @@ const suggestionHandler = async (interaction, client) => {
                 const message = interaction.message;
                 const oldEmbed = message.embeds[0];
                 
-                // Extract author ID from footer, description, or author icon/name if stored, or parse description
-                // To safely track the author, let's look at the author name/footer or embed fields.
-                // Alternatively, let's embed the author's Discord ID safely into the footer text invisibly: e.g. `Author ID: 123456789`
                 const footerText = oldEmbed.footer?.text || '';
                 const authorIdMatch = footerText.match(/Author ID: (\d+)/);
 

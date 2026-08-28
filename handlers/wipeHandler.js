@@ -6,7 +6,6 @@ module.exports = async (interaction, client) => {
     const customId = interaction.customId || '';
 
     try {
-        // 1. Initial Panel Trigger (From Admin Menu)
         if (interaction.isStringSelectMenu() && interaction.values && interaction.values[0] === 'setup_wipe') {
             const embed = new EmbedBuilder()
                 .setTitle('☢️ Server Wipe Manager')
@@ -25,7 +24,6 @@ module.exports = async (interaction, client) => {
             return interaction.update({ embeds: [embed], components: [row1, row2], content: null });
         }
 
-        // 2. Button Handlers
         if (interaction.isButton()) {
             if (customId === 'btn_wipe_full') {
                 const modal = new ModalBuilder().setCustomId('modal_wipe_full').setTitle('Confirm FULL Wipe');
@@ -51,7 +49,6 @@ module.exports = async (interaction, client) => {
             }
         }
 
-        // 3. Select Menu Handler for Selective Wipe
         if (interaction.isStringSelectMenu() && customId === 'select_wipe_custom') {
             const sel = interaction.values.join('-');
             const modal = new ModalBuilder().setCustomId(`modal_wipe_sel_${sel}`).setTitle('Confirm Selective Wipe');
@@ -59,18 +56,12 @@ module.exports = async (interaction, client) => {
             return interaction.showModal(modal);
         }
 
-        // 4. Modal Submit Handlers (The Actual Wipe Execution)
         if (interaction.isModalSubmit()) {
             if (customId === 'modal_wipe_cooldowns') {
-                if (interaction.fields.getTextInputValue('confirm_text') !== 'COOLDOWNS') {
-                    return interaction.reply({ content: '❌ Action Cancelled. You must type `COOLDOWNS`.', flags: 64 });
-                }
-
-                // Clear Every Cooldown Table in the Bot
+                if (interaction.fields.getTextInputValue('confirm_text') !== 'COOLDOWNS') return interaction.reply({ content: '❌ Action Cancelled. You must type `COOLDOWNS`.', flags: 64 });
                 await ShopCooldown.destroy({ where: { guildId: interaction.guild.id } });
                 await BindCooldown.destroy({ where: { guildId: interaction.guild.id } });
                 await BountyCooldown.destroy({ where: { guildId: interaction.guild.id } });
-
                 return interaction.reply({ content: `⏳ **All Cooldowns Cleared!** Shop, bind, and bounty cooldown timers have been completely wiped.`, flags: 64 });
             }
 
@@ -80,15 +71,10 @@ module.exports = async (interaction, client) => {
                 let updateData = {}; 
                 
                 if (customId === 'modal_wipe_full') {
-                    // Zones
                     const allZones = await PveZone.findAll({ where: { guildId: interaction.guild.id } });
                     for (const z of allZones) { try { await sendRconCommand(interaction.guild.id, `zones.deletecustomzone "${z.zoneName}"`); } catch (e) {} }
                     await PveZone.destroy({ where: { guildId: interaction.guild.id } });
-                    
-                    // Custom Binds
                     await CustomBind.destroy({ where: { guildId: interaction.guild.id } });
-
-                    // Clear All Cooldowns on Full Wipe too
                     await ShopCooldown.destroy({ where: { guildId: interaction.guild.id } });
                     await BindCooldown.destroy({ where: { guildId: interaction.guild.id } });
                     await BountyCooldown.destroy({ where: { guildId: interaction.guild.id } });
@@ -109,9 +95,7 @@ module.exports = async (interaction, client) => {
                         for (const z of selZones) { try { await sendRconCommand(interaction.guild.id, `zones.deletecustomzone "${z.zoneName}"`); } catch (e) {} }
                         await PveZone.destroy({ where: { guildId: interaction.guild.id } });
                     }
-                    if (sel.includes('wipe_binds')) {
-                        await CustomBind.destroy({ where: { guildId: interaction.guild.id } });
-                    }
+                    if (sel.includes('wipe_binds')) await CustomBind.destroy({ where: { guildId: interaction.guild.id } });
                 }
                 
                 await GuildConfig.update(updateData, { where: { guildId: interaction.guild.id } });
@@ -124,8 +108,6 @@ module.exports = async (interaction, client) => {
         console.error('[WIPE HANDLER ERROR]', err);
         if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
             await interaction.reply({ content: '❌ An error occurred while executing the wipe.', flags: 64 });
-        } else {
-            await interaction.followUp({ content: '❌ An error occurred while executing the wipe.', flags: 64 }).catch(() => {});
         }
     }
 };

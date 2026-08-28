@@ -2,13 +2,11 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelect
 const { GuildConfig, ShopItem, UserEconomy, ShopCooldown } = require('../database/db');
 const { sendRconCommand } = require('../utils/rconManager');
 const { RUST_CATEGORIES } = require('../utils/rustCatalog');
-const { Op } = require('sequelize');
 
 module.exports = async (interaction, client) => {
     const customId = interaction.customId || '';
     const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
 
-    // --- HELPER FUNCTION: CATEGORY BREAKDOWN SHOP MANAGER PANEL ---
     async function renderShopManagePanel(interaction, messageText = '') {
         const dbItems = await ShopItem.findAll({ where: { guildId: interaction.guild.id } });
         const totalCount = dbItems.length;
@@ -50,10 +48,7 @@ module.exports = async (interaction, client) => {
         }
     }
 
-    // --- ADMIN SETUP HUB ---
-    if (customId === 'admin_menu_select' && selectedValue === 'setup_shop') {
-        return await renderShopManagePanel(interaction);
-    }
+    if (customId === 'admin_menu_select' && selectedValue === 'setup_shop') return await renderShopManagePanel(interaction);
 
     if (customId === 'shop_action_select') {
         if (selectedValue === 'shop_add_catalog') {
@@ -80,9 +75,7 @@ module.exports = async (interaction, client) => {
             modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('multiplier').setLabel("Multiplier % (e.g. 100 = Base, 500 = 500%)").setStyle(TextInputStyle.Short).setRequired(true)));
             return interaction.showModal(modal);
         }
-        if (selectedValue === 'shop_manage') {
-            return await renderShopManagePanel(interaction);
-        }
+        if (selectedValue === 'shop_manage') return await renderShopManagePanel(interaction);
         if (selectedValue === 'shop_clear_all') {
             await ShopItem.destroy({ where: { guildId: interaction.guild.id } });
             return await renderShopManagePanel(interaction, '🗑️ Successfully wiped and cleared the entire shop!');
@@ -128,18 +121,9 @@ module.exports = async (interaction, client) => {
                 const existing = await ShopItem.findOne({ where: { guildId: interaction.guild.id, command: cmdString } });
 
                 if (!existing) {
-                    await ShopItem.create({
-                        guildId: interaction.guild.id,
-                        name: catalogItem.name,
-                        command: cmdString,
-                        price: catalogItem.basePrice,
-                        category: catKey,
-                        cooldownSeconds: 0
-                    });
+                    await ShopItem.create({ guildId: interaction.guild.id, name: catalogItem.name, command: cmdString, price: catalogItem.basePrice, category: catKey, cooldownSeconds: 0 });
                     addedCount++;
-                } else {
-                    duplicateCount++;
-                }
+                } else { duplicateCount++; }
             }
         }
 
@@ -153,7 +137,6 @@ module.exports = async (interaction, client) => {
         return interaction.update({ content: `✅ Item role restriction updated successfully!`, components: [] });
     }
 
-    // --- PLAYER SHOP ---
     if (customId === 'hub_shop_menu') {
         const embed = new EmbedBuilder().setTitle('🛒 Server Shop').setDescription('Choose an option below to browse items by category or check the real-time categorized price list.').setColor('#e67e22');
         const row = new ActionRowBuilder().addComponents(
@@ -210,9 +193,7 @@ module.exports = async (interaction, client) => {
         const currency = config?.economyCurrency || 'Scrap';
         const multiplier = (config?.shopMultiplier || 100) / 100;
 
-        if (dbItems.length === 0) {
-            return interaction.update({ content: '❌ There are currently no items for sale in the shop.', embeds: [], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('hub_shop_menu').setLabel('Go Back').setStyle(ButtonStyle.Secondary).setEmoji('🔙'))] });
-        }
+        if (dbItems.length === 0) return interaction.update({ content: '❌ There are currently no items for sale in the shop.', embeds: [], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('hub_shop_menu').setLabel('Go Back').setStyle(ButtonStyle.Secondary).setEmoji('🔙'))] });
 
         const embed = new EmbedBuilder().setTitle('📋 Categorized Store Price List').setDescription('Here are all items currently available for purchase:').setColor('#3498db').setFooter({ text: 'Prices reflect real-time multipliers.' });
 
@@ -269,13 +250,9 @@ module.exports = async (interaction, client) => {
             const shopItem = await ShopItem.findByPk(itemId);
             if (!shopItem) return interaction.reply({ content: '❌ Item no longer exists.', flags: 64 });
 
-            // COOLDOWN CHECK
             if (shopItem.cooldownSeconds > 0) {
                 const now = new Date();
-                const [cooldownRecord] = await ShopCooldown.findOrCreate({
-                    where: { guildId: interaction.guild.id, userId: interaction.user.id, itemId: shopItem.id },
-                    defaults: { expiresAt: now }
-                });
+                const [cooldownRecord] = await ShopCooldown.findOrCreate({ where: { guildId: interaction.guild.id, userId: interaction.user.id, itemId: shopItem.id }, defaults: { expiresAt: now } });
 
                 if (new Date(cooldownRecord.expiresAt) > now) {
                     const secondsLeft = Math.ceil((new Date(cooldownRecord.expiresAt) - now) / 1000);
@@ -283,7 +260,6 @@ module.exports = async (interaction, client) => {
                     const timeString = minutesLeft > 0 ? `${minutesLeft}m ${secondsLeft % 60}s` : `${secondsLeft}s`;
                     return interaction.reply({ content: `⏳ You are on cooldown for **${shopItem.name}**! Please wait **${timeString}** before purchasing it again.`, flags: 64 });
                 }
-
                 await cooldownRecord.update({ expiresAt: new Date(now.getTime() + shopItem.cooldownSeconds * 1000) });
             }
 
