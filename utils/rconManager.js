@@ -1,9 +1,10 @@
 const WebSocket = require('ws');
-const { GuildConfig, GameServer, UserEconomy, CustomBind, BindCooldown, ActiveBounty, BountyCooldown } = require('../database/db');
+const { GuildConfig, GameServer, UserEconomy, CustomBind, BindCooldown, ActiveBounty, BountyCooldown, HomeTeleportConfig, HomeTeleportCooldown, HomeTeleportLocation } = require('../database/db');
 const { EmbedBuilder } = require('discord.js');
 
 const activeConnections = new Map();
 const adminPosQueue = new Map(); 
+const homeTpPosQueue = new Map(); // Queue specifically for catching home coords after suicide
 
 function registerEventParser(rconMock, emit) {
     rconMock.on('message', (msg) => {
@@ -117,7 +118,7 @@ async function connectRcon(guildId, client, targetServerId = null) {
                 const guild = client ? client.guilds.cache.get(guildId) : null;
 
                 // ==========================================
-                // 1. POSITION INTERCEPTOR (RUST CONSOLE EDITION)
+                // 1. POSITION INTERCEPTOR (ADMIN / SETUP TOOLS)
                 // ==========================================
                 if (adminPosQueue.size > 0) {
                     for (const [adminId, setupData] of adminPosQueue.entries()) {
@@ -144,7 +145,6 @@ async function connectRcon(guildId, client, targetServerId = null) {
                         if (foundPos) {
                             if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
 
-                            // A. CUSTOM BIND
                             if (setupData.type === 'custom_bind') {
                                 try {
                                     const bind = await CustomBind.findByPk(setupData.targetId);
@@ -158,7 +158,6 @@ async function connectRcon(guildId, client, targetServerId = null) {
                                     }
                                 } catch (error) {}
                             }
-                            // B. CUSTOM ZONE
                             else if (setupData.type === 'custom_zone') {
                                 try {
                                     const customZoneHandler = require('../handlers/customZoneHandler');
@@ -170,7 +169,6 @@ async function connectRcon(guildId, client, targetServerId = null) {
                                     }
                                 } catch (error) {}
                             }
-                            // C. AUTO EVENT (Matches your exact unedited autoEventsHandler methods)
                             else if (setupData.type === 'auto_event') {
                                 try {
                                     const autoEventsHandler = require('../handlers/autoEventsHandler');
@@ -189,7 +187,31 @@ async function connectRcon(guildId, client, targetServerId = null) {
                     }
                 }
 
+                // ==========================================
+                // 1.1 HOME TELEPORT RESPAWN SCANNER INTERCEPTOR
+                // ==========================================
+                if (homeTpPosQueue.size > 0) {
+                    for (const [userId, tpData] of homeTpPosQueue.entries()) {
+                        if (msgLower.includes(tpData.inGameName.toLowerCase()) && (msgLower.includes('spawn') || msgLower.includes('teleport') || msgLower.includes('respawn'))) {
+                            const nakedCoordMatch = msg.match(/\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)/);
+                            if (nakedCoordMatch) {
+                                const posX = parseFloat(nakedCoordMatch[1]).toFixed(2);
+                                const posY = parseFloat(nakedCoordMatch[2]).toFixed(2);
+                                const posZ = parseFloat(nakedCoordMatch[3]).toFixed(2);
+
+                                await HomeTeleportLocation.upsert({ guildId, userId, posX, posY, posZ });
+                                if (tpData.timeoutTimer) clearTimeout(tpData.timeoutTimer);
+                                homeTpPosQueue.delete(userId);
+                                await sendRconCommand(guildId, `say "${tpData.inGameName}, your Home location has been successfully anchored to your respawn position!"`, client);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // ==========================================
                 // 2. LIVE GAME FEEDS
+                // ==========================================
                 if (currentConfig && guild) {
                     if (/(giving |spawned |teleport|kick |ban |inventory\.giveto)/i.test(msg)) {
                         if (currentConfig.logAdminChannelId) {
@@ -199,7 +221,9 @@ async function connectRcon(guildId, client, targetServerId = null) {
                     }
                 }
 
+                // ==========================================
                 // 3. KILLFEED & BOUNTIES
+                // ==========================================
                 if ((msgLower.includes('killed') || msgLower.includes('murdered') || msgLower.includes('suicide') || msgLower.includes('died') || msgLower.includes('slain')) && !msg.includes('[Killfeed]')) {
                     await sendRconCommand(guildId, `say "[Killfeed] ${msg}"`, client);
                     let killerDb = null; let victimDb = null;
@@ -217,7 +241,76 @@ async function connectRcon(guildId, client, targetServerId = null) {
                     if (killerDb && victimDb && killerDb.userId !== victimDb.userId) await processBountyLogic(guildId, killerDb, victimDb, client, currentConfig);
                 }
 
-                // 4. CUSTOM BINDS CATCHER
+                // ==========================================
+                // 4. HOME TELEPORT EMOTE INTERCEPTOR ("can i have a key" & "retreat")
+                // ==========================================
+                const hometpConfig = await HomeTeleportConfig.findOne({ where: { guildId } });
+                if (hometpConfig && (msg.includes('d11_quick_chat_combat_slot_') || msgLower.includes('retreat'))) {
+                    const registeredPlayers = await UserEconomy.findAll({ where: { guildId: guildId } });
+                    let matchedPlayer = null;
+                    for (const player of registeredPlayers) {
+                        if (player.inGameName && msgLower.includes(player.inGameName.toLowerCase())) {
+                            matchedPlayer = player;
+                            break;
+                        }
+                    }
+
+                    if (matchedPlayer && client) {
+                        const guildObj = client.guilds.cache.get(guildId);
+                        const memberObj = await guildObj?.members.fetch(matchedPlayer.userId).catch(() => null);
+
+                        if (memberObj) {
+                            // Check Role Requirement
+                            if (hometpConfig.requiredRoleId && !memberObj.roles.cache.has(hometpConfig.requiredRoleId)) {
+                                await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, you lack the required Discord role to use Home Teleport!"`, client);
+                                return;
+                            }
+
+                            // A. SET HOME TRIGGER ("can i have a key" quick-chat slot match)
+                            if (msg.includes('d11_quick_chat_combat_slot_')) {
+                                await sendRconCommand(guildId, `dmg.suicide "${matchedPlayer.inGameName}"`, client);
+                                await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, initialization command received! Kills executed. Respawn at your bag to log home coordinates."`, client);
+                                
+                                if (homeTpPosQueue.has(matchedPlayer.userId)) clearTimeout(homeTpPosQueue.get(matchedPlayer.userId).timeoutTimer);
+                                const timeoutTimer = setTimeout(() => homeTpPosQueue.delete(matchedPlayer.userId), 30000);
+                                homeTpPosQueue.set(matchedPlayer.userId, { userId: matchedPlayer.userId, inGameName: matchedPlayer.inGameName, timeoutTimer });
+                                
+                                // Trigger coordinate tracker
+                                await sendRconCommand(guildId, `printpos "${matchedPlayer.inGameName}"`, client);
+                                return;
+                            }
+
+                            // B. RETREAT TELEPORT TRIGGER
+                            if (msgLower.includes('retreat')) {
+                                const now = new Date();
+                                const [cd] = await HomeTeleportCooldown.findOrCreate({ where: { guildId, userId: matchedPlayer.userId }, defaults: { expiresAt: now } });
+                                
+                                if (new Date(cd.expiresAt) > now) {
+                                    const minsLeft = Math.ceil((new Date(cd.expiresAt) - now) / 60000);
+                                    await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, Home Teleport is on cooldown for another ${minsLeft} minutes!"`, client);
+                                    return;
+                                }
+
+                                const homeLoc = await HomeTeleportLocation.findOne({ where: { guildId, userId: matchedPlayer.userId } });
+                                if (!homeLoc) {
+                                    await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, you have not set a home yet! Use the 'can i have a key' emote first."`, client);
+                                    return;
+                                }
+
+                                const expiryTime = new Date(now.getTime() + hometpConfig.cooldownMinutes * 60000);
+                                await cd.update({ expiresAt: expiryTime });
+
+                                await sendRconCommand(guildId, `global.teleportpos (${homeLoc.posX},${homeLoc.posY},${homeLoc.posZ}) "${matchedPlayer.inGameName}"`, client);
+                                await sendRconCommand(guildId, `say "[Teleport] ${matchedPlayer.inGameName} successfully retreated home!"`, client);
+                                return;
+                            }
+                        }
+                    }
+                }
+
+                // ==========================================
+                // 5. CUSTOM BINDS CATCHER
+                // ==========================================
                 const serverBinds = await CustomBind.findAll({ where: { guildId: guildId } });
                 if (serverBinds.length === 0) return;
                 const registeredPlayers = await UserEconomy.findAll({ where: { guildId: guildId } });

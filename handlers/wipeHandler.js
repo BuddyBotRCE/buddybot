@@ -1,5 +1,5 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { GuildConfig, UserEconomy, PveZone, CustomBind, ShopCooldown, BindCooldown, BountyCooldown } = require('../database/db');
+const { GuildConfig, UserEconomy, PveZone, CustomBind, ShopCooldown, BindCooldown, BountyCooldown, HomeTeleportCooldown, HomeTeleportLocation } = require('../database/db');
 const { sendRconCommand } = require('../utils/rconManager');
 
 module.exports = async (interaction, client) => {
@@ -9,7 +9,7 @@ module.exports = async (interaction, client) => {
         if (interaction.isStringSelectMenu() && interaction.values && interaction.values[0] === 'setup_wipe') {
             const embed = new EmbedBuilder()
                 .setTitle('☢️ Server Wipe Manager')
-                .setDescription('Select how you want to wipe the server databases or reset server cooldowns.\n\n**Full Wipe:** Wipes all economy, stats, zones, teleports, and custom binds.\n**Selective Wipe:** Choose exactly which databases to clear.\n**Clear All Cooldowns:** Resets all player shop, command bind, and bounty cooldown timers instantly.')
+                .setDescription('Select how you want to wipe the server databases or reset server cooldowns.\n\n**Full Wipe:** Wipes all economy, stats, zones, home teleports, and custom binds.\n**Selective Wipe:** Choose exactly which databases to clear.\n**Clear All Cooldowns:** Resets all player shop, command bind, bounty, and home teleport cooldown timers instantly.')
                 .setColor('#e74c3c');
                 
             const row1 = new ActionRowBuilder().addComponents(
@@ -35,7 +35,7 @@ module.exports = async (interaction, client) => {
                     new StringSelectMenuBuilder().setCustomId('select_wipe_custom').setPlaceholder('Select data to wipe...').setMinValues(1).setMaxValues(5).addOptions([
                         { label: 'Economy & Banks', value: 'wipe_econ', emoji: '💰' }, 
                         { label: 'BuddyPass Progress', value: 'wipe_bp', emoji: '⭐' }, 
-                        { label: 'Home Teleports', value: 'wipe_tp', emoji: '🏠' }, 
+                        { label: 'Home Teleports & Locations', value: 'wipe_tp', emoji: '🏠' }, 
                         { label: 'PVE Zones', value: 'wipe_zones', emoji: '🏕️' },
                         { label: 'Custom Binds (Wheel)', value: 'wipe_binds', emoji: '🗣️' }
                     ])
@@ -62,7 +62,8 @@ module.exports = async (interaction, client) => {
                 await ShopCooldown.destroy({ where: { guildId: interaction.guild.id } });
                 await BindCooldown.destroy({ where: { guildId: interaction.guild.id } });
                 await BountyCooldown.destroy({ where: { guildId: interaction.guild.id } });
-                return interaction.reply({ content: `⏳ **All Cooldowns Cleared!** Shop, bind, and bounty cooldown timers have been completely wiped.`, flags: 64 });
+                await HomeTeleportCooldown.destroy({ where: { guildId: interaction.guild.id } });
+                return interaction.reply({ content: `⏳ **All Cooldowns Cleared!** Shop, bind, bounty, and home teleport cooldown timers have been completely wiped.`, flags: 64 });
             }
 
             if (customId === 'modal_wipe_full' || customId.startsWith('modal_wipe_sel_')) {
@@ -78,6 +79,8 @@ module.exports = async (interaction, client) => {
                     await ShopCooldown.destroy({ where: { guildId: interaction.guild.id } });
                     await BindCooldown.destroy({ where: { guildId: interaction.guild.id } });
                     await BountyCooldown.destroy({ where: { guildId: interaction.guild.id } });
+                    await HomeTeleportCooldown.destroy({ where: { guildId: interaction.guild.id } });
+                    await HomeTeleportLocation.destroy({ where: { guildId: interaction.guild.id } });
 
                     updateData = { wallet: 0, xp: 0, level: 1, homeX: null, homeY: null, homeZ: null, autoSupplyEnabled: false, autoEliteEnabled: false, autoTimedEnabled: false, supplySpawnCount: 1, eliteSpawnCount: 1, timedSpawnCount: 1 };
                     for (let i = 1; i <= 10; i++) {
@@ -89,7 +92,11 @@ module.exports = async (interaction, client) => {
                     const sel = customId.replace('modal_wipe_sel_', '').split('-');
                     if (sel.includes('wipe_econ')) updateData.wallet = 0;
                     if (sel.includes('wipe_bp')) { updateData.xp = 0; updateData.level = 1; }
-                    if (sel.includes('wipe_tp')) { updateData.homeX = null; updateData.homeY = null; updateData.homeZ = null; }
+                    if (sel.includes('wipe_tp')) { 
+                        updateData.homeX = null; updateData.homeY = null; updateData.homeZ = null; 
+                        await HomeTeleportLocation.destroy({ where: { guildId: interaction.guild.id } });
+                        await HomeTeleportCooldown.destroy({ where: { guildId: interaction.guild.id } });
+                    }
                     if (sel.includes('wipe_zones')) {
                         const selZones = await PveZone.findAll({ where: { guildId: interaction.guild.id } });
                         for (const z of selZones) { try { await sendRconCommand(interaction.guild.id, `zones.deletecustomzone "${z.zoneName}"`); } catch (e) {} }

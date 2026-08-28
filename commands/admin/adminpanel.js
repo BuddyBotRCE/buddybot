@@ -63,10 +63,11 @@ module.exports = {
                     { label: 'Premium Status & License', value: 'setup_tier', emoji: '⭐' },
                     { label: 'Embeds & Reaction Roles', value: 'setup_embeds_roles', description: 'Announcements, Verifications, & Roles', emoji: '🎨' },
                     { label: 'Giveaways Manager', value: 'setup_giveaways', emoji: '🎉' },
-                    { label: 'Suggestions System', value: 'setup_suggestions', emoji: '💡' }
+                    { label: 'Suggestions System', value: 'setup_suggestions', emoji: '💡' },
+                    { label: 'Home Teleport System', value: 'setup_hometp', description: 'Configure emote retreat teleports', emoji: '🏠' }
                 ])
         );
-
+S
         await interaction.reply({ embeds: [adminEmbed], components: [row1, row2], flags: 64 });
     }
 };
