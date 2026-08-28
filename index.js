@@ -11,8 +11,8 @@ const client = new Client({
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.GuildVoiceStates, // Added for Voice Logs
-        GatewayIntentBits.GuildModeration   // Added for Ban Logs
+        GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.GuildModeration
     ]
 });
 
@@ -71,12 +71,12 @@ app.listen(PORT, () => console.log(`[SYSTEM] Webhook listener running on port ${
 
 // --- START DISCORD LOGGERS ---
 require('./utils/discordLogger')(client);
-require('./events/discordAuditLogger')(client); // <--- ADDED: Boots up joins, leaves, bans, messages, & voice logs!
+require('./events/discordAuditLogger')(client);
 require('./events/aiChatListener')(client);
 
 client.on('messageCreate', async message => require('./events/messageCreate')(message, client));
 
-// Load Slash Commands Recursively (Supports subfolders like admin/ and player/)
+// Load Slash Commands Recursively
 const commandsPath = path.join(__dirname, 'commands');
 function loadCommandsRecursively(dir) {
     if (!fs.existsSync(dir)) return;
@@ -111,7 +111,7 @@ if (fs.existsSync(interactionCreateEvent)) {
     console.log('[SYSTEM] Loaded event: interactionCreate');
 }
 
-// --- INITIALIZE BACKGROUND AUTO-EVENT MANAGER LOOP SAFELY ---
+// --- INITIALIZE BACKGROUND AUTO-EVENT MANAGER ---
 try {
     const { initAutoEventLoop } = require('./utils/autoEventManager');
     if (typeof initAutoEventLoop === 'function') {
@@ -122,6 +122,8 @@ try {
 }
 
 client.once('ready', async () => {
+    require('./events/ready')(client); // Hook into our ready event file
+    
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     const commandData = client.commands.map(cmd => cmd.data.toJSON());
     
@@ -132,13 +134,14 @@ client.once('ready', async () => {
         console.error('[COMMAND SYNC ERROR]', error);
     }
 
-    // --- LIVE RCON STATUS MONITOR LOOP (Runs every 60 seconds) ---
+    // --- LIVE RCON STATUS MONITOR LOOP ---
     setInterval(async () => {
         try {
             const { GuildConfig } = require('./database/db');
             const { sendRconCommand } = require('./utils/rconManager');
+            const { Op } = require('sequelize');
             
-            const configs = await GuildConfig.findAll({ where: { statusChannelId: { [require('sequelize').Op.ne]: null } } });
+            const configs = await GuildConfig.findAll({ where: { statusChannelId: { [Op.ne]: null } } });
             
             for (const config of configs) {
                 const guild = client.guilds.cache.get(config.guildId);
