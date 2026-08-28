@@ -35,7 +35,13 @@ const wipeHandler = require(handlerPath('wipeHandler'));
 
 module.exports = async (interaction, client) => {
     console.log(`[INTERACTION DEBUG] Type: ${interaction.type} | CustomID: ${interaction.customId || 'N/A'} | Command: ${interaction.commandName || 'N/A'}`);
+    
     try {
+        // 🛑 INSTANT DEFER FOR NON-MODAL/NON-COMMAND COMPONENTS TO PREVENT 3S TIMEOUTS
+        if (!interaction.isChatInputCommand() && !interaction.isModalSubmit() && !interaction.replied && !interaction.deferred) {
+            await interaction.deferUpdate().catch(() => {});
+        }
+
         // --- CHAT COMMANDS ---
         if (interaction.isChatInputCommand()) {
             const command = client.commands.get(interaction.commandName);
@@ -156,6 +162,43 @@ module.exports = async (interaction, client) => {
         // 🚦 2. COMPONENT ROUTING STATION (Buttons & Select Menus)
         // ====================================================================
 
+        // 👇 DIRECT ROUTE PLAYER HUB BUTTONS FIRST 👇
+        if (customId === 'hub_clans' || customId.includes('clan') || customId.includes('bank')) {
+            return await clanHandler(interaction, client);
+        }
+
+        if (customId === 'hub_economy_menu' || customId.includes('econ') || customId.includes('hub_deposit') || customId.includes('hub_withdraw')) {
+            return await economyHandler(interaction, client);
+        }
+
+        if (customId === 'hub_shop_menu' || customId === 'hub_shop_browse' || customId === 'hub_shop_pricelist' || customId.startsWith('player_shop_') || customId.includes('shop')) {
+            return await shopHandler(interaction, client);
+        }
+
+        if (customId === 'hub_casino' || customId === 'casino_game_select' || customId.startsWith('modal_play_') || customId.includes('casino')) {
+            return await casinoHandler(interaction, client);
+        }
+
+        if (customId === 'hub_buddypass_view' || customId.startsWith('bp_') || customId.includes('buddypass')) {
+            return await buddyPassHandler(interaction, client);
+        }
+
+        if (customId === 'ticket_create' || customId.startsWith('tk_') || customId.includes('ticket')) {
+            return await ticketHandler(interaction, client);
+        }
+
+        if (customId === 'btn_player_open_suggestion' || customId.startsWith('sug_')) {
+            return await suggestionHandler(interaction, client);
+        }
+
+        if (customId === 'hub_leaderboards' || customId === 'hub_lb_select' || customId.startsWith('lb_refresh_')) {
+            return await adminHandler(interaction, client);
+        }
+
+        if (customId === 'hub_vote_info') {
+            return await interaction.editReply({ content: `🗳️ **Vote & Claim:** Link your vote tracking with your Rust server to automatically reward players with free currency or kits! (Configure via your voting site webhook).`, components: [] }).catch(()=>{});
+        }
+
         // 👇 ROUTE WIPE & COOLDOWN BUTTONS 👇
         if (
             customId === 'btn_wipe_full' || 
@@ -183,18 +226,6 @@ module.exports = async (interaction, client) => {
             return await loggingHandler(interaction, client);
         }
 
-        if (
-            customId.startsWith('sug_') || 
-            customId.startsWith('btn_sug_') || 
-            customId === 'select_sug_channel' || 
-            customId === 'select_sug_role' || 
-            customId === 'btn_player_open_suggestion' ||
-            interaction.isChannelSelectMenu() && customId === 'select_sug_channel' ||
-            interaction.isRoleSelectMenu() && customId === 'select_sug_role'
-        ) {
-            return await suggestionHandler(interaction, client);
-        }
-
         if (customId.startsWith('am_') || customId.startsWith('btn_am_')) {
             return await autoModHandler(interaction, client);
         }
@@ -210,10 +241,6 @@ module.exports = async (interaction, client) => {
             return await reactionRoleHandler(interaction, client);
         }
 
-        if (customId.includes('clan') || customId.includes('bank') || customId.startsWith('btn_clan_') || customId.startsWith('btn_bank_') || customId.startsWith('select_clan_')) {
-            return await clanHandler(interaction, client);
-        }
-
         if (customId.startsWith('btn_emb_') || customId === 'select_emb_target_channel' || customId === 'select_emb_template') {
             return await postEmbedHandler(interaction, client);
         }
@@ -222,41 +249,12 @@ module.exports = async (interaction, client) => {
             return await autoEventsHandler(interaction, client);
         }
 
-        if (
-            customId.includes('econ') || 
-            customId.includes('hub_') || 
-            customId.startsWith('btn_econ_') || 
-            customId === 'btn_admin_give' || 
-            customId === 'btn_admin_take' || 
-            customId === 'select_admin_give_target' || 
-            customId === 'select_admin_take_target' ||
-            interaction.isUserSelectMenu() && (customId.includes('admin_give') || customId.includes('admin_take') || customId.includes('econ'))
-        ) {
-            return await economyHandler(interaction, client);
-        }
-
         if (customId === 'toggle_tier_status') {
             return await premiumHandler(interaction, client);
         }
 
-        if (customId.startsWith('tk_') || customId.startsWith('btn_tk_') || customId.includes('ticket')) {
-            return await ticketHandler(interaction, client);
-        }
-
         if (customId.startsWith('ga_') || customId.includes('giveaway')) {
             return await giveawayHandler(interaction, client);
-        }
-
-        if (customId.includes('shop') || customId.startsWith('buy_item_')) {
-            return await shopHandler(interaction, client);
-        }
-
-        if (customId.startsWith('bp_') || customId.includes('buddypass')) {
-            return await buddyPassHandler(interaction, client);
-        }
-
-        if (customId.includes('casino')) {
-            return await casinoHandler(interaction, client);
         }
 
         if (customId.includes('bounty') || customId.includes('bounties')) {
