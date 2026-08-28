@@ -31,7 +31,7 @@ const postEmbedHandler = require(handlerPath('postEmbedHandler'));
 const customZoneHandler = require(handlerPath('customZoneHandler'));
 const reactionRoleHandler = require(handlerPath('reactionRoleHandler'));
 const autoModHandler = require(handlerPath('autoModHandler'));
-const wipeHandler = require(handlerPath('wipeHandler')); // Ensure wipeHandler is imported
+const wipeHandler = require(handlerPath('wipeHandler')); 
 
 module.exports = async (interaction, client) => {
     console.log(`[INTERACTION DEBUG] Type: ${interaction.type} | CustomID: ${interaction.customId || 'N/A'} | Command: ${interaction.commandName || 'N/A'}`);
@@ -52,6 +52,15 @@ module.exports = async (interaction, client) => {
         if (interaction.isModalSubmit()) {
             if (customId.startsWith('modal_givekit_exec_')) {
                 return await adminHandler(interaction, client);
+            }
+
+            // 👇 ROUTE SHOP MODALS (Multiplier, Custom Items, Quantities) 👇
+            if (
+                customId === 'modal_shop_multiplier' || 
+                customId === 'modal_shop_custom' || 
+                customId.startsWith('modal_buy_qty_')
+            ) {
+                return await shopHandler(interaction, client);
             }
 
             // 👇 ROUTE WIPE & COOLDOWN CLEARANCE MODALS 👇
@@ -118,7 +127,7 @@ module.exports = async (interaction, client) => {
         // ====================================================================
         // 🚦 1. ADMIN MENU ROUTER
         // ====================================================================
-        if (customId === 'admin_menu_select') {
+        if (customId === 'admin_menu_select' || customId === 'admin_menu_select_2') {
             if (selectedValue === 'setup_wipe') return await wipeHandler(interaction, client);
             if (selectedValue === 'setup_autoevents') return await autoEventsHandler(interaction, client);
             if (selectedValue === 'setup_economy') return await economyHandler(interaction, client);
@@ -133,7 +142,6 @@ module.exports = async (interaction, client) => {
             if (selectedValue === 'setup_bounties') return await bountyHandler(interaction, client);
             if (selectedValue === 'setup_kits') return await kitHandler(interaction, client);
             if (selectedValue === 'setup_logging' || selectedValue.includes('log')) return await loggingHandler(interaction, client);
-            if (selectedValue === 'setup_tier') return await premiumHandler(interaction, client);
             if (selectedValue === 'setup_binds') return await bindHandler(interaction, client);
             if (selectedValue === 'setup_postembed' || selectedValue.includes('embed')) return await postEmbedHandler(interaction, client);
             
