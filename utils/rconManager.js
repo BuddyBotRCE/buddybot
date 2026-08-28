@@ -110,9 +110,12 @@ async function connectRcon(guildId, client, targetServerId = null) {
         ws.on('message', async (data) => {
             try {
                 const parsed = JSON.parse(data);
-                if (!parsed || !parsed.Message) return;
-                const msg = parsed.Message;
+                if (!parsed) return;
+                
+                const msg = parsed.Message || '';
+                const username = parsed.Username || '';
                 const msgLower = msg.toLowerCase();
+                const userLower = username.toLowerCase();
 
                 const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
                 const guild = client ? client.guilds.cache.get(guildId) : null;
@@ -133,7 +136,7 @@ async function connectRcon(guildId, client, targetServerId = null) {
                             foundPos = true;
                         }
 
-                        if (!foundPos && msgLower.includes(setupData.inGameName.toLowerCase()) && msgLower.includes('teleport')) {
+                        if (!foundPos && (userLower === setupData.inGameName.toLowerCase() || msgLower.includes(setupData.inGameName.toLowerCase())) && msgLower.includes('teleport')) {
                             const matches = msg.match(/-?\d+(\.\d+)?/g);
                             if (matches && matches.length >= 3) {
                                 const len = matches.length;
@@ -192,7 +195,7 @@ async function connectRcon(guildId, client, targetServerId = null) {
                 // ==========================================
                 if (homeTpPosQueue.size > 0) {
                     for (const [userId, tpData] of homeTpPosQueue.entries()) {
-                        if (msgLower.includes(tpData.inGameName.toLowerCase()) && (msgLower.includes('spawn') || msgLower.includes('teleport') || msgLower.includes('respawn'))) {
+                        if ((userLower === tpData.inGameName.toLowerCase() || msgLower.includes(tpData.inGameName.toLowerCase())) && (msgLower.includes('spawn') || msgLower.includes('teleport') || msgLower.includes('respawn'))) {
                             const nakedCoordMatch = msg.match(/\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)/);
                             if (nakedCoordMatch) {
                                 const posX = parseFloat(nakedCoordMatch[1]).toFixed(2);
@@ -230,8 +233,8 @@ async function connectRcon(guildId, client, targetServerId = null) {
                     const playersList = await UserEconomy.findAll({ where: { guildId: guildId } });
 
                     for (const p of playersList) {
-                        if (p.inGameName && msg.includes(p.inGameName)) {
-                            if (msgLower.includes('killed') && msg.indexOf(p.inGameName) < msg.indexOf('killed')) {
+                        if (p.inGameName && (userLower === p.inGameName.toLowerCase() || msg.includes(p.inGameName))) {
+                            if (msgLower.includes('killed') && (userLower === p.inGameName.toLowerCase() || msg.indexOf(p.inGameName) < msg.indexOf('killed'))) {
                                 await p.update({ pvpKills: (p.pvpKills || 0) + 1 }); killerDb = p; 
                             } else if (msgLower.includes('killed') || msgLower.includes('murdered')) {
                                 await p.update({ deaths: (p.deaths || 0) + 1, currentKillstreak: 0 }); victimDb = p; 
@@ -244,17 +247,12 @@ async function connectRcon(guildId, client, targetServerId = null) {
                 // ==========================================
                 // 4. RUST CONSOLE QUICK-CHAT WHEEL INTERCEPTOR
                 // ==========================================
-                // Debug log to capture whatever raw string your console version outputs
-                if (msgLower.includes('quick') || msgLower.includes('d11') || msgLower.includes('chat') || msgLower.includes('slot') || msgLower.includes('key') || msgLower.includes('retreat')) {
-                    console.log('[RCON QUICK-CHAT DEBUG]:', msg);
-                }
-
-                const hometpConfig = await HomeTeleportConfig.findOne({ where: { guildId } });
-                if (hometpConfig && (msgLower.includes('d11') || msgLower.includes('quick_chat') || msgLower.includes('slot') || msgLower.includes('retreat') || msgLower.includes('key'))) {
+                if (msgLower.includes('d11_quick_chat_') || msgLower.includes('retreat')) {
                     const registeredPlayers = await UserEconomy.findAll({ where: { guildId: guildId } });
                     let matchedPlayer = null;
+
                     for (const player of registeredPlayers) {
-                        if (player.inGameName && msgLower.includes(player.inGameName.toLowerCase())) {
+                        if (player.inGameName && (userLower === player.inGameName.toLowerCase() || msgLower.includes(player.inGameName.toLowerCase()))) {
                             matchedPlayer = player;
                             break;
                         }
@@ -265,48 +263,51 @@ async function connectRcon(guildId, client, targetServerId = null) {
                         const memberObj = await guildObj?.members.fetch(matchedPlayer.userId).catch(() => null);
 
                         if (memberObj) {
-                            // Check Role Requirement
-                            if (hometpConfig.requiredRoleId && !memberObj.roles.cache.has(hometpConfig.requiredRoleId)) {
-                                await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, you lack the required Discord role to use Home Teleport!"`, client);
-                                return;
-                            }
-
-                            // A. SET HOME TRIGGER ("Can I have a key" wheel action)
-                            if (msgLower.includes('key') || msgLower.includes('slot')) {
-                                await sendRconCommand(guildId, `dmg.suicide "${matchedPlayer.inGameName}"`, client);
-                                await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, initialization command received! Respawn at your bag to log home coordinates."`, client);
-                                
-                                if (homeTpPosQueue.has(matchedPlayer.userId)) clearTimeout(homeTpPosQueue.get(matchedPlayer.userId).timeoutTimer);
-                                const timeoutTimer = setTimeout(() => homeTpPosQueue.delete(matchedPlayer.userId), 30000);
-                                homeTpPosQueue.set(matchedPlayer.userId, { userId: matchedPlayer.userId, inGameName: matchedPlayer.inGameName, timeoutTimer });
-                                
-                                await sendRconCommand(guildId, `printpos "${matchedPlayer.inGameName}"`, client);
-                                return;
-                            }
-
-                            // B. RETREAT TELEPORT TRIGGER
-                            if (msgLower.includes('retreat')) {
-                                const now = new Date();
-                                const [cd] = await HomeTeleportCooldown.findOrCreate({ where: { guildId, userId: matchedPlayer.userId }, defaults: { expiresAt: now } });
-                                
-                                if (new Date(cd.expiresAt) > now) {
-                                    const minsLeft = Math.ceil((new Date(cd.expiresAt) - now) / 60000);
-                                    await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, Home Teleport is on cooldown for another ${minsLeft} minutes!"`, client);
+                            const hometpConfig = await HomeTeleportConfig.findOne({ where: { guildId } });
+                            if (hometpConfig) {
+                                // Check Role Requirement
+                                if (hometpConfig.requiredRoleId && !memberObj.roles.cache.has(hometpConfig.requiredRoleId)) {
+                                    await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, you lack the required Discord role to use Home Teleport!"`, client);
                                     return;
                                 }
 
-                                const homeLoc = await HomeTeleportLocation.findOne({ where: { guildId, userId: matchedPlayer.userId } });
-                                if (!homeLoc) {
-                                    await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, you have not set a home yet! Use the quick-chat wheel first."`, client);
+                                // A. SET HOME TRIGGER (Any quick chat wheel selection anchors home)
+                                if (msgLower.includes('d11_quick_chat_')) {
+                                    await sendRconCommand(guildId, `dmg.suicide "${matchedPlayer.inGameName}"`, client);
+                                    await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, home set command received! Respawn at your bag to anchor coordinates."`, client);
+                                    
+                                    if (homeTpPosQueue.has(matchedPlayer.userId)) clearTimeout(homeTpPosQueue.get(matchedPlayer.userId).timeoutTimer);
+                                    const timeoutTimer = setTimeout(() => homeTpPosQueue.delete(matchedPlayer.userId), 30000);
+                                    homeTpPosQueue.set(matchedPlayer.userId, { userId: matchedPlayer.userId, inGameName: matchedPlayer.inGameName, timeoutTimer });
+                                    
+                                    await sendRconCommand(guildId, `printpos "${matchedPlayer.inGameName}"`, client);
                                     return;
                                 }
 
-                                const expiryTime = new Date(now.getTime() + hometpConfig.cooldownMinutes * 60000);
-                                await cd.update({ expiresAt: expiryTime });
+                                // B. RETREAT TELEPORT TRIGGER
+                                if (msgLower.includes('retreat')) {
+                                    const now = new Date();
+                                    const [cd] = await HomeTeleportCooldown.findOrCreate({ where: { guildId, userId: matchedPlayer.userId }, defaults: { expiresAt: now } });
+                                    
+                                    if (new Date(cd.expiresAt) > now) {
+                                        const minsLeft = Math.ceil((new Date(cd.expiresAt) - now) / 60000);
+                                        await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, Home Teleport is on cooldown for another ${minsLeft} minutes!"`, client);
+                                        return;
+                                    }
 
-                                await sendRconCommand(guildId, `global.teleportpos (${homeLoc.posX},${homeLoc.posY},${homeLoc.posZ}) "${matchedPlayer.inGameName}"`, client);
-                                await sendRconCommand(guildId, `say "[Teleport] ${matchedPlayer.inGameName} successfully retreated home!"`, client);
-                                return;
+                                    const homeLoc = await HomeTeleportLocation.findOne({ where: { guildId, userId: matchedPlayer.userId } });
+                                    if (!homeLoc) {
+                                        await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, you have not set a home yet! Use the quick-chat wheel first."`, client);
+                                        return;
+                                    }
+
+                                    const expiryTime = new Date(now.getTime() + hometpConfig.cooldownMinutes * 60000);
+                                    await cd.update({ expiresAt: expiryTime });
+
+                                    await sendRconCommand(guildId, `global.teleportpos (${homeLoc.posX},${homeLoc.posY},${homeLoc.posZ}) "${matchedPlayer.inGameName}"`, client);
+                                    await sendRconCommand(guildId, `say "[Teleport] ${matchedPlayer.inGameName} successfully retreated home!"`, client);
+                                    return;
+                                }
                             }
                         }
                     }
@@ -325,7 +326,7 @@ async function connectRcon(guildId, client, targetServerId = null) {
                     if (msgLower.includes(phrase)) {
                         let matchedPlayer = null;
                         for (const player of registeredPlayers) {
-                            if (player.inGameName && msgLower.includes(player.inGameName.toLowerCase())) { matchedPlayer = player; break; }
+                            if (player.inGameName && (userLower === player.inGameName.toLowerCase() || msgLower.includes(player.inGameName.toLowerCase()))) { matchedPlayer = player; break; }
                         }
                         if (matchedPlayer) {
                             if (bind.cost > 0 && matchedPlayer.wallet < bind.cost) {
