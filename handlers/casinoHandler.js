@@ -1,5 +1,5 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { GuildConfig } = require('../database/db');
+const { GuildConfig, UserEconomy, CasinoCooldown } = require('../database/db');
 
 module.exports = async (interaction, client) => {
     const customId = interaction.customId || '';
