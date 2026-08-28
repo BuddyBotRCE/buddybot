@@ -28,6 +28,7 @@ const postEmbedHandler = require(handlerPath('postEmbedHandler'));
 const customZoneHandler = require(handlerPath('customZoneHandler'));
 const autoModHandler = require(handlerPath('autoModHandler'));
 const wipeHandler = require(handlerPath('wipeHandler')); 
+const homeTpHandler = require(handlerPath('homeTpHandler'));
 
 module.exports = async (interaction, client) => {
     try {
@@ -147,7 +148,8 @@ module.exports = async (interaction, client) => {
             if (selectedValue === 'setup_orp') return await adminHandler(interaction, client);
             if (selectedValue.includes('pve') || selectedValue.includes('zone') || selectedValue === 'setup_custom_zones') return await customZoneHandler(interaction, client);
             if (selectedValue === 'setup_automod') return await autoModHandler(interaction, client);
-            
+            if (selectedValue === 'setup_hometp') return await homeTpHandler(interaction, client);
+
             return await adminHandler(interaction, client);
         }
 
@@ -157,6 +159,10 @@ module.exports = async (interaction, client) => {
         
         // 👇 HANDLE ADMIN & MOD ROLE SELECT MENUS 👇
         if (interaction.isRoleSelectMenu()) {
+
+            if (customId.startsWith('hometp_') || customId === 'modal_hometp_settings') {
+    return await homeTpHandler(interaction, client);
+}
             if (customId === 'select_config_admin_role') {
                 const roleId = interaction.values[0];
                 await GuildConfig.upsert({ guildId: interaction.guild.id, adminRoleId: roleId });
