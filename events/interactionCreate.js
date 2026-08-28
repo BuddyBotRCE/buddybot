@@ -135,7 +135,10 @@ module.exports = async (interaction, client) => {
             if (selectedValue === 'setup_shop') return await shopHandler(interaction, client);
             if (selectedValue === 'setup_clans') return await clanHandler(interaction, client);
             if (selectedValue === 'setup_buddypass') return await buddyPassHandler(interaction, client);
+            
+            // 👇 FIXED CASINO ADMIN SETUP ROUTE 👇
             if (selectedValue === 'setup_minigames') return await casinoHandler(interaction, client);
+            
             if (selectedValue === 'setup_bounties') return await bountyHandler(interaction, client);
             if (selectedValue === 'setup_kits') return await kitHandler(interaction, client);
             if (selectedValue === 'setup_logging' || selectedValue.includes('log')) return await loggingHandler(interaction, client);
@@ -173,7 +176,10 @@ module.exports = async (interaction, client) => {
         if (customId === 'hub_clans' || customId.includes('clan') || customId.includes('bank')) return await clanHandler(interaction, client);
         if (customId === 'hub_economy_menu' || customId === 'hub_balance' || customId === 'hub_daily' || customId === 'hub_deposit' || customId === 'hub_withdraw' || customId.includes('econ') || customId === 'btn_admin_give' || customId === 'btn_admin_take' || customId === 'select_admin_give_target' || customId === 'select_admin_take_target') return await economyHandler(interaction, client);
         if (customId === 'hub_shop_menu' || customId === 'hub_shop_browse' || customId === 'hub_shop_pricelist' || customId.startsWith('player_shop_') || customId.includes('shop')) return await shopHandler(interaction, client);
-        if (customId === 'hub_casino' || customId === 'casino_game_select' || customId.startsWith('modal_play_') || customId.includes('casino')) return await casinoHandler(interaction, client);
+        
+        // 👇 FIXED CASINO COMPONENT ROUTING 👇
+        if (customId === 'hub_casino' || customId === 'casino_game_select' || customId.startsWith('modal_play_') || customId.includes('casino') || customId === 'btn_casino_settings') return await casinoHandler(interaction, client);
+        
         if (customId === 'hub_buddypass_view' || customId.startsWith('bp_') || customId.includes('buddypass')) return await buddyPassHandler(interaction, client);
         if (customId === 'ticket_create' || customId.startsWith('tk_') || customId.includes('ticket')) return await ticketHandler(interaction, client);
         if (customId.includes('sug_') || customId === 'btn_player_open_suggestion') return await suggestionHandler(interaction, client);

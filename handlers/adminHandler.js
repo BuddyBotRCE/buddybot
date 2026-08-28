@@ -360,9 +360,28 @@ module.exports = async (interaction, client) => {
             return interaction.showModal(modal);
         }
         if (customId === 'btn_admin_say') {
-            const modal = new ModalBuilder().setCustomId('modal_admin_say_2ecc71').setTitle('Server Broadcast Message');
-            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('say_msg').setLabel("Type your message").setStyle(TextInputStyle.Paragraph).setRequired(true)));
-            return interaction.showModal(modal);
+            const colorOptions = [
+                { label: 'Red (Hostile / Alert)', value: 'e74c3c', emoji: '🔴' },
+                { label: 'Green (Safe / Success)', value: '2ecc71', emoji: '🟢' },
+                { label: 'Blue (Neutral / Info)', value: '3498db', emoji: '🔵' },
+                { label: 'Yellow (Warning)', value: 'f1c40f', emoji: '🟡' },
+                { label: 'Orange (Event)', value: 'e67e22', emoji: '🟠' },
+                { label: 'Purple (Admin Special)', value: '9b59b6', emoji: '🟣' },
+                { label: 'White (Standard)', value: 'ffffff', emoji: '⚪' }
+            ];
+
+            const row = new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('admin_say_color_select')
+                    .setPlaceholder('🎨 Select text color for server broadcast...')
+                    .addOptions(colorOptions)
+            );
+
+            return interaction.reply({ 
+                content: '📢 **Server Say Broadcast:** First, select the color you want your broadcast text to display in-game:', 
+                components: [row], 
+                flags: 64 
+            });
         }
         if (customId === 'btn_rcon_setup') {
             const modal = new ModalBuilder().setCustomId('modal_setup_rcon').setTitle('Configure RCON Credentials');

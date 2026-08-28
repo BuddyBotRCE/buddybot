@@ -1,29 +1,24 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { GuildConfig, UserEconomy, CasinoCooldown } = require('../database/db');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { GuildConfig } = require('../database/db');
 
 module.exports = async (interaction, client) => {
     const customId = interaction.customId || '';
     const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
 
-    // --- ADMIN SETUP HUB ---
+    // 👇 ADD THIS ADMIN PANEL SETUP ROUTE IF MISSING 👇
     if (customId === 'admin_menu_select' && selectedValue === 'setup_minigames') {
         const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-        const embed = new EmbedBuilder()
-            .setTitle('🎰 Minigames Casino Manager')
-            .setDescription(`Configure global limits for all 20 casino minigames:\n\n• **Max Bet Amount:** ${config?.casinoMaxBet || 1000} Scrap\n• **Game Cooldown:** ${config?.casinoCooldownSeconds || 5} seconds`)
-            .setColor('#e74c3c');
-        
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('btn_casino_settings').setLabel('Configure Casino Limits').setStyle(ButtonStyle.Primary).setEmoji('⚙️')
-        );
-        return interaction.update({ embeds: [embed], components: [row], content: null });
-    }
+        const currency = config?.economyCurrency || 'Scrap';
 
-    if (customId === 'casino_game_select') {
-        const gameKey = selectedValue;
-        const modal = new ModalBuilder().setCustomId(`modal_play_${gameKey}`).setTitle(`Play ${gameKey.toUpperCase()}`);
-        modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('bet').setLabel("Enter Bet Amount").setStyle(TextInputStyle.Short).setRequired(true)));
-        return interaction.showModal(modal);
+        const embed = new EmbedBuilder()
+            .setTitle('🎰 Casino & Minigames Manager')
+            .setDescription(`Configure casino settings, maximum bets, and game cooldowns.\n\n• **Max Bet Limit:** ${config?.casinoMaxBet || 1000} ${currency}\n• **Game Cooldown:** ${config?.casinoCooldownSeconds || 5} seconds`)
+            .setColor('#9b59b6');
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('btn_casino_settings').setLabel('Configure Limits').setStyle(ButtonStyle.Primary).setEmoji('⚙️')
+        );
+        return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
     }
 
     // --- BUTTON CLICKS ---
