@@ -7,8 +7,8 @@ module.exports = async (interaction, client) => {
         const guildId = interaction.guild.id;
         const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
 
-        // 1. Admin Panel Setup View (triggered from Dropdown 2 / Premium Panel)
-        if (customId === 'admin_menu_select' && selectedValue === 'setup_hometp') {
+        // Helper function to build the Home TP Manager panel view
+        async function renderHomeTpPanel() {
             const [config] = await HomeTeleportConfig.findOrCreate({ where: { guildId }, defaults: { cooldownMinutes: 30 } });
             const roleDisplay = config.requiredRoleId ? `<@&${config.requiredRoleId}>` : '`None (Open to all players)`';
 
@@ -24,18 +24,31 @@ module.exports = async (interaction, client) => {
             const row1 = new ActionRowBuilder().addComponents(
                 new RoleSelectMenuBuilder().setCustomId('hometp_select_role').setPlaceholder('Select required role...').setMinValues(1).setMaxValues(1)
             );
+            
             const row2 = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('hometp_btn_settings').setLabel('Set Cooldown Minutes').setStyle(ButtonStyle.Primary).setEmoji('⚙️')
+                new ButtonBuilder().setCustomId('hometp_btn_settings').setLabel('Set Cooldown Minutes').setStyle(ButtonStyle.Primary).setEmoji('⚙️'),
+                new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
             );
 
-            return interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
+            return { embeds: [embed], components: [row1, row2] };
         }
 
-        // 2. Save Role Selection from Role Select Menu
+        // 1. Admin Panel Setup View (triggered from Dropdown 2 / Premium Panel)
+        if (customId === 'admin_menu_select' && selectedValue === 'setup_hometp') {
+            const panelData = await renderHomeTpPanel();
+            return interaction.reply({ ...panelData, flags: 64 });
+        }
+
+        // 2. Save Role Selection and STAY on the panel
         if (interaction.isRoleSelectMenu() && customId === 'hometp_select_role') {
             const roleId = interaction.values[0];
             await HomeTeleportConfig.upsert({ guildId, requiredRoleId: roleId });
-            return interaction.update({ content: `✅ Home Teleport required role successfully set to <@&${roleId}>!`, components: [], embeds: [] });
+            
+            const panelData = await renderHomeTpPanel();
+            return interaction.update({ 
+                content: `✅ Required role successfully updated to <@&${roleId}>!`, 
+                ...panelData 
+            });
         }
 
         // 3. Open Cooldown Settings Modal
@@ -50,12 +63,21 @@ module.exports = async (interaction, client) => {
             return interaction.showModal(modal);
         }
 
-        // 4. Save Modal Settings
+        // 4. Save Modal Settings and refresh the panel
         if (interaction.isModalSubmit() && customId === 'modal_hometp_settings') {
             const cooldownMinutes = parseInt(interaction.fields.getTextInputValue('tp_cooldown')) || 30;
-
             await HomeTeleportConfig.upsert({ guildId, cooldownMinutes });
+
             return interaction.reply({ content: `✅ Home Teleport cooldown updated to **${cooldownMinutes} minutes**!`, flags: 64 });
+        }
+
+        // 5. Back Button handler to return to main admin dashboard
+        if (interaction.isButton() && customId === 'admin_menu_back') {
+            const adminHandler = require('./adminHandler');
+            if (adminHandler && adminHandler.renderMainPanel) {
+                return await adminHandler.renderMainPanel(interaction);
+            }
+            return interaction.update({ content: '🔙 Returned to main dashboard.', components: [], embeds: [] });
         }
 
     } catch (err) {
