@@ -5,9 +5,13 @@ const { RUST_CATEGORIES } = require('../utils/rustCatalog');
 const { Op } = require('sequelize');
 
 module.exports = async (interaction, client) => {
-    // 🛑 INSTANTLY DEFER NON-MODAL INTERACTIONS TO PREVENT 3-SECOND TIMEOUTS
+    // 🛑 ONLY DEFER BUTTONS & SELECT MENUS (EXCLUDE MODAL SUBMISSIONS & MODAL TRIGGERS)
     if (!interaction.isModalSubmit() && !interaction.replied && !interaction.deferred) {
-        await interaction.deferUpdate().catch(() => {});
+        // Only defer if it's not a button or select menu trying to open a modal
+        const customIdCheck = interaction.customId || '';
+        if (customIdCheck !== 'shop_multiplier' && customIdCheck !== 'shop_add_custom' && customIdCheck !== 'player_shop_buy_select') {
+            await interaction.deferUpdate().catch(() => {});
+        }
     }
 
     const customId = interaction.customId || '';
