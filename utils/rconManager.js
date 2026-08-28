@@ -242,10 +242,15 @@ async function connectRcon(guildId, client, targetServerId = null) {
                 }
 
                 // ==========================================
-                // 4. HOME TELEPORT EMOTE INTERCEPTOR ("can i have a key" & "retreat")
+                // 4. RUST CONSOLE QUICK-CHAT WHEEL INTERCEPTOR
                 // ==========================================
+                // Debug log to capture whatever raw string your console version outputs
+                if (msgLower.includes('quick') || msgLower.includes('d11') || msgLower.includes('chat') || msgLower.includes('slot') || msgLower.includes('key') || msgLower.includes('retreat')) {
+                    console.log('[RCON QUICK-CHAT DEBUG]:', msg);
+                }
+
                 const hometpConfig = await HomeTeleportConfig.findOne({ where: { guildId } });
-                if (hometpConfig && (msg.includes('d11_quick_chat_combat_slot_') || msgLower.includes('retreat'))) {
+                if (hometpConfig && (msgLower.includes('d11') || msgLower.includes('quick_chat') || msgLower.includes('slot') || msgLower.includes('retreat') || msgLower.includes('key'))) {
                     const registeredPlayers = await UserEconomy.findAll({ where: { guildId: guildId } });
                     let matchedPlayer = null;
                     for (const player of registeredPlayers) {
@@ -266,16 +271,15 @@ async function connectRcon(guildId, client, targetServerId = null) {
                                 return;
                             }
 
-                            // A. SET HOME TRIGGER ("can i have a key" quick-chat slot match)
-                            if (msg.includes('d11_quick_chat_combat_slot_')) {
+                            // A. SET HOME TRIGGER ("Can I have a key" wheel action)
+                            if (msgLower.includes('key') || msgLower.includes('slot')) {
                                 await sendRconCommand(guildId, `dmg.suicide "${matchedPlayer.inGameName}"`, client);
-                                await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, initialization command received! Kills executed. Respawn at your bag to log home coordinates."`, client);
+                                await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, initialization command received! Respawn at your bag to log home coordinates."`, client);
                                 
                                 if (homeTpPosQueue.has(matchedPlayer.userId)) clearTimeout(homeTpPosQueue.get(matchedPlayer.userId).timeoutTimer);
                                 const timeoutTimer = setTimeout(() => homeTpPosQueue.delete(matchedPlayer.userId), 30000);
                                 homeTpPosQueue.set(matchedPlayer.userId, { userId: matchedPlayer.userId, inGameName: matchedPlayer.inGameName, timeoutTimer });
                                 
-                                // Trigger coordinate tracker
                                 await sendRconCommand(guildId, `printpos "${matchedPlayer.inGameName}"`, client);
                                 return;
                             }
@@ -293,7 +297,7 @@ async function connectRcon(guildId, client, targetServerId = null) {
 
                                 const homeLoc = await HomeTeleportLocation.findOne({ where: { guildId, userId: matchedPlayer.userId } });
                                 if (!homeLoc) {
-                                    await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, you have not set a home yet! Use the 'can i have a key' emote first."`, client);
+                                    await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, you have not set a home yet! Use the quick-chat wheel first."`, client);
                                     return;
                                 }
 

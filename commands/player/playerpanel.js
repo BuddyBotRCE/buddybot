@@ -49,7 +49,8 @@ module.exports = {
         const row1 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('hub_link_account').setLabel('Link Account').setStyle(ButtonStyle.Primary).setEmoji('🔗'),
             new ButtonBuilder().setCustomId('hub_shop_menu').setLabel('Shop').setStyle(ButtonStyle.Secondary).setEmoji('🛒'),
-            new ButtonBuilder().setCustomId('hub_clans').setLabel('Clans').setStyle(ButtonStyle.Success).setEmoji('🛡️')
+            new ButtonBuilder().setCustomId('hub_clans').setLabel('Clans').setStyle(ButtonStyle.Success).setEmoji('🛡️'),
+            new ButtonBuilder().setCustomId('hub_hometp_info').setLabel('My Home').setStyle(ButtonStyle.Secondary).setEmoji('🏠')
         );
 
         const row2 = new ActionRowBuilder().addComponents(
@@ -70,8 +71,7 @@ module.exports = {
                 .setLabel('Make a Suggestion')
                 .setStyle(ButtonStyle.Primary)
                 .setEmoji('💡')
-        );
-
+        );  
         return interaction.reply({ embeds: [embed], components: [row1, row2, row3, suggestionButtonRow], flags: 64 });
     }
 };
