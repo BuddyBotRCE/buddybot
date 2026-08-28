@@ -51,19 +51,21 @@ module.exports = async (interaction, client) => {
             });
         }
 
-        // 3. Open Cooldown Settings Modal
+        // 3. Open Cooldown Settings Modal (Must be the ONLY response to this button)
         if (interaction.isButton() && customId === 'hometp_btn_settings') {
             const config = await HomeTeleportConfig.findOne({ where: { guildId } });
             const modal = new ModalBuilder().setCustomId('modal_hometp_settings').setTitle('Home Teleport Cooldown');
+            
             modal.addComponents(
                 new ActionRowBuilder().addComponents(
                     new TextInputBuilder().setCustomId('tp_cooldown').setLabel('Cooldown (Minutes)').setStyle(TextInputStyle.Short).setValue(`${config?.cooldownMinutes || 30}`).setRequired(true)
                 )
             );
-            return interaction.showModal(modal);
+            
+            return await interaction.showModal(modal);
         }
 
-        // 4. Save Modal Settings & Refresh Panel In-Place
+        // 4. Save Modal Settings & Refresh Panel
         if (interaction.isModalSubmit() && customId === 'modal_hometp_settings') {
             const cooldownMinutes = parseInt(interaction.fields.getTextInputValue('tp_cooldown')) || 30;
             await HomeTeleportConfig.upsert({ guildId, cooldownMinutes });

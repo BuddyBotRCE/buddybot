@@ -60,7 +60,7 @@ module.exports = async (interaction, client) => {
             if (customId === 'modal_ae_settings' || customId.startsWith('modal_ae_')) return await autoEventsHandler(interaction, client);
             if (customId === 'modal_casino_config') return await casinoHandler(interaction, client);
             // Inside events/interactionCreate.js modal router section:
-if (customId === 'modal_hometp_settings' || customId.startsWith('hometp_')) return await homeTpHandler(interaction, client);
+            if (customId === 'modal_hometp_settings' || customId.startsWith('hometp_')) return await homeTpHandler(interaction, client);
             // 👇 COMBINED UNIFIED HUB MODALS 👇
             if (customId.startsWith('modal_emb_') || customId === 'modal_admin_embed' || customId.startsWith('modal_rr_') || customId === 'modal_edit_embed_prompt' || customId === 'modal_attach_rr_prompt') return await postEmbedHandler(interaction, client);
             
