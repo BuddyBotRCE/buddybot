@@ -38,8 +38,9 @@ module.exports = {
                     { label: 'Giveaways Manager', value: 'setup_giveaways', emoji: '🎉' },
                     { label: 'Cross-Chat', value: 'setup_crosschat', emoji: '💬' },
                     { label: 'ORP Manager', value: 'setup_orp', emoji: '🛡️' },
-                    // 👇 NEW COMBINED HUB OPTION 👇
                     { label: 'Embeds & Reaction Roles', value: 'setup_embeds_roles', description: 'Announcements, Verifications, & Roles', emoji: '🎨' },
+                    // 👇 NEW ADMIN & MOD ROLE CONFIG OPTION 👇
+                    { label: 'Admin & Mod Roles', value: 'setup_server_roles', description: 'Set bot administrator & moderator roles', emoji: '👑' },
                     { label: 'AI Integration Setup', value: 'setup_ai', emoji: '🤖' },
                     { label: 'Logging System', value: 'setup_logging', emoji: '📊' },
                     { label: 'Suggestions System', value: 'setup_suggestions', emoji: '💡' },

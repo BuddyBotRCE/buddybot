@@ -85,7 +85,10 @@ const GuildConfig = sequelize.define('GuildConfig', {
     amInviteAction: { type: DataTypes.STRING, defaultValue: 'delete' },
     amWordsEnabled: { type: DataTypes.BOOLEAN, defaultValue: false },
     amWordsList: { type: DataTypes.TEXT, defaultValue: '' },
-    amWordsAction: { type: DataTypes.STRING, defaultValue: 'delete' }
+    amWordsAction: { type: DataTypes.STRING, defaultValue: 'delete' },
+    // Add these inside GuildConfig definition in database/db.js:
+    adminRoleId: { type: DataTypes.STRING, allowNull: true },
+    modRoleId: { type: DataTypes.STRING, allowNull: true },
 });
 
 const GameServer = sequelize.define('GameServer', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, serverName: { type: DataTypes.STRING, allowNull: false }, rconIp: { type: DataTypes.STRING, allowNull: false }, rconPort: { type: DataTypes.STRING, allowNull: false }, rconPassword: { type: DataTypes.STRING, allowNull: false }});

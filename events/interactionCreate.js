@@ -74,6 +74,38 @@ module.exports = async (interaction, client) => {
         // 🚦 1. ADMIN MENU ROUTER
         // ====================================================================
         if (customId === 'admin_menu_select') {
+            // 👇 NEW ADMIN & MOD ROLE CONFIG ROUTER 👇
+            if (selectedValue === 'setup_server_roles') {
+                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+                const adminRoleDisplay = config?.adminRoleId ? `<@&${config.adminRoleId}>` : '`Not Set`';
+                const modRoleDisplay = config?.modRoleId ? `<@&${config.modRoleId}>` : '`Not Set`';
+
+                const embed = new EmbedBuilder()
+                    .setTitle('👑 Admin & Moderator Roles Manager')
+                    .setDescription(`Configure which Discord roles are recognized by BuddyBot as Server Admins and Moderators.\n\n` +
+                        `• **Current Admin Role:** ${adminRoleDisplay}\n` +
+                        `• **Current Mod Role:** ${modRoleDisplay}`)
+                    .setColor('#e67e22');
+
+                const row1 = new ActionRowBuilder().addComponents(
+                    new RoleSelectMenuBuilder()
+                        .setCustomId('select_config_admin_role')
+                        .setPlaceholder('Select Bot Admin Role...')
+                        .setMinValues(1)
+                        .setMaxValues(1)
+                );
+
+                const row2 = new ActionRowBuilder().addComponents(
+                    new RoleSelectMenuBuilder()
+                        .setCustomId('select_config_mod_role')
+                        .setPlaceholder('Select Bot Moderator Role...')
+                        .setMinValues(1)
+                        .setMaxValues(1)
+                );
+
+                return interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
+            }
+
             // 👇 UPDATED UNIFIED HUB SELECTION 👇
             if (selectedValue === 'setup_embeds_roles') {
                 const embed = new EmbedBuilder()
@@ -119,6 +151,20 @@ module.exports = async (interaction, client) => {
         // 🚦 2. COMPONENT ROUTING STATION (Buttons & Select Menus)
         // ====================================================================
         
+        // 👇 HANDLE ADMIN & MOD ROLE SELECT MENUS 👇
+        if (interaction.isRoleSelectMenu()) {
+            if (customId === 'select_config_admin_role') {
+                const roleId = interaction.values[0];
+                await GuildConfig.upsert({ guildId: interaction.guild.id, adminRoleId: roleId });
+                return interaction.update({ content: `✅ Bot **Admin Role** successfully set to <@&${roleId}>!`, components: [] });
+            }
+            if (customId === 'select_config_mod_role') {
+                const roleId = interaction.values[0];
+                await GuildConfig.upsert({ guildId: interaction.guild.id, modRoleId: roleId });
+                return interaction.update({ content: `✅ Bot **Moderator Role** successfully set to <@&${roleId}>!`, components: [] });
+            }
+        }
+
         // 👇 COMBINED UNIFIED EMBED/RR ROUTING 👇
         if (customId === 'unified_embed_select' || customId.startsWith('btn_emb_') || customId.startsWith('select_emb_') || customId.startsWith('rr_') || customId.startsWith('select_rr_') || customId.startsWith('btn_rr_')) {
             return await postEmbedHandler(interaction, client);
@@ -134,7 +180,7 @@ module.exports = async (interaction, client) => {
         if (customId === 'hub_leaderboards' || customId === 'hub_lb_select' || customId.startsWith('lb_refresh_')) return await adminHandler(interaction, client);
         if (customId === 'hub_vote_info') return await interaction.reply({ content: `🗳️ **Vote & Claim:** Link your vote tracking with your Rust server to automatically reward players with free currency or kits! (Configure via your voting site webhook).`, components: [], flags: 64 }).catch(()=>{});
         if (customId === 'btn_wipe_full' || customId === 'btn_wipe_selective' || customId === 'btn_wipe_cooldowns' || customId === 'select_wipe_custom') return await wipeHandler(interaction, client);
-        if (customId === 'btn_admin_kit' || customId.startsWith('ak_panel_') || customId === 'ak_panel_kit_select' || customId === 'admin_kit_choice_select' || customId.startsWith('admin_kit_target_') || customId === 'admin_kit_target_select' || customId === 'hub_link_account' || customId === 'select_link_server_target') return await adminHandler(interaction, client);
+        if (customId === 'btn_admin_kit' || customId.startsWith('ak_panel_') || customId === 'ak_panel_kit_select' || customId === 'admin_kit_choice_select' || customId.startsWith('admin_kit_target_') || customId.startsWith('admin_kit_target_select' ) || customId === 'hub_link_account' || customId === 'select_link_server_target') return await adminHandler(interaction, client);
         if (customId === 'toggle_tier_status' || customId === 'btn_manage_stripe' || customId === 'btn_transfer_license' || customId === 'btn_open_verify_modal') return await premiumHandler(interaction, client);
         if (customId.startsWith('btn_log_') || customId.startsWith('select_log_chan_')) return await loggingHandler(interaction, client);
         if (customId.startsWith('am_') || customId.startsWith('btn_am_')) return await autoModHandler(interaction, client);
