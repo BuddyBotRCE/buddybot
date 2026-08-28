@@ -225,24 +225,51 @@ async function connectRcon(guildId, client, targetServerId = null) {
                 }
 
                 // ==========================================
-                // 3. KILLFEED & BOUNTIES
-                // ==========================================
-                if ((msgLower.includes('killed') || msgLower.includes('murdered') || msgLower.includes('suicide') || msgLower.includes('died') || msgLower.includes('slain')) && !msg.includes('[Killfeed]')) {
-                    await sendRconCommand(guildId, `say "[Killfeed] ${msg}"`, client);
-                    let killerDb = null; let victimDb = null;
-                    const playersList = await UserEconomy.findAll({ where: { guildId: guildId } });
+// 3. KILLFEED, BOUNTIES & KILL REWARDS
+// ==========================================
+if ((msgLower.includes('killed') || msgLower.includes('murdered') || msgLower.includes('suicide') || msgLower.includes('died') || msgLower.includes('slain')) && !msg.includes('[Killfeed]')) {
+    await sendRconCommand(guildId, `say "[Killfeed] ${msg}"`, client);
+    
+    let killerDb = null; 
+    let victimDb = null;
+    const currency = currentConfig?.economyCurrency || 'Scrap';
+    const playersList = await UserEconomy.findAll({ where: { guildId: guildId } });
 
-                    for (const p of playersList) {
-                        if (p.inGameName && (userLower === p.inGameName.toLowerCase() || msg.includes(p.inGameName))) {
-                            if (msgLower.includes('killed') && (userLower === p.inGameName.toLowerCase() || msg.indexOf(p.inGameName) < msg.indexOf('killed'))) {
-                                await p.update({ pvpKills: (p.pvpKills || 0) + 1 }); killerDb = p; 
-                            } else if (msgLower.includes('killed') || msgLower.includes('murdered')) {
-                                await p.update({ deaths: (p.deaths || 0) + 1, currentKillstreak: 0 }); victimDb = p; 
-                            }
-                        }
-                    }
-                    if (killerDb && victimDb && killerDb.userId !== victimDb.userId) await processBountyLogic(guildId, killerDb, victimDb, client, currentConfig);
+    // Check if a player killed a Scientist NPC
+    if (msgLower.includes('scientist') && (msgLower.includes('killed') || msgLower.includes('murdered'))) {
+        for (const p of playersList) {
+            if (p.inGameName && msg.indexOf(p.inGameName) < msg.indexOf('killed') && msg.indexOf(p.inGameName) !== -1) {
+                killerDb = p;
+                break;
+            }
+        }
+        if (killerDb) {
+            const reward = currentConfig?.scientistKillReward || 10;
+            await killerDb.update({ wallet: (killerDb.wallet || 0) + reward });
+            await sendRconCommand(guildId, `say "${killerDb.inGameName} earned +${reward} ${currency} for killing a Scientist!"`, client);
+        }
+    } else {
+        // Standard Player vs Player kill tracking
+        for (const p of playersList) {
+            if (p.inGameName && msg.includes(p.inGameName)) {
+                if (msgLower.includes('killed') && msg.indexOf(p.inGameName) < msg.indexOf('killed')) {
+                    await p.update({ pvpKills: (p.pvpKills || 0) + 1 }); 
+                    killerDb = p; 
+                } else if (msgLower.includes('killed') || msgLower.includes('murdered')) {
+                    await p.update({ deaths: (p.deaths || 0) + 1, currentKillstreak: 0 }); 
+                    victimDb = p; 
                 }
+            }
+        }
+
+        if (killerDb && victimDb && killerDb.userId !== victimDb.userId) {
+            const reward = currentConfig?.playerKillReward || 50;
+            await killerDb.update({ wallet: (killerDb.wallet || 0) + reward });
+            await sendRconCommand(guildId, `say "${killerDb.inGameName} earned +${reward} ${currency} for eliminating ${victimDb.inGameName}!"`, client);
+            await processBountyLogic(guildId, killerDb, victimDb, client, currentConfig);
+        }
+    }
+}
 
                 // ==========================================
 // 4. RUST CONSOLE QUICK-CHAT WHEEL INTERCEPTOR

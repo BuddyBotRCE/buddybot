@@ -5,29 +5,63 @@ module.exports = async (interaction, client) => {
     const customId = interaction.customId;
     const value = interaction.isStringSelectMenu() ? interaction.values[0] : null;
 
+    // ==========================================
+    // 1. ADMIN ECONOMY SETUP PANEL
+    // ==========================================
     if (customId === 'admin_menu_select' && value === 'setup_economy') {
         const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
         const currencyName = config?.economyCurrency || 'Scrap';
 
         const embed = new EmbedBuilder()
             .setTitle('💰 Economy Manager')
-            .setDescription(`Manage currency names, interest rates, and individual player balances.\n\n• **Current Currency Name:** \`${currencyName}\`\n• **Bank Interest Rate:** \`${config?.bankInterestRate || 0}%\` every \`${config?.bankInterestHours || 24}\` hours`)
+            .setDescription(`Manage currency names, interest rates, kill rewards, and individual player balances.\n\n` +
+                `• **Current Currency Name:** \`${currencyName}\`\n` +
+                `• **Bank Interest Rate:** \`${config?.bankInterestRate || 0}%\` every \`${config?.bankInterestHours || 24}\` hours\n` +
+                `• **Scientist Kill Reward:** \`${config?.scientistKillReward ?? 10}\` ${currencyName}\n` +
+                `• **Player Kill Reward:** \`${config?.playerKillReward ?? 50}\` ${currencyName}`)
             .setColor('#f1c40f');
             
-        const row = new ActionRowBuilder().addComponents(
+        const row1 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('btn_econ_name').setLabel('Set Currency Name').setStyle(ButtonStyle.Secondary).setEmoji('🏷️'),
+            new ButtonBuilder().setCustomId('btn_econ_interest').setLabel('Set Bank Interest').setStyle(ButtonStyle.Primary).setEmoji('📈'),
             new ButtonBuilder().setCustomId('btn_admin_give').setLabel('Give Currency').setStyle(ButtonStyle.Success).setEmoji('➕'),
-            new ButtonBuilder().setCustomId('btn_admin_take').setLabel('Take Currency').setStyle(ButtonStyle.Danger).setEmoji('➖'),
-            new ButtonBuilder().setCustomId('btn_econ_interest').setLabel('Set Bank Interest').setStyle(ButtonStyle.Primary).setEmoji('📈')
+            new ButtonBuilder().setCustomId('btn_admin_take').setLabel('Take Currency').setStyle(ButtonStyle.Danger).setEmoji('➖')
         );
-        return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+
+        const row2 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('btn_econ_scientist_reward').setLabel('Scientist Reward').setStyle(ButtonStyle.Primary).setEmoji('🧪'),
+            new ButtonBuilder().setCustomId('btn_econ_player_reward').setLabel('Player Kill Reward').setStyle(ButtonStyle.Danger).setEmoji('⚔️')
+        );
+
+        return interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
     }
 
+    // ==========================================
+    // 2. BUTTON HANDLERS
+    // ==========================================
     if (interaction.isButton()) {
         if (customId === 'btn_econ_name') {
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
             const modal = new ModalBuilder().setCustomId('modal_setup_economy').setTitle('Configure Currency');
             modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('currency_name').setLabel("Currency Name (e.g. Scrap)").setStyle(TextInputStyle.Short).setValue(config?.economyCurrency || 'Scrap').setRequired(true)));
+            return interaction.showModal(modal);
+        }
+
+        if (customId === 'btn_econ_scientist_reward') {
+            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+            const modal = new ModalBuilder().setCustomId('modal_econ_scientist_reward').setTitle('Scientist Kill Reward');
+            modal.addComponents(new ActionRowBuilder().addComponents(
+                new TextInputBuilder().setCustomId('reward_amount').setLabel("Reward per Scientist Kill").setStyle(TextInputStyle.Short).setValue(`${config?.scientistKillReward ?? 10}`).setRequired(true)
+            ));
+            return interaction.showModal(modal);
+        }
+
+        if (customId === 'btn_econ_player_reward') {
+            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+            const modal = new ModalBuilder().setCustomId('modal_econ_player_reward').setTitle('Player Kill Reward');
+            modal.addComponents(new ActionRowBuilder().addComponents(
+                new TextInputBuilder().setCustomId('reward_amount').setLabel("Reward per Player Kill").setStyle(TextInputStyle.Short).setValue(`${config?.playerKillReward ?? 50}`).setRequired(true)
+            ));
             return interaction.showModal(modal);
         }
 
@@ -99,6 +133,9 @@ module.exports = async (interaction, client) => {
         }
     }
 
+    // ==========================================
+    // 3. USER SELECT MENUS
+    // ==========================================
     if (interaction.isUserSelectMenu()) {
         if (customId === 'select_admin_give_target') {
             const targetUserId = interaction.values[0];
@@ -118,11 +155,28 @@ module.exports = async (interaction, client) => {
         }
     }
 
+    // ==========================================
+    // 4. MODAL SUBMISSIONS
+    // ==========================================
     if (interaction.isModalSubmit()) {
         if (customId === 'modal_setup_economy') {
             const newName = interaction.fields.getTextInputValue('currency_name').trim();
             await GuildConfig.upsert({ guildId: interaction.guild.id, economyCurrency: newName });
             return interaction.reply({ content: `✅ Currency name successfully updated to **${newName}**!`, flags: 64 });
+        }
+
+        if (customId === 'modal_econ_scientist_reward') {
+            const amount = parseInt(interaction.fields.getTextInputValue('reward_amount'));
+            const finalAmount = isNaN(amount) || amount < 0 ? 0 : amount;
+            await GuildConfig.upsert({ guildId: interaction.guild.id, scientistKillReward: finalAmount });
+            return interaction.reply({ content: `✅ Scientist Kill Reward updated to **${finalAmount}** currency!`, flags: 64 });
+        }
+
+        if (customId === 'modal_econ_player_reward') {
+            const amount = parseInt(interaction.fields.getTextInputValue('reward_amount'));
+            const finalAmount = isNaN(amount) || amount < 0 ? 0 : amount;
+            await GuildConfig.upsert({ guildId: interaction.guild.id, playerKillReward: finalAmount });
+            return interaction.reply({ content: `✅ Player Kill Reward updated to **${finalAmount}** currency!`, flags: 64 });
         }
 
         if (customId === 'modal_econ_interest') {

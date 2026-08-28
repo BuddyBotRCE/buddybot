@@ -88,6 +88,9 @@ const GuildConfig = sequelize.define('GuildConfig', {
     amWordsAction: { type: DataTypes.STRING, defaultValue: 'delete' },
     adminRoleId: { type: DataTypes.STRING, allowNull: true },
     modRoleId: { type: DataTypes.STRING, allowNull: true },
+    // Inside your GuildConfig definition in database/db.js:
+    scientistKillReward: { type: DataTypes.INTEGER, defaultValue: 10 },
+    playerKillReward: { type: DataTypes.INTEGER, defaultValue: 50 },
 });
 
 const GameServer = sequelize.define('GameServer', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, serverName: { type: DataTypes.STRING, allowNull: false }, rconIp: { type: DataTypes.STRING, allowNull: false }, rconPort: { type: DataTypes.STRING, allowNull: false }, rconPassword: { type: DataTypes.STRING, allowNull: false }});
