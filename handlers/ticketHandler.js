@@ -6,32 +6,28 @@ module.exports = async (interaction, client) => {
         const customId = interaction.customId || '';
         const guildId = interaction.guild.id;
 
-        // ====================================================================
-        // 1. ADMIN SETUP PANEL ROUTER
-        // ====================================================================
+        // 1. Admin setup panel trigger
         if (customId === 'admin_menu_select' && interaction.isStringSelectMenu() && interaction.values[0] === 'setup_tickets') {
             const config = await GuildConfig.findOne({ where: { guildId } });
-            const catDisplay = config?.ticketCategoryId ? `<#${config.ticketCategoryId}>` : '`Not Set`';
+            const catDisplay = config?.ticketCategory ? `<#${config.ticketCategory}>` : '`Not Set`';
 
             const embed = new EmbedBuilder()
                 .setTitle('🎫 Ticket System Manager')
-                .setDescription(`Configure your support ticket system.\n\n• **Support Category:** ${catDisplay}`)
+                .setDescription(`Configure support tickets for your players.\n\n• **Support Category:** ${catDisplay}`)
                 .setColor('#3498db');
 
             const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('btn_tk_setcat').setLabel('Set Ticket Category').setStyle(ButtonStyle.Primary).setEmoji('📂')
+                new ButtonBuilder().setCustomId('btn_tk_setcat').setLabel('Set Category').setStyle(ButtonStyle.Primary).setEmoji('📂')
             );
 
             return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
         }
 
-        // ====================================================================
-        // 2. ADMIN CATEGORY SELECT BUTTON & HANDLERS
-        // ====================================================================
+        // 2. Set category button
         if (interaction.isButton() && customId === 'btn_tk_setcat') {
             const embed = new EmbedBuilder()
                 .setTitle('📂 Select Ticket Category')
-                .setDescription('Please select the Discord category where new support tickets should be created.')
+                .setDescription('Please select the Discord category where new support tickets will be spawned.')
                 .setColor('#3498db');
 
             const row = new ActionRowBuilder().addComponents(
@@ -48,82 +44,45 @@ module.exports = async (interaction, client) => {
             return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
         }
 
-        // Catch the custom category select menu response
+        // 3. Save selected category
         if (interaction.isChannelSelectMenu() && customId === 'select_tk_category') {
             const categoryId = interaction.values[0];
-            // Save to BOTH common column names to prevent future mismatch errors
-            await GuildConfig.upsert({ 
-                guildId, 
-                ticketCategoryId: categoryId,
-                ticketCategory: categoryId 
-            });
-
-            return interaction.update({ 
-                content: `✅ Support ticket category successfully set to <#${categoryId}>!`, 
-                components: [], 
-                embeds: [] 
-            });
+            await GuildConfig.upsert({ guildId, ticketCategory: categoryId });
+            return interaction.update({ content: `✅ Ticket category successfully set to <#${categoryId}>!`, components: [], embeds: [] });
         }
 
-        // ====================================================================
-        // 3. PLAYER PANEL / BUTTON: CREATE TICKET
-        // ====================================================================
-        if (customId === 'ticket_create' || customId === 'hub_ticket_create' || customId === 'btn_player_create_ticket') {
+        // 4. Player create ticket
+        if (customId === 'ticket_create') {
             const config = await GuildConfig.findOne({ where: { guildId } });
-            
-            // Check both properties to ensure it passes even if one was blank
-            const categoryId = config?.ticketCategoryId || config?.ticketCategory;
-
-            if (!categoryId) {
-                return interaction.reply({ 
-                    content: '❌ **Ticket System Error:** The support ticket category has not been configured by an administrator yet!', 
-                    flags: 64 
-                });
+            if (!config || !config.ticketCategory) {
+                return interaction.reply({ content: '❌ **Ticket System Error:** The support ticket system needs to be set up by an admin first!', flags: 64 });
             }
 
             const guild = interaction.guild;
-            const category = guild.channels.cache.get(categoryId);
-
+            const category = guild.channels.cache.get(config.ticketCategory);
             if (!category) {
-                return interaction.reply({ 
-                    content: '❌ **Ticket System Error:** The configured ticket category no longer exists on this server. Please ask an admin to re-configure it.', 
-                    flags: 64 
-                });
+                return interaction.reply({ content: '❌ **Ticket System Error:** The configured ticket category no longer exists.', flags: 64 });
             }
 
-            // Check if user already has an active ticket channel
             const existingChannel = guild.channels.cache.find(c => c.name === `ticket-${interaction.user.username.toLowerCase()}`);
             if (existingChannel) {
-                return interaction.reply({ 
-                    content: `❌ You already have an open ticket: ${existingChannel}`, 
-                    flags: 64 
-                });
+                return interaction.reply({ content: `❌ You already have an open ticket: ${existingChannel}`, flags: 64 });
             }
 
-            // Create private ticket channel
             const ticketChannel = await guild.channels.create({
                 name: `ticket-${interaction.user.username}`,
                 type: ChannelType.GuildText,
                 parent: category.id,
                 permissionOverwrites: [
-                    {
-                        id: guild.roles.everyone.id,
-                        deny: [PermissionsBitField.Flags.ViewChannel],
-                    },
-                    {
-                        id: interaction.user.id,
-                        allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory],
-                    },
-                    {
-                        id: client.user.id,
-                        allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageChannels],
-                    }
+                    { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+                    { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] },
+                    { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageChannels] }
                 ]
             });
 
             const ticketEmbed = new EmbedBuilder()
                 .setTitle(`🎫 Support Ticket — ${interaction.user.tag}`)
-                .setDescription('Welcome! Describe your issue or question below. Support staff will be with you shortly.')
+                .setDescription('Welcome! Describe your issue below and staff will assist you shortly.')
                 .setColor('#2ecc71')
                 .setTimestamp();
 
@@ -132,16 +91,10 @@ module.exports = async (interaction, client) => {
             );
 
             await ticketChannel.send({ content: `<@${interaction.user.id}>`, embeds: [ticketEmbed], components: [closeRow] });
-
-            return interaction.reply({ 
-                content: `✅ Your ticket has been created successfully! Head over to ${ticketChannel}.`, 
-                flags: 64 
-            });
+            return interaction.reply({ content: `✅ Your ticket has been created! Head over to ${ticketChannel}.`, flags: 64 });
         }
 
-        // ====================================================================
-        // 4. CLOSE TICKET BUTTON
-        // ====================================================================
+        // 5. Close ticket
         if (customId === 'tk_close') {
             await interaction.reply({ content: '🔒 Closing this ticket in 5 seconds...', flags: 64 });
             setTimeout(() => {
@@ -150,7 +103,7 @@ module.exports = async (interaction, client) => {
         }
 
     } catch (error) {
-        console.error('[TICKET HANDLER ERROR]', error);
+        console.error('[TICKET ERROR]', error);
         if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
             await interaction.reply({ content: '❌ An error occurred processing your ticket request.', flags: 64 }).catch(() => {});
         }
