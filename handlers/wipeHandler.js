@@ -1,8 +1,13 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { GuildConfig, UserEconomy, PveZone, CustomBind } = require('../database/db');
+const { GuildConfig, UserEconomy, PveZone, CustomBind, ShopCooldown, BindCooldown, BountyCooldown } = require('../database/db');
 const { sendRconCommand } = require('../utils/rconManager');
 
 module.exports = async (interaction, client) => {
+    // 🛑 INSTANTLY DEFER NON-MODAL INTERACTIONS TO PREVENT 3-SECOND TIMEOUTS
+    if (!interaction.isModalSubmit() && !interaction.replied && !interaction.deferred) {
+        await interaction.deferUpdate().catch(() => {});
+    }
+
     const customId = interaction.customId || '';
 
     try {
@@ -10,14 +15,19 @@ module.exports = async (interaction, client) => {
         if (interaction.isStringSelectMenu() && interaction.values && interaction.values[0] === 'setup_wipe') {
             const embed = new EmbedBuilder()
                 .setTitle('☢️ Server Wipe Manager')
-                .setDescription('Select how you want to wipe the server databases.\n\n**Full Wipe:** Wipes all economy, stats, zones, teleports, and custom binds.\n**Selective Wipe:** Choose exactly which databases to clear.')
+                .setDescription('Select how you want to wipe the server databases or reset server cooldowns.\n\n**Full Wipe:** Wipes all economy, stats, zones, teleports, and custom binds.\n**Selective Wipe:** Choose exactly which databases to clear.\n**Clear All Cooldowns:** Resets all player shop, command bind, and bounty cooldown timers instantly.')
                 .setColor('#e74c3c');
                 
-            const row = new ActionRowBuilder().addComponents(
+            const row1 = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('btn_wipe_full').setLabel('Full Wipe').setStyle(ButtonStyle.Danger).setEmoji('☢️'), 
                 new ButtonBuilder().setCustomId('btn_wipe_selective').setLabel('Selective Wipe').setStyle(ButtonStyle.Primary).setEmoji('🗂️')
             );
-            return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+
+            const row2 = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('btn_wipe_cooldowns').setLabel('Clear All Cooldowns').setStyle(ButtonStyle.Secondary).setEmoji('⏳')
+            );
+
+            return interaction.editReply({ embeds: [embed], components: [row1, row2], content: null });
         }
 
         // 2. Button Handlers
@@ -37,7 +47,12 @@ module.exports = async (interaction, client) => {
                         { label: 'Custom Binds (Wheel)', value: 'wipe_binds', emoji: '🗣️' }
                     ])
                 );
-                return interaction.reply({ content: '🗑️ **Selective Wipe:** Choose exactly which databases to reset below:', components: [row], flags: 64 });
+                return interaction.editReply({ content: '🗑️ **Selective Wipe:** Choose exactly which databases to reset below:', components: [row] });
+            }
+            if (customId === 'btn_wipe_cooldowns') {
+                const modal = new ModalBuilder().setCustomId('modal_wipe_cooldowns').setTitle('Confirm Clear All Cooldowns');
+                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('confirm_text').setLabel('Type COOLDOWNS to reset all timers').setStyle(TextInputStyle.Short).setRequired(true)));
+                return interaction.showModal(modal);
             }
         }
 
@@ -51,6 +66,19 @@ module.exports = async (interaction, client) => {
 
         // 4. Modal Submit Handlers (The Actual Wipe Execution)
         if (interaction.isModalSubmit()) {
+            if (customId === 'modal_wipe_cooldowns') {
+                if (interaction.fields.getTextInputValue('confirm_text') !== 'COOLDOWNS') {
+                    return interaction.reply({ content: '❌ Action Cancelled. You must type `COOLDOWNS`.', flags: 64 });
+                }
+
+                // Clear Every Cooldown Table in the Bot
+                await ShopCooldown.destroy({ where: { guildId: interaction.guild.id } });
+                await BindCooldown.destroy({ where: { guildId: interaction.guild.id } });
+                await BountyCooldown.destroy({ where: { guildId: interaction.guild.id } });
+
+                return interaction.reply({ content: `⏳ **All Cooldowns Cleared!** Shop, bind, and bounty cooldown timers have been completely wiped.`, flags: 64 });
+            }
+
             if (customId === 'modal_wipe_full' || customId.startsWith('modal_wipe_sel_')) {
                 if (interaction.fields.getTextInputValue('confirm_text') !== 'WIPE') return interaction.reply({ content: '❌ Wipe Cancelled.', flags: 64 });
                 
@@ -64,6 +92,11 @@ module.exports = async (interaction, client) => {
                     
                     // Custom Binds
                     await CustomBind.destroy({ where: { guildId: interaction.guild.id } });
+
+                    // Clear All Cooldowns on Full Wipe too
+                    await ShopCooldown.destroy({ where: { guildId: interaction.guild.id } });
+                    await BindCooldown.destroy({ where: { guildId: interaction.guild.id } });
+                    await BountyCooldown.destroy({ where: { guildId: interaction.guild.id } });
 
                     updateData = { wallet: 0, xp: 0, level: 1, homeX: null, homeY: null, homeZ: null, autoSupplyEnabled: false, autoEliteEnabled: false, autoTimedEnabled: false, supplySpawnCount: 1, eliteSpawnCount: 1, timedSpawnCount: 1 };
                     for (let i = 1; i <= 10; i++) {
@@ -89,13 +122,15 @@ module.exports = async (interaction, client) => {
                 await GuildConfig.update(updateData, { where: { guildId: interaction.guild.id } });
                 await UserEconomy.update(updateData, { where: { guildId: interaction.guild.id } });
                 
-                return interaction.reply({ content: `☢️ **Server WIPED successfully!** Requested databases have been cleared.`, flags: 64 });
+                return interaction.reply({ content: `☢️ **Server WIPED successfully!** Requested databases and cooldowns have been cleared.`, flags: 64 });
             }
         }
     } catch (err) {
         console.error('[WIPE HANDLER ERROR]', err);
-        if (interaction.isRepliable() && !interaction.replied) {
+        if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
             await interaction.reply({ content: '❌ An error occurred while executing the wipe.', flags: 64 });
+        } else {
+            await interaction.followUp({ content: '❌ An error occurred while executing the wipe.', flags: 64 }).catch(() => {});
         }
     }
 };

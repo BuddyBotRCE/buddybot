@@ -138,7 +138,7 @@ module.exports = async (interaction, client) => {
         return await wipeHandler(interaction, client);
     }
 
-    if (customId === 'admin_menu_select') {
+    if (customId === 'admin_menu_select' || customId === 'admin_menu_select_2') {
         await interaction.channel.messages.fetch({ limit: 10 }).then(messages => {
             const prompts = messages.filter(m => m.content.includes('Grabbing coordinates') || m.content.includes('Stand at your desired'));
             for (const [_, msg] of prompts) { msg.delete().catch(() => {}); }

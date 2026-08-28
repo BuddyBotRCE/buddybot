@@ -2,6 +2,11 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelect
 const { GuildConfig, UserEconomy, CasinoCooldown } = require('../database/db');
 
 module.exports = async (interaction, client) => {
+    // 🛑 INSTANTLY DEFER NON-MODAL INTERACTIONS TO PREVENT 3-SECOND TIMEOUTS
+    if (!interaction.isModalSubmit() && !interaction.replied && !interaction.deferred) {
+        await interaction.deferUpdate().catch(() => {});
+    }
+
     const customId = interaction.customId || '';
     const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
 
@@ -16,7 +21,7 @@ module.exports = async (interaction, client) => {
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('btn_casino_settings').setLabel('Configure Casino Limits').setStyle(ButtonStyle.Primary).setEmoji('⚙️')
         );
-        return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+        return interaction.editReply({ embeds: [embed], components: [row], content: null });
     }
 
     if (customId === 'casino_game_select') {
@@ -70,7 +75,7 @@ module.exports = async (interaction, client) => {
             );
 
             const footerText = isPremium ? '⭐ **Premium Tier Active:** All 20 minigames are unlocked!' : '💡 **Free Tier:** Upgrade to Premium in the Admin Panel to unlock all 20 minigames!';
-            return interaction.reply({ content: `🎰 **Server Casino Hub:**\n${footerText}`, components: [row], flags: 64 });
+            return interaction.editReply({ content: `🎰 **Server Casino Hub:**\n${footerText}`, components: [row] });
         }
     }
 

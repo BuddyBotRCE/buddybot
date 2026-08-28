@@ -21,33 +21,33 @@ function registerEventParser(rconMock, emit) {
 async function connectRcon(guildId, client, targetServerId = null) {
     let rconIp, rconPort, rconPassword;
 
-    // 1. If a specific multi-server ID was provided, use its credentials
+    // 1. If a specific multi-server ID was provided, use its credentials first
     if (targetServerId) {
         const specificServer = await GameServer.findByPk(targetServerId);
-        if (specificServer) {
+        if (specificServer && specificServer.rconIp && specificServer.rconPort && specificServer.rconPassword) {
             rconIp = specificServer.rconIp;
             rconPort = specificServer.rconPort;
             rconPassword = specificServer.rconPassword;
         }
     }
 
-    // 2. If not found yet, check the main GuildConfig table
+    // 2. If not found yet, check the first available server in the Multi-Server table
+    if (!rconIp || !rconPort || !rconPassword) {
+        const firstGameServer = await GameServer.findOne({ where: { guildId: guildId } });
+        if (firstGameServer && firstGameServer.rconIp && firstGameServer.rconPort && firstGameServer.rconPassword) {
+            rconIp = firstGameServer.rconIp;
+            rconPort = firstGameServer.rconPort;
+            rconPassword = firstGameServer.rconPassword;
+        }
+    }
+
+    // 3. Last resort: check the main GuildConfig table
     if (!rconIp || !rconPort || !rconPassword) {
         const config = await GuildConfig.findOne({ where: { guildId: guildId } });
         if (config && config.rconIp && config.rconPort && config.rconPassword) {
             rconIp = config.rconIp;
             rconPort = config.rconPort;
             rconPassword = config.rconPassword;
-        }
-    }
-
-    // 3. If still not found, fall back to the first available server in the Multi-Server table
-    if (!rconIp || !rconPort || !rconPassword) {
-        const firstGameServer = await GameServer.findOne({ where: { guildId: guildId } });
-        if (firstGameServer) {
-            rconIp = firstGameServer.rconIp;
-            rconPort = firstGameServer.rconPort;
-            rconPassword = firstGameServer.rconPassword;
         }
     }
 

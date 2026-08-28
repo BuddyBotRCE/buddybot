@@ -31,6 +31,7 @@ const postEmbedHandler = require(handlerPath('postEmbedHandler'));
 const customZoneHandler = require(handlerPath('customZoneHandler'));
 const reactionRoleHandler = require(handlerPath('reactionRoleHandler'));
 const autoModHandler = require(handlerPath('autoModHandler'));
+const wipeHandler = require(handlerPath('wipeHandler')); // Ensure wipeHandler is imported
 
 module.exports = async (interaction, client) => {
     console.log(`[INTERACTION DEBUG] Type: ${interaction.type} | CustomID: ${interaction.customId || 'N/A'} | Command: ${interaction.commandName || 'N/A'}`);
@@ -51,6 +52,15 @@ module.exports = async (interaction, client) => {
         if (interaction.isModalSubmit()) {
             if (customId.startsWith('modal_givekit_exec_')) {
                 return await adminHandler(interaction, client);
+            }
+
+            // 👇 ROUTE WIPE & COOLDOWN CLEARANCE MODALS 👇
+            if (
+                customId === 'modal_wipe_full' || 
+                customId.startsWith('modal_wipe_sel_') || 
+                customId === 'modal_wipe_cooldowns'
+            ) {
+                return await wipeHandler(interaction, client);
             }
 
             // 👇 ROUTE ACCOUNT LINKING MODALS 👇
@@ -109,6 +119,7 @@ module.exports = async (interaction, client) => {
         // 🚦 1. ADMIN MENU ROUTER
         // ====================================================================
         if (customId === 'admin_menu_select') {
+            if (selectedValue === 'setup_wipe') return await wipeHandler(interaction, client);
             if (selectedValue === 'setup_autoevents') return await autoEventsHandler(interaction, client);
             if (selectedValue === 'setup_economy') return await economyHandler(interaction, client);
             if (selectedValue === 'setup_tier') return await premiumHandler(interaction, client);
@@ -136,6 +147,16 @@ module.exports = async (interaction, client) => {
         // ====================================================================
         // 🚦 2. COMPONENT ROUTING STATION (Buttons & Select Menus)
         // ====================================================================
+
+        // 👇 ROUTE WIPE & COOLDOWN BUTTONS 👇
+        if (
+            customId === 'btn_wipe_full' || 
+            customId === 'btn_wipe_selective' || 
+            customId === 'btn_wipe_cooldowns' || 
+            customId === 'select_wipe_custom'
+        ) {
+            return await wipeHandler(interaction, client);
+        }
 
         if (
             customId === 'btn_admin_kit' || 
