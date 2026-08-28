@@ -26,79 +26,87 @@ module.exports = async (interaction, client) => {
         // ====================================================================
         if (customId === 'unified_embed_select') {
             if (selectedValue === 'setup_postembed') {
-                // Initialize default creation session
                 embedSessions.set(guildId, { title: '📢 Server Announcement', description: 'Type your announcement details here.', color: '#3498db', thumbnailUrl: '', imageUrl: '', footerText: '', editMode: false });
-                // Let it flow down into the builder renderer
             }
             if (selectedValue === 'edit_postembed') {
                 const modal = new ModalBuilder().setCustomId('modal_edit_embed_prompt').setTitle('Edit Existing Embed');
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('channel_id').setLabel('Channel ID').setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('message_id').setLabel('Message ID').setStyle(TextInputStyle.Short).setRequired(true))
-                );
+                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('message_id').setLabel('Message ID or Link').setStyle(TextInputStyle.Short).setRequired(true)));
                 return await interaction.showModal(modal);
             }
             if (selectedValue === 'attach_reaction_panel') {
                 const modal = new ModalBuilder().setCustomId('modal_attach_rr_prompt').setTitle('Attach Roles to Message');
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('channel_id').setLabel('Channel ID').setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('message_id').setLabel('Message ID').setStyle(TextInputStyle.Short).setRequired(true))
-                );
+                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('message_id').setLabel('Message ID or Link').setStyle(TextInputStyle.Short).setRequired(true)));
                 return await interaction.showModal(modal);
             }
             if (selectedValue === 'create_reaction_panel' || selectedValue === 'create_verification_panel') {
                 const isVerify = selectedValue === 'create_verification_panel';
                 rrSetupSessions.set(guildId, { channelId: null, description: null, panelMode: isVerify ? 'verify' : 'toggle' });
-                // Let it flow down to the RR builder
             }
         }
 
         // ====================================================================
         // 📥 MODAL CATCHERS FOR TARGET IDs (EDITING / ATTACHING)
         // ====================================================================
-        if (interaction.isModalSubmit() && customId === 'modal_edit_embed_prompt') {
-            const channelId = interaction.fields.getTextInputValue('channel_id').trim();
-            const messageId = interaction.fields.getTextInputValue('message_id').trim();
-            try {
-                const channel = await interaction.guild.channels.fetch(channelId);
-                const msg = await channel.messages.fetch(messageId);
-                if (!msg.embeds.length) return interaction.reply({ content: '❌ That message has no embeds to edit.', flags: 64 });
-                
-                const oldEmbed = msg.embeds[0];
-                const embSession = embedSessions.get(guildId) || {};
-                embSession.title = oldEmbed.title || '';
-                embSession.description = oldEmbed.description || '';
-                embSession.color = oldEmbed.hexColor || '#3498db';
-                embSession.thumbnailUrl = oldEmbed.thumbnail?.url || '';
-                embSession.imageUrl = oldEmbed.image?.url || '';
-                embSession.footerText = oldEmbed.footer?.text || '';
-                embSession.editMode = true;
-                embSession.targetChannelId = channelId;
-                embSession.targetMessageId = messageId;
-                
-                embedSessions.set(guildId, embSession);
-                await interaction.deferUpdate().catch(()=>{}); // Defer to transition smoothly
-            } catch (e) {
-                return interaction.reply({ content: '❌ Could not find that message. Check your Channel and Message IDs.', flags: 64 });
-            }
-        }
+        if (interaction.isModalSubmit() && (customId === 'modal_edit_embed_prompt' || customId === 'modal_attach_rr_prompt')) {
+            const input = interaction.fields.getTextInputValue('message_id').trim();
+            let msg = null;
+            let targetChannelId = null;
 
-        if (interaction.isModalSubmit() && customId === 'modal_attach_rr_prompt') {
-            const channelId = interaction.fields.getTextInputValue('channel_id').trim();
-            const messageId = interaction.fields.getTextInputValue('message_id').trim();
             try {
-                const channel = await interaction.guild.channels.fetch(channelId);
-                const msg = await channel.messages.fetch(messageId);
-                
-                const rrSession = rrSetupSessions.get(guildId) || { channelId: null, description: null, panelMode: 'toggle' };
-                rrSession.panelMode = 'attach';
-                rrSession.channelId = channelId;
-                rrSession.targetMessageId = messageId;
-                
-                rrSetupSessions.set(guildId, rrSession);
-                await interaction.deferUpdate().catch(()=>{}); // Defer to transition
+                // 1. If they pasted a Message Link
+                if (input.includes('discord.com/channels/')) {
+                    const parts = input.split('/');
+                    targetChannelId = parts[parts.length - 2];
+                    const mId = parts[parts.length - 1];
+                    const channel = await interaction.guild.channels.fetch(targetChannelId).catch(()=>null);
+                    if (channel) msg = await channel.messages.fetch(mId).catch(()=>null);
+                } else {
+                    // 2. If they just pasted an ID, try current channel first
+                    msg = await interaction.channel.messages.fetch(input).catch(()=>null);
+                    targetChannelId = interaction.channelId;
+                    
+                    // 3. Fallback: Search all text channels for the ID
+                    if (!msg) {
+                        const channels = interaction.guild.channels.cache.filter(c => c.isTextBased());
+                        for (const [id, channel] of channels) {
+                            msg = await channel.messages.fetch(input).catch(()=>null);
+                            if (msg) { targetChannelId = id; break; }
+                        }
+                    }
+                }
+
+                if (!msg) return interaction.reply({ content: '❌ Could not find that message. Try pasting the full Message Link instead.', flags: 64 });
+
+                // Route to Edit Embed Setup
+                if (customId === 'modal_edit_embed_prompt') {
+                    if (!msg.embeds.length) return interaction.reply({ content: '❌ That message has no embeds to edit.', flags: 64 });
+                    
+                    const oldEmbed = msg.embeds[0];
+                    const embSession = embedSessions.get(guildId) || {};
+                    embSession.title = oldEmbed.title || '';
+                    embSession.description = oldEmbed.description || '';
+                    embSession.color = oldEmbed.hexColor || '#3498db';
+                    embSession.thumbnailUrl = oldEmbed.thumbnail?.url || '';
+                    embSession.imageUrl = oldEmbed.image?.url || '';
+                    embSession.footerText = oldEmbed.footer?.text || '';
+                    embSession.editMode = true;
+                    embSession.targetChannelId = targetChannelId;
+                    embSession.targetMessageId = msg.id;
+                    
+                    embedSessions.set(guildId, embSession);
+                } 
+                // Route to Attach Reaction Roles Setup
+                else if (customId === 'modal_attach_rr_prompt') {
+                    const rrSession = rrSetupSessions.get(guildId) || { channelId: null, description: null, panelMode: 'toggle' };
+                    rrSession.panelMode = 'attach';
+                    rrSession.channelId = targetChannelId;
+                    rrSession.targetMessageId = msg.id;
+                    rrSetupSessions.set(guildId, rrSession);
+                }
+
+                await interaction.deferUpdate().catch(()=>{}); 
             } catch (e) {
-                return interaction.reply({ content: '❌ Could not find that message. Check your Channel and Message IDs.', flags: 64 });
+                return interaction.reply({ content: '❌ An error occurred trying to fetch that message.', flags: 64 });
             }
         }
 
@@ -131,9 +139,7 @@ module.exports = async (interaction, client) => {
 
                 const components = [];
 
-                if (!isAttach) {
-                    components.push(new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_rr_channel').setPlaceholder(targetChannelId ? `📂 Target Channel Selected` : '📂 1. Select Target Channel for Panel...').addChannelTypes(ChannelType.GuildText)));
-                }
+                if (!isAttach) components.push(new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_rr_channel').setPlaceholder(targetChannelId ? `📂 Target Channel Selected` : '📂 1. Select Target Channel for Panel...').addChannelTypes(ChannelType.GuildText)));
                 
                 components.push(new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder().setCustomId('select_rr_role').setPlaceholder('🏷️ 2. Select Role to Add to Panel...')));
                 
@@ -164,7 +170,7 @@ module.exports = async (interaction, client) => {
 
                 const emojiMenu = new ActionRowBuilder().addComponents(
                     new StringSelectMenuBuilder().setCustomId(`select_rr_emoji_${selectedValue}`).setPlaceholder('✨ Select a Preset Emoji for this Role Button...').addOptions([
-                        { label: 'Verify / Checkmark', value: '✅', description: 'Verification checkmark', emoji: '✅' }, { label: 'Fire / PvP', value: '🔥', description: 'Flame emoji', emoji: '🔥' }, { label: 'Shield / Defense', value: '🛡️', description: 'Shield emoji', emoji: '🛡️' }, { label: 'Swords / Combat', value: '⚔️', description: 'Swords emoji', emoji: '⚔️' }, { label: 'Star / VIP', value: '⭐', description: 'Star emoji', emoji: '⭐' }, { label: 'Gaming Controller', value: '🎮', description: 'Controller emoji', emoji: '🎮' }, { label: 'Robot / Automation', value: '🤖', description: 'Robot emoji', emoji: '🤖' }, { label: 'Diamond / Premium', value: '💎', description: 'Gem emoji', emoji: '💎' }, { label: 'Rocket / Launch', value: '🚀', description: 'Rocket emoji', emoji: '🚀' }, { label: 'Crown / Leader', value: '👑', description: 'Crown emoji', emoji: '👑' }
+                        { label: 'Verify / Checkmark', value: '✅', emoji: '✅' }, { label: 'Fire / PvP', value: '🔥', emoji: '🔥' }, { label: 'Shield / Defense', value: '🛡️', emoji: '🛡️' }, { label: 'Swords / Combat', value: '⚔️', emoji: '⚔️' }, { label: 'Star / VIP', value: '⭐', emoji: '⭐' }, { label: 'Gaming Controller', value: '🎮', emoji: '🎮' }, { label: 'Robot', value: '🤖', emoji: '🤖' }, { label: 'Diamond', value: '💎', emoji: '💎' }, { label: 'Rocket', value: '🚀', emoji: '🚀' }, { label: 'Crown', value: '👑', emoji: '👑' }
                     ])
                 );
                 return await interaction.reply({ embeds: [new EmbedBuilder().setTitle(`🎨 Choose Emoji for: ${roleObj?.name || 'Role'}`).setDescription('Select an emoji from the dropdown menu below to assign it to this button.').setColor('#2ecc71')], components: [emojiMenu], flags: 64 });
@@ -177,7 +183,7 @@ module.exports = async (interaction, client) => {
                 await ReactionRole.create({ guildId, channelId: rrSession.channelId || interaction.channelId, roleId: roleId, buttonLabel: isVerify ? 'Verify' : (roleObj?.name || 'Get Role'), buttonStyle: isVerify ? 'Success' : 'Primary', messageId: 'PENDING_DEPLOY', emoji: selectedValue || '✅' });
                 
                 await interaction.deferUpdate();
-                await interaction.deleteReply(); // Clean up the emoji prompt
+                await interaction.deleteReply(); 
                 return await renderSetupPanel(interaction, `✅ Added role **${roleObj?.name || 'Role'}**!`);
             }
 
@@ -203,7 +209,7 @@ module.exports = async (interaction, client) => {
             if (interaction.isButton() && customId === 'btn_rr_deploy') {
                 const roles = await ReactionRole.findAll({ where: { guildId, messageId: 'PENDING_DEPLOY' } });
                 if (roles.length === 0) return await renderSetupPanel(interaction, '❌ Please select at least one role using the role dropdown menu first!');
-                if (!rrSession.channelId) return await renderSetupPanel(interaction, '❌ Please select a target channel using the channel dropdown menu (Step 1) before deploying!');
+                if (!rrSession.channelId) return await renderSetupPanel(interaction, '❌ Please set the Target Message ID or Target Channel first!');
 
                 let targetChannel = interaction.guild.channels.cache.get(rrSession.channelId);
                 if (!targetChannel) targetChannel = await interaction.guild.channels.fetch(rrSession.channelId).catch(()=>null);
@@ -237,7 +243,6 @@ module.exports = async (interaction, client) => {
                 }
             }
 
-            // USER CLICKING A BUTTON
             if (interaction.isButton() && customId.startsWith('rr_toggle_')) {
                 const rrData = await ReactionRole.findByPk(customId.replace('rr_toggle_', ''));
                 if (!rrData) return await interaction.reply({ content: '❌ This role configuration no longer exists.', flags: 64 });
@@ -254,7 +259,7 @@ module.exports = async (interaction, client) => {
                     else { await member.roles.add(role); return await interaction.reply({ content: `✅ Added role **${role.name}** to you!`, flags: 64 }); }
                 }
             }
-            return; // End RR Execution
+            return;
         }
 
         // ====================================================================
