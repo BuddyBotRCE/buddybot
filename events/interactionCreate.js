@@ -27,6 +27,7 @@ const customZoneHandler = require(handlerPath('customZoneHandler'));
 const autoModHandler = require(handlerPath('autoModHandler'));
 const wipeHandler = require(handlerPath('wipeHandler')); 
 const homeTpHandler = require(handlerPath('homeTpHandler'));
+const skipNightHandler = require(handlerPath('skipNightHandler')); // <-- Added Skip Night Handler
 
 module.exports = async (interaction, client) => {
     try {
@@ -50,6 +51,7 @@ module.exports = async (interaction, client) => {
         // ====================================================================
         if (interaction.isModalSubmit()) {
             if (customId === 'modal_hometp_settings') return await homeTpHandler(interaction, client);
+            if (customId === 'modal_skipnight_percentage') return await skipNightHandler(interaction, client); // <-- Added Skip Night Modal
             if (customId.startsWith('modal_givekit_exec_')) return await adminHandler(interaction, client);
             if (customId === 'modal_shop_multiplier' || customId === 'modal_shop_custom' || customId.startsWith('modal_buy_qty_')) return await shopHandler(interaction, client);
             if (customId === 'modal_wipe_full' || customId.startsWith('modal_wipe_sel_') || customId === 'modal_wipe_cooldowns') return await wipeHandler(interaction, client);
@@ -113,6 +115,7 @@ module.exports = async (interaction, client) => {
                 return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
             }
 
+            if (selectedValue === 'setup_skipnight') return await skipNightHandler(interaction, client); // <-- Added Skip Night Option
             if (selectedValue === 'setup_wipe') return await wipeHandler(interaction, client);
             if (selectedValue === 'setup_autoevents') return await autoEventsHandler(interaction, client);
             if (selectedValue === 'setup_economy') return await economyHandler(interaction, client);
@@ -166,16 +169,21 @@ module.exports = async (interaction, client) => {
         // 🚦 4. BUTTONS & COMPONENT ROUTING
         // ====================================================================
         
+        // Skip Night Buttons
+        if (customId === 'btn_toggle_skipnight' || customId === 'btn_set_skipnight_percentage') {
+            return await skipNightHandler(interaction, client);
+        }
+
         // Home TP Buttons & Player Panel Home Info
         if (customId === 'hometp_btn_settings' || customId === 'admin_menu_back') {
             return await homeTpHandler(interaction, client);
         }
-        // Inside events/interactionCreate.js button routing:
+
         if (customId === 'admin_menu_back') {
-    const adminHandler = require('./adminHandler');
-    if (adminHandler && adminHandler.renderMainPanel) {
-        return await adminHandler.renderMainPanel(interaction);
-    }
+            const adminHandler = require('./adminHandler');
+            if (adminHandler && adminHandler.renderMainPanel) {
+                return await adminHandler.renderMainPanel(interaction);
+            }
         }  
 
         if (customId === 'hub_hometp_info') {
@@ -184,28 +192,27 @@ module.exports = async (interaction, client) => {
                 flags: 64 
             });
         }
-        // Inside events/interactionCreate.js button routing section:
+
         if (customId === 'hub_pvp_areas') {
-    const { PveZone } = require('../database/db');
-    
-    // Fetch all zones where PvP is explicitly active and enabled
-    const activePvpZones = await PveZone.findAll({ 
-        where: { 
-            guildId: interaction.guild.id, 
-            isEnabled: true, 
-            pvp: true 
-        } 
-    });
+            const { PveZone } = require('../database/db');
+            
+            const activePvpZones = await PveZone.findAll({ 
+                where: { 
+                    guildId: interaction.guild.id, 
+                    isEnabled: true, 
+                    pvp: true 
+                } 
+            });
 
-    let pvpText = '### ⚔️ Live Active PvP Areas & Monuments\n\n\`All areas are currently Safe PvE (No active PvP zones).\`';
-    
-    if (activePvpZones && activePvpZones.length > 0) {
-        pvpText = '### ⚔️ Live Active PvP Areas & Monuments\n\n' + 
-            activePvpZones.map(z => `• 🔴 **${z.name || 'Custom Zone'}** — Radius: \`${z.radius || 50}m\``).join('\n');
-    }
+            let pvpText = '### ⚔️ Live Active PvP Areas & Monuments\n\n\`All areas are currently Safe PvE (No active PvP zones).\`';
+            
+            if (activePvpZones && activePvpZones.length > 0) {
+                pvpText = '### ⚔️ Live Active PvP Areas & Monuments\n\n' + 
+                    activePvpZones.map(z => `• 🔴 **${z.name || 'Custom Zone'}** — Radius: \`${z.radius || 50}m\``).join('\n');
+            }
 
-    return interaction.reply({ content: pvpText, flags: 64 });
-}
+            return interaction.reply({ content: pvpText, flags: 64 });
+        }
 
         // Player Hub & Core Modules
         if (customId === 'hub_link_account' || customId === 'select_link_server_target' || customId === 'hub_leaderboards' || customId === 'hub_lb_select' || customId.startsWith('lb_refresh_') || customId === 'btn_admin_kit' || customId.startsWith('ak_panel_') || customId === 'ak_panel_kit_select' || customId.includes('admin_kit_choice') || customId.startsWith('admin_kit_target_') || customId.startsWith('admin_kit_target_select')) {

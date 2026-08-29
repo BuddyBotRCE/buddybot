@@ -48,7 +48,8 @@ async function renderMainPanel(interaction) {
                 { label: 'Embeds & Reaction Roles', value: 'setup_embeds_roles', description: 'Announcements, Verifications, & Roles', emoji: '🎨' },
                 { label: 'Giveaways Manager', value: 'setup_giveaways', emoji: '🎉' },
                 { label: 'Suggestions System', value: 'setup_suggestions', emoji: '💡' },
-                { label: 'Home Teleport System', value: 'setup_hometp', description: 'Configure emote retreat teleports', emoji: '🏠' }
+                { label: 'Home Teleport System', value: 'setup_hometp', description: 'Configure emote retreat teleports', emoji: '🏠' },
+                { label: 'Skip Night Settings', value: 'setup_skipnight', emoji: '🌙' },
             ])
     );
 

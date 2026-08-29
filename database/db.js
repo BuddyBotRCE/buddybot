@@ -91,6 +91,9 @@ const GuildConfig = sequelize.define('GuildConfig', {
     // Inside your GuildConfig definition in database/db.js:
     scientistKillReward: { type: DataTypes.INTEGER, defaultValue: 10 },
     playerKillReward: { type: DataTypes.INTEGER, defaultValue: 50 },
+    skipNightEnabled: { type: DataTypes.BOOLEAN, defaultValue: false },
+    skipNightPercentage: { type: DataTypes.INTEGER, defaultValue: 50 },
+    skipNightEmote: { type: DataTypes.STRING, defaultValue: 'Wait Here' },
 });
 
 const GameServer = sequelize.define('GameServer', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, serverName: { type: DataTypes.STRING, allowNull: false }, rconIp: { type: DataTypes.STRING, allowNull: false }, rconPort: { type: DataTypes.STRING, allowNull: false }, rconPassword: { type: DataTypes.STRING, allowNull: false }});
