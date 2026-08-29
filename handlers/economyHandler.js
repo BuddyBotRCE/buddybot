@@ -3,7 +3,7 @@ const { GuildConfig, UserEconomy } = require('../database/db');
 const adminHandler = require('./adminHandler');
 
 module.exports = async (interaction, client) => {
-    const customId = interaction.customId;
+    const customId = interaction.customId || '';
     const value = interaction.isStringSelectMenu() ? interaction.values[0] : null;
 
     if (customId === 'admin_menu_back') {
@@ -63,7 +63,7 @@ module.exports = async (interaction, client) => {
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
             const modal = new ModalBuilder().setCustomId('modal_econ_scientist_reward').setTitle('Scientist Kill Reward');
             modal.addComponents(new ActionRowBuilder().addComponents(
-                new TextInputBuilder().setCustomId('reward_amount').setLabel("Reward per Scientist Kill").setStyle(TextInputStyle.Short).setValue(`${config?.scientistKillReward ?? 10}`).setRequired(true)
+                new TextInputBuilder().setCustomId('scientist_reward_amount').setLabel("Reward per Scientist Kill").setStyle(TextInputStyle.Short).setValue(`${config?.scientistKillReward ?? 10}`).setRequired(true)
             ));
             return interaction.showModal(modal);
         }
@@ -72,7 +72,7 @@ module.exports = async (interaction, client) => {
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
             const modal = new ModalBuilder().setCustomId('modal_econ_player_reward').setTitle('Player Kill Reward');
             modal.addComponents(new ActionRowBuilder().addComponents(
-                new TextInputBuilder().setCustomId('reward_amount').setLabel("Reward per Player Kill").setStyle(TextInputStyle.Short).setValue(`${config?.playerKillReward ?? 50}`).setRequired(true)
+                new TextInputBuilder().setCustomId('player_reward_amount').setLabel("Reward per Player Kill").setStyle(TextInputStyle.Short).setValue(`${config?.playerKillReward ?? 50}`).setRequired(true)
             ));
             return interaction.showModal(modal);
         }
@@ -178,14 +178,14 @@ module.exports = async (interaction, client) => {
         }
 
         if (customId === 'modal_econ_scientist_reward') {
-            const amount = parseInt(interaction.fields.getTextInputValue('reward_amount'));
+            const amount = parseInt(interaction.fields.getTextInputValue('scientist_reward_amount'));
             const finalAmount = isNaN(amount) || amount < 0 ? 0 : amount;
             await GuildConfig.upsert({ guildId: interaction.guild.id, scientistKillReward: finalAmount });
             return interaction.reply({ content: `✅ Scientist Kill Reward updated to **${finalAmount}** currency!`, flags: 64 });
         }
 
         if (customId === 'modal_econ_player_reward') {
-            const amount = parseInt(interaction.fields.getTextInputValue('reward_amount'));
+            const amount = parseInt(interaction.fields.getTextInputValue('player_reward_amount'));
             const finalAmount = isNaN(amount) || amount < 0 ? 0 : amount;
             await GuildConfig.upsert({ guildId: interaction.guild.id, playerKillReward: finalAmount });
             return interaction.reply({ content: `✅ Player Kill Reward updated to **${finalAmount}** currency!`, flags: 64 });
