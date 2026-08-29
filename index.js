@@ -113,9 +113,9 @@ if (fs.existsSync(interactionCreateEvent)) {
 
 // --- INITIALIZE BACKGROUND AUTO-EVENT MANAGER ---
 try {
-    const { initAutoEventLoop } = require('./utils/autoEventManager');
-    if (typeof initAutoEventLoop === 'function') {
-        initAutoEventLoop(client);
+    const { startAutoEventLoop } = require('./utils/autoEventManager');
+    if (typeof startAutoEventLoop === 'function') {
+        startAutoEventLoop(client);
     }
 } catch (e) {
     console.log('[SYSTEM] Auto event loop file skipped or not found.');
