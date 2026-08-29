@@ -126,7 +126,8 @@ const PveZone = sequelize.define('PveZone', {
     visible: { type: DataTypes.BOOLEAN, defaultValue: true },
     isEnabled: { type: DataTypes.BOOLEAN, defaultValue: false },
     enterMessage: { type: DataTypes.STRING, allowNull: true },
-    exitMessage: { type: DataTypes.STRING, allowNull: true }
+    exitMessage: { type: DataTypes.STRING, allowNull: true },
+    rotation: { type: DataTypes.STRING, defaultValue: '0' },
 });
 
 const ActiveBounty = sequelize.define('ActiveBounty', { guildId: { type: DataTypes.STRING }, userId: { type: DataTypes.STRING }, inGameName: { type: DataTypes.STRING }, reward: { type: DataTypes.INTEGER } });

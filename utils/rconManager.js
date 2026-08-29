@@ -170,7 +170,7 @@ async function connectRcon(guildId, client, targetServerId = null) {
                                         await bindHandler.refreshPanelViaInteraction(setupData.interaction, `✅ **Position Captured!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``, setupData.targetId);
                                     }
                                 } catch (error) {}
-                            } 
+                            }
                             else if (setupData.type === 'auto_event') {
                                 try {
                                     const autoEventsHandler = require('../handlers/autoEventsHandler');
@@ -181,6 +181,21 @@ async function connectRcon(guildId, client, targetServerId = null) {
                                         await autoEventsHandler.refreshPanelViaInteraction(
                                             setupData.interaction,
                                             `✅ **Spawn Position Added!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``
+                                        );
+                                    }
+                                } catch (error) {}
+                            }
+                            else if (setupData.type === 'custom_zone') {
+                                try {
+                                    const customZoneHandler = require('../handlers/customZoneHandler');
+                                    if (customZoneHandler && customZoneHandler.autoSaveLocation) {
+                                        await customZoneHandler.autoSaveLocation(setupData.interaction.guild.id, posX, posY, posZ, setupData.targetId);
+                                    }
+                                    if (customZoneHandler && customZoneHandler.refreshPanelViaInteraction) {
+                                        await customZoneHandler.refreshPanelViaInteraction(
+                                            setupData.interaction,
+                                            `✅ **Zone Center Added!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``,
+                                            setupData.targetId
                                         );
                                     }
                                 } catch (error) {}
