@@ -9,6 +9,55 @@ const { activeConnections } = require('../utils/rconManager');
 const giveKitSessions = new Map();
 const adminActionSessions = new Map(); 
 
+async function renderMainPanel(interaction) {
+    const embed = new EmbedBuilder()
+        .setTitle('🛠️ Admin Panel & Dashboard')
+        .setDescription('Configure your server modules, automated systems, shops, and community tools using the categories below.\n\n• **Dropdown 1:** Basic Systems & Upgrades\n• **Dropdown 2:** ⭐ Premium & Advanced Modules')
+        .setColor('#2b2d31');
+
+    const row1 = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder().setCustomId('admin_menu_select').setPlaceholder('⚙️ Basic Systems & Upgrades...')
+            .addOptions([
+                { label: '⭐ Buy / Upgrade to Premium', value: 'setup_tier', description: 'Unlock all advanced modules and features', emoji: '⭐' },
+                { label: 'RCON & Servers', value: 'setup_multiserver', emoji: '🌐' },
+                { label: 'Live Admin Tools', value: 'admin_tools', emoji: '🧰' },
+                { label: 'Shop & Store Manager', value: 'setup_shop', emoji: '🛒' },
+                { label: 'Economy Manager', value: 'setup_economy', emoji: '💰' },
+                { label: 'Minigames Casino', value: 'setup_minigames', emoji: '🎰' },
+                { label: 'Ticket System', value: 'setup_tickets', emoji: '🎫' },
+                { label: 'Cross-Chat', value: 'setup_crosschat', emoji: '💬' },
+                { label: 'Admin & Mod Roles', value: 'setup_server_roles', description: 'Set bot admin/mod roles', emoji: '👑' },
+                { label: 'Logging System', value: 'setup_logging', emoji: '📊' },
+                { label: 'Custom Zones Builder', value: 'setup_custom_zones', description: 'Create and manage map zones', emoji: '🗺️' },
+                { label: 'Server Wipe Panel', value: 'setup_wipe', emoji: '☢️' }
+            ])
+    );
+
+    const row2 = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder().setCustomId('admin_menu_select_2').setPlaceholder('⭐ Premium & Advanced Features...')
+            .addOptions([
+                { label: 'Auto-Events (Premium)', value: 'setup_autoevents', emoji: '🚁' },
+                { label: 'Auto-Moderation Suite', value: 'setup_automod', emoji: '🛡️' },
+                { label: 'BuddyPass Manager', value: 'setup_buddypass', emoji: '⭐' },
+                { label: 'Clan System Manager', value: 'setup_clans', emoji: '🛡️' },
+                { label: 'Bounties System', value: 'setup_bounties', emoji: '🎯' },
+                { label: 'Custom Binds', value: 'setup_binds', emoji: '🗣️' },
+                { label: 'ORP Manager', value: 'setup_orp', emoji: '🛡️' },
+                { label: 'AI Integration Setup', value: 'setup_ai', emoji: '🤖' },
+                { label: 'Premium Status & License', value: 'setup_tier', emoji: '⭐' },
+                { label: 'Embeds & Reaction Roles', value: 'setup_embeds_roles', description: 'Announcements, Verifications, & Roles', emoji: '🎨' },
+                { label: 'Giveaways Manager', value: 'setup_giveaways', emoji: '🎉' },
+                { label: 'Suggestions System', value: 'setup_suggestions', emoji: '💡' },
+                { label: 'Home Teleport System', value: 'setup_hometp', description: 'Configure emote retreat teleports', emoji: '🏠' }
+            ])
+    );
+
+    if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
+        return await interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
+    }
+    return await interaction.update({ embeds: [embed], components: [row1, row2], content: null }).catch(() => {});
+}
+
 async function fetchRceLiveKits(guildId) {
     return new Promise((resolve) => {
         const ws = activeConnections.get(guildId);
@@ -72,16 +121,21 @@ async function renderGiveKitPanel(interaction, session, messageOverride = '') {
     const row1 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('ak_panel_server').setLabel('Select Server').setStyle(ButtonStyle.Primary).setEmoji('🖥️'), new ButtonBuilder().setCustomId('ak_panel_player').setLabel('Select Player').setStyle(ButtonStyle.Primary).setEmoji('👤'), new ButtonBuilder().setCustomId('ak_panel_kit').setLabel('Select Kit').setStyle(ButtonStyle.Secondary).setEmoji('📦'));
     const isReady = session.targetUserId && session.kitName;
     const row2 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('ak_panel_send').setLabel('🚀 Send Kit to Player').setStyle(ButtonStyle.Success).setDisabled(!isReady), new ButtonBuilder().setCustomId('ak_panel_cancel').setLabel('Cancel').setStyle(ButtonStyle.Danger));
+    const row3 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙'));
 
-    const payload = { embeds: [embed], components: [row1, row2], flags: 64 };
+    const payload = { embeds: [embed], components: [row1, row2, row3], flags: 64 };
     if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) return await interaction.reply(payload);
     return await interaction.update(payload).catch(() => interaction.editReply(payload));
 }
 
-module.exports = async (interaction, client) => {
+const adminHandler = async (interaction, client) => {
     const customId = interaction.customId || '';
     const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
     const userId = interaction.user.id;
+
+    if (customId === 'admin_menu_back') {
+        return await renderMainPanel(interaction);
+    }
 
     if (customId === 'select_multiserver_remove_target') {
         try {
@@ -104,15 +158,19 @@ module.exports = async (interaction, client) => {
             for (const [_, msg] of prompts) { msg.delete().catch(() => {}); }
         });
 
+        const backRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+        );
+
         if (selectedValue === 'setup_logging') {
             const embed = new EmbedBuilder().setTitle('📊 Server Logging Manager').setDescription('Route different types of logs to specific channels.').setColor('#3498db');
             const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('log_action_select').setPlaceholder('Select a log channel to configure...').addOptions([{ label: 'Set Admin Logs Channel', value: 'log_admin', emoji: '🛡️' }, { label: 'Set Game Feeds Channel', value: 'log_game', emoji: '🎮' }, { label: 'Set Discord Logs Channel', value: 'log_discord', emoji: '💬' }]));
-            return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+            return interaction.reply({ embeds: [embed], components: [row, backRow], flags: 64 });
         }
 
         if (selectedValue === 'setup_orp') {
             const embed = new EmbedBuilder().setTitle('🛡️ ORP Manager (Offline Raid Protection)').setDescription('ORP systems are actively being upgraded to v2.0.\n\nPlease check back in the next update to configure offline raid protection zones.').setColor('#e67e22');
-            return interaction.reply({ embeds: [embed], flags: 64 });
+            return interaction.reply({ embeds: [embed], components: [backRow], flags: 64 });
         }
 
         if (selectedValue === 'setup_multiserver') {
@@ -120,7 +178,7 @@ module.exports = async (interaction, client) => {
             const serverList = servers.length ? servers.map(s => `• **${s.serverName}** (\`${s.rconIp}:${s.rconPort}\`)`).join('\n') : 'No game servers configured yet.';
             const embed = new EmbedBuilder().setTitle('🌐 RCON Connect & Server Manager').setDescription(`**Configured Servers:**\n${serverList}`).setColor('#3498db');
             const row1 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_multiserver_add').setLabel('Add Game Server').setStyle(ButtonStyle.Success).setEmoji('➕'), new ButtonBuilder().setCustomId('btn_multiserver_remove').setLabel('Remove Game Server').setStyle(ButtonStyle.Danger).setEmoji('🗑️').setDisabled(servers.length === 0), new ButtonBuilder().setCustomId('rcon_quick_connect').setLabel('Connect RCON').setStyle(ButtonStyle.Primary).setEmoji('🔌'));
-            return interaction.reply({ embeds: [embed], components: [row1], flags: 64 });
+            return interaction.reply({ embeds: [embed], components: [row1, backRow], flags: 64 });
         }
 
         if (selectedValue === 'setup_ai') {
@@ -135,12 +193,12 @@ module.exports = async (interaction, client) => {
 
             const row1 = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('select_ai_provider').setPlaceholder('Choose AI Platform / Provider...').addOptions([{ label: 'OpenAI', value: 'openai', emoji: '🟢' }, { label: 'Anthropic', value: 'anthropic', emoji: '🟠' }, { label: 'Google Gemini', value: 'gemini', emoji: '🔵' }, { label: 'DeepSeek', value: 'deepseek', emoji: '🟣' }, { label: 'Groq', value: 'groq', emoji: '⚡' }, { label: 'OpenRouter', value: 'openrouter', emoji: '🌐' }, { label: 'Custom / Ollama', value: 'custom', emoji: '💻' }]));
             const row2 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_ai_toggle').setLabel(isEnabled ? 'Disable AI' : 'Enable AI').setStyle(isEnabled ? ButtonStyle.Danger : ButtonStyle.Success).setEmoji(isEnabled ? '🔴' : '🟢'), new ButtonBuilder().setCustomId('btn_ai_set_key').setLabel('API Key & Model').setStyle(ButtonStyle.Primary).setEmoji('🔑'), new ButtonBuilder().setCustomId('btn_ai_premade').setLabel('Premade Responses').setStyle(ButtonStyle.Secondary).setEmoji('📝'));
-            return interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
+            return interaction.reply({ embeds: [embed], components: [row1, row2, backRow], flags: 64 });
         }
         
         if (selectedValue === 'setup_rcon') {
             const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_rcon_setup').setLabel('Set Credentials').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('rcon_quick_connect').setLabel('Connect RCON').setStyle(ButtonStyle.Success));
-            return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🌐 RCON Setup').setColor('#3498db')], components: [row], flags: 64 });
+            return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🌐 RCON Setup').setColor('#3498db')], components: [row, backRow], flags: 64 });
         }
         
         if (selectedValue === 'admin_tools') {
@@ -150,12 +208,12 @@ module.exports = async (interaction, client) => {
             const row1 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_admin_item').setLabel('Give Any Item').setStyle(ButtonStyle.Success).setEmoji('🎁'), new ButtonBuilder().setCustomId('btn_admin_kit').setLabel('Give Kit').setStyle(ButtonStyle.Success).setEmoji('📦'), new ButtonBuilder().setCustomId('btn_admin_vip').setLabel('Add VIP').setStyle(ButtonStyle.Primary).setEmoji('⭐'), new ButtonBuilder().setCustomId('btn_admin_mod').setLabel('Add Moderator').setStyle(ButtonStyle.Secondary).setEmoji('🛡️'));
             const row2 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_admin_say').setLabel('Server Say').setStyle(ButtonStyle.Primary).setEmoji('📢'), new ButtonBuilder().setCustomId('btn_admin_rcon').setLabel('Custom RCON Cmd').setStyle(ButtonStyle.Danger).setEmoji('⚡'));
 
-            const components = [row1, row2];
+            const components = [row1, row2, backRow];
             if (serverSelectOptions) components.unshift(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('admin_global_server_select').setPlaceholder('🖥️ Select target server for tools below (Optional)...').addOptions([{ label: 'Default / Main Server', value: 'admin_server_target_default', emoji: '🌐' }, ...serverSelectOptions])));
             return interaction.reply({ content: '🧰 **Live Admin Tools:** Choose a target server (optional) and an administrative action below:', components, flags: 64 });
         }
         
-        if (selectedValue === 'setup_crosschat') return interaction.reply({ content: '💬 Select a text channel:', components: [new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_crosschat_channel').setPlaceholder('Select channel...').addChannelTypes(ChannelType.GuildText))], flags: 64 });
+        if (selectedValue === 'setup_crosschat') return interaction.reply({ content: '💬 Select a text channel:', components: [new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_crosschat_channel').setPlaceholder('Select channel...').addChannelTypes(ChannelType.GuildText)), backRow], flags: 64 });
     }
 
     if (interaction.isChannelSelectMenu()) {
@@ -606,3 +664,5 @@ module.exports = async (interaction, client) => {
         }
     }
 };
+
+module.exports.renderMainPanel = renderMainPanel;

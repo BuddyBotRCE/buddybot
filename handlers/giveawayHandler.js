@@ -1,22 +1,45 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, UserSelectMenuBuilder, ChannelSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { GuildConfig, Giveaway } = require('../database/db');
+const adminHandler = require('./adminHandler');
 
 module.exports = async (interaction, client) => {
     const customId = interaction.customId || '';
     const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
 
+    if (customId === 'admin_menu_back') {
+        if (adminHandler && adminHandler.renderMainPanel) {
+            return await adminHandler.renderMainPanel(interaction);
+        }
+        return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] });
+    }
+
     if (customId === 'admin_menu_select' && selectedValue === 'setup_giveaways') {
         const embed = new EmbedBuilder().setTitle('🎉 Giveaway Manager').setDescription('Manage your server giveaways.').setColor('#9b59b6');
-        const row = new ActionRowBuilder().addComponents(
+        
+        const row1 = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder().setCustomId('giveaway_action_select').setPlaceholder('Select a giveaway action...')
-            .addOptions([{ label: 'Start Giveaway', value: 'ga_start', emoji: '🚀' }, { label: 'Set Default Channel', value: 'ga_channel', emoji: '📺' }, { label: 'Set Default Banner', value: 'ga_banner', emoji: '🖼️' }, { label: 'Reroll Winner', value: 'ga_reroll', emoji: '🎲' }, { label: 'View Participants', value: 'ga_players', emoji: '👥' }, { label: 'Cancel Giveaway', value: 'ga_cancel', emoji: '❌' }])
+            .addOptions([
+                { label: 'Start Giveaway', value: 'ga_start', emoji: '🚀' }, 
+                { label: 'Set Default Channel', value: 'ga_channel', emoji: '📺' }, 
+                { label: 'Set Default Banner', value: 'ga_banner', emoji: '🖼️' }, 
+                { label: 'Reroll Winner', value: 'ga_reroll', emoji: '🎲' }, 
+                { label: 'View Participants', value: 'ga_players', emoji: '👥' }, 
+                { label: 'Cancel Giveaway', value: 'ga_cancel', emoji: '❌' }
+            ])
         );
-        return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+
+        const row2 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+        );
+
+        return interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
     }
+
     if (customId === 'select_giveaway_channel') {
         await GuildConfig.upsert({ guildId: interaction.guild.id, giveawayChannelId: interaction.values[0] });
         return interaction.update({ content: `✅ Default Giveaway channel linked!`, components: [] });
     }
+
     if (customId.startsWith('select_ga_reroll_')) {
         const ga = await Giveaway.findByPk(customId.replace('select_ga_reroll_', ''));
         if (!ga) return interaction.reply({ content: '❌ Giveaway not found.', flags: 64 });
@@ -28,6 +51,7 @@ module.exports = async (interaction, client) => {
         if (channel) channel.send(`🎲 Giveaway Rerolled! <@${interaction.values[0]}> was replaced by our new winner: <@${newWinner}>!`);
         return interaction.update({ content: `✅ Rerolled successfully!`, components: [] });
     }
+
     if (customId === 'giveaway_action_select') {
         if (selectedValue === 'ga_start') {
             const modal = new ModalBuilder().setCustomId('modal_giveaway_start').setTitle('Start Giveaway');
@@ -56,6 +80,7 @@ module.exports = async (interaction, client) => {
             return interaction.showModal(modal);
         }
     }
+
     if (customId === 'enter_giveaway') {
         const giveaway = await Giveaway.findByPk(interaction.message.id);
         if (!giveaway || !giveaway.isActive) return interaction.reply({ content: '❌ Ended!', flags: 64 });
@@ -63,6 +88,7 @@ module.exports = async (interaction, client) => {
         if (!entries.includes(interaction.user.id)) { entries.push(interaction.user.id); await giveaway.update({ entries: JSON.stringify(entries) }); }
         return interaction.reply({ content: '🎉 Entered!', flags: 64 });
     }
+
     if (interaction.isModalSubmit()) {
         if (customId === 'modal_giveaway_start') {
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });

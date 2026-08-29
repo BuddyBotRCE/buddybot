@@ -1,9 +1,17 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { GuildConfig, ActiveBounty } = require('../database/db');
+const adminHandler = require('./adminHandler');
 
 module.exports = async (interaction, client) => {
     const customId = interaction.customId || '';
     const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
+
+    if (customId === 'admin_menu_back') {
+        if (adminHandler && adminHandler.renderMainPanel) {
+            return await adminHandler.renderMainPanel(interaction);
+        }
+        return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] });
+    }
 
     if (customId === 'admin_menu_select' && selectedValue === 'setup_bounties') {
         const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
@@ -14,11 +22,16 @@ module.exports = async (interaction, client) => {
             .setDescription(`Configure automatic killstreak bounties.\n\n• **Kills to Activate:** ${config?.bountyKillsToActivate || 5}\n• **Reward Amount:** ${config?.bountyRewardAmount || 500} ${config?.economyCurrency || 'Scrap'}\n• **Cooldown After Bounty:** ${config?.bountyCooldownMinutes || 60} mins\n\n• **Current Active Bounties:** ${activeBounties}`)
             .setColor('#e74c3c');
             
-        const row = new ActionRowBuilder().addComponents(
+        const row1 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('btn_bounty_settings').setLabel('Configure Bounties').setStyle(ButtonStyle.Primary).setEmoji('⚙️'),
             new ButtonBuilder().setCustomId('btn_bounty_clear').setLabel('Clear All Active Bounties').setStyle(ButtonStyle.Danger).setEmoji('🗑️')
         );
-        return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+
+        const row2 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+        );
+
+        return interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
     }
 
     if (customId === 'hub_bounties') {

@@ -1,5 +1,6 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder, StringSelectMenuBuilder, ChannelType, PermissionFlagsBits } = require('discord.js');
 const { GuildConfig, UserEconomy, Clan, ClanMember, ClanInvite } = require('../database/db');
+const adminHandler = require('./adminHandler');
 
 async function renderClanHub(interaction, member, editMode = false) {
     const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
@@ -62,6 +63,13 @@ module.exports = async (interaction, client) => {
         const customId = interaction.customId || '';
         const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
 
+        if (customId === 'admin_menu_back') {
+            if (adminHandler && adminHandler.renderMainPanel) {
+                return await adminHandler.renderMainPanel(interaction);
+            }
+            return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] });
+        }
+
         if (customId === 'admin_menu_select' && selectedValue === 'setup_clans') {
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
             const activeClans = await Clan.count({ where: { guildId: interaction.guild.id } });
@@ -72,11 +80,16 @@ module.exports = async (interaction, client) => {
                 .setDescription(`Configure server clan limits, creation costs, and automatic Discord channel syncing.\n\n• **Active Clans:** ${activeClans}\n• **Creation Cost:** ${config?.clanCreationCost || 1000} ${currency}\n• **Default Max Members:** ${config?.clanDefaultMaxMembers || 4}\n• **Discord Auto-Sync:** ${config?.clanDiscordSyncEnabled ? '🟢 Enabled' : '🔴 Disabled'}`)
                 .setColor('#3498db');
             
-            const row = new ActionRowBuilder().addComponents(
+            const row1 = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('btn_clan_settings').setLabel('Configure Clan Settings').setStyle(ButtonStyle.Primary).setEmoji('⚙️'),
                 new ButtonBuilder().setCustomId('btn_clan_toggle_sync').setLabel(config?.clanDiscordSyncEnabled ? 'Disable Discord Sync' : 'Enable Discord Sync').setStyle(config?.clanDiscordSyncEnabled ? ButtonStyle.Danger : ButtonStyle.Success).setEmoji('🔄')
             );
-            return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+
+            const row2 = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+            );
+
+            return interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
         }
 
         if (interaction.isButton()) {

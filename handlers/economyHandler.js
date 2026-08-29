@@ -1,9 +1,17 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder } = require('discord.js');
 const { GuildConfig, UserEconomy } = require('../database/db');
+const adminHandler = require('./adminHandler');
 
 module.exports = async (interaction, client) => {
     const customId = interaction.customId;
     const value = interaction.isStringSelectMenu() ? interaction.values[0] : null;
+
+    if (customId === 'admin_menu_back') {
+        if (adminHandler && adminHandler.renderMainPanel) {
+            return await adminHandler.renderMainPanel(interaction);
+        }
+        return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] });
+    }
 
     // ==========================================
     // 1. ADMIN ECONOMY SETUP PANEL
@@ -33,7 +41,11 @@ module.exports = async (interaction, client) => {
             new ButtonBuilder().setCustomId('btn_econ_player_reward').setLabel('Player Kill Reward').setStyle(ButtonStyle.Danger).setEmoji('⚔️')
         );
 
-        return interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
+        const row3 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+        );
+
+        return interaction.reply({ embeds: [embed], components: [row1, row2, row3], flags: 64 });
     }
 
     // ==========================================

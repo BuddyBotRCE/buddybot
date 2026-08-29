@@ -1,11 +1,19 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelSelectMenuBuilder, RoleSelectMenuBuilder } = require('discord.js');
 const { GuildConfig } = require('../database/db');
+const adminHandler = require('./adminHandler');
 
 const suggestionHandler = async (interaction, client) => {
     try {
         const customId = interaction.customId || '';
         const guildId = interaction.guild.id;
         let selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
+
+        if (customId === 'admin_menu_back') {
+            if (adminHandler && adminHandler.renderMainPanel) {
+                return await adminHandler.renderMainPanel(interaction);
+            }
+            return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] });
+        }
 
         // --- 1. ADMIN PANEL CONFIGURATION VIEW ---
         if (customId === 'admin_menu_select' && (selectedValue === 'setup_suggestions' || selectedValue.includes('suggestion'))) {
@@ -23,7 +31,11 @@ const suggestionHandler = async (interaction, client) => {
                 new ButtonBuilder().setCustomId('btn_sug_set_role').setLabel('Select Admin Role to Ping').setStyle(ButtonStyle.Secondary).setEmoji('🔔')
             );
 
-            const payload = { embeds: [embed], components: [row1], flags: 64 };
+            const row2 = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+            );
+
+            const payload = { embeds: [embed], components: [row1, row2], flags: 64 };
             if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) return await interaction.reply(payload);
             return await interaction.update(payload).catch(() => interaction.followUp(payload));
         }

@@ -1,10 +1,18 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { GuildConfig } = require('../database/db');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const adminHandler = require('./adminHandler');
 
 module.exports = async (interaction, client) => {
     const customId = interaction.customId || '';
     const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
+
+    if (customId === 'admin_menu_back') {
+        if (adminHandler && adminHandler.renderMainPanel) {
+            return await adminHandler.renderMainPanel(interaction);
+        }
+        return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] });
+    }
 
     // --- ENTRY FROM ADMIN PANEL ---
     if (customId === 'admin_menu_select' && selectedValue === 'setup_tier') {
@@ -40,6 +48,12 @@ module.exports = async (interaction, client) => {
             );
             componentsArray.push(row3);
         }
+
+        // ROW 4: Back to Admin Panel Button
+        const rowBack = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+        );
+        componentsArray.push(rowBack);
 
         return interaction.reply({ embeds: [embed], components: componentsArray, flags: 64 });
     }

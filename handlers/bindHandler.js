@@ -1,6 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, RoleSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } = require('discord.js');
 const { CustomBind, ServerKit } = require('../database/db');
 const { queueAdminPos } = require('../utils/rconManager'); 
+const adminHandler = require('./adminHandler');
 
 const bindSessions = new Map();
 
@@ -89,6 +90,10 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
                     .addOptions(selectOptions)
             ));
         }
+
+        components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+        ));
     } 
     else if (session.view === 'bind') {
         const activeBind = await CustomBind.findByPk(session.selectedBindId);
@@ -218,6 +223,13 @@ const bindHandler = async (interaction, client) => {
         if (customId === 'admin_menu_select' || customId === 'setup_binds') {
             session.view = 'main';
             return await renderBindPanel(interaction);
+        }
+
+        if (customId === 'admin_menu_back') {
+            if (adminHandler && adminHandler.renderMainPanel) {
+                return await adminHandler.renderMainPanel(interaction);
+            }
+            return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] });
         }
 
         if (customId.startsWith('bind_create_')) {

@@ -2,10 +2,18 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelect
 const { GuildConfig, ShopItem, UserEconomy, ShopCooldown } = require('../database/db');
 const { sendRconCommand } = require('../utils/rconManager');
 const { RUST_CATEGORIES } = require('../utils/rustCatalog');
+const adminHandler = require('./adminHandler');
 
 module.exports = async (interaction, client) => {
     const customId = interaction.customId || '';
     const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
+
+    if (customId === 'admin_menu_back') {
+        if (adminHandler && adminHandler.renderMainPanel) {
+            return await adminHandler.renderMainPanel(interaction);
+        }
+        return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] });
+    }
 
     async function renderShopManagePanel(interaction, messageText = '') {
         const dbItems = await ShopItem.findAll({ where: { guildId: interaction.guild.id } });
@@ -28,7 +36,7 @@ module.exports = async (interaction, client) => {
                 `📂 **Category Breakdown:**\n${categoryBreakdown}`)
             .setColor('#2ecc71');
 
-        const row = new ActionRowBuilder().addComponents(
+        const row1 = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder().setCustomId('shop_action_select').setPlaceholder('Select shop action...')
             .addOptions([
                 { label: 'Add Prebuilt Catalog Items (Multi-Select)', value: 'shop_add_catalog', emoji: '📦' },
@@ -39,12 +47,16 @@ module.exports = async (interaction, client) => {
             ])
         );
 
+        const row2 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+        );
+
         if (interaction.replied || interaction.deferred) {
-            return await interaction.editReply({ embeds: [embed], components: [row], content: null });
+            return await interaction.editReply({ embeds: [embed], components: [row1, row2], content: null });
         } else if (interaction.isStringSelectMenu() || interaction.isButton()) {
-            return await interaction.update({ embeds: [embed], components: [row], content: null });
+            return await interaction.update({ embeds: [embed], components: [row1, row2], content: null });
         } else {
-            return await interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+            return await interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
         }
     }
 

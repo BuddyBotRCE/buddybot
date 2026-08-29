@@ -1,11 +1,19 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { GuildConfig, UserEconomy, CasinoCooldown } = require('../database/db');
+const adminHandler = require('./adminHandler');
 
 module.exports = async (interaction, client) => {
     const customId = interaction.customId || '';
     const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
 
-    // 👇 ADD THIS ADMIN PANEL SETUP ROUTE IF MISSING 👇
+    if (customId === 'admin_menu_back') {
+        if (adminHandler && adminHandler.renderMainPanel) {
+            return await adminHandler.renderMainPanel(interaction);
+        }
+        return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] });
+    }
+
+    // 👇 ADMIN PANEL SETUP ROUTE 👇
     if (customId === 'admin_menu_select' && selectedValue === 'setup_minigames') {
         const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
         const currency = config?.economyCurrency || 'Scrap';
@@ -15,10 +23,15 @@ module.exports = async (interaction, client) => {
             .setDescription(`Configure casino settings, maximum bets, and game cooldowns.\n\n• **Max Bet Limit:** ${config?.casinoMaxBet || 1000} ${currency}\n• **Game Cooldown:** ${config?.casinoCooldownSeconds || 5} seconds`)
             .setColor('#9b59b6');
 
-        const row = new ActionRowBuilder().addComponents(
+        const row1 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('btn_casino_settings').setLabel('Configure Limits').setStyle(ButtonStyle.Primary).setEmoji('⚙️')
         );
-        return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+
+        const row2 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+        );
+
+        return interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
     }
 
     // --- BUTTON CLICKS ---

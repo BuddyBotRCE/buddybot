@@ -1,11 +1,19 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder } = require('discord.js');
 const { GuildConfig } = require('../database/db');
+const adminHandler = require('./adminHandler');
 
 const loggingHandler = async (interaction, client) => {
     try {
         const customId = interaction.customId || '';
         const guildId = interaction.guild.id;
         let selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
+
+        if (customId === 'admin_menu_back') {
+            if (adminHandler && adminHandler.renderMainPanel) {
+                return await adminHandler.renderMainPanel(interaction);
+            }
+            return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] });
+        }
 
         // --- 1. ADMIN CONFIGURATION VIEW ---
         if (customId === 'admin_menu_select' && (selectedValue === 'setup_logging' || selectedValue.includes('log'))) {
@@ -41,7 +49,11 @@ const loggingHandler = async (interaction, client) => {
                 new ButtonBuilder().setCustomId('btn_log_set_voice').setLabel('Voice Chat').setStyle(ButtonStyle.Success).setEmoji('🔊')
             );
 
-            const payload = { embeds: [embed], components: [row1, row2], flags: 64 };
+            const row3 = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+            );
+
+            const payload = { embeds: [embed], components: [row1, row2, row3], flags: 64 };
             if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) return await interaction.reply(payload);
             return await interaction.update(payload).catch(() => interaction.followUp(payload));
         }

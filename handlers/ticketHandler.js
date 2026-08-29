@@ -1,10 +1,18 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionsBitField, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { GuildConfig } = require('../database/db');
+const adminHandler = require('./adminHandler');
 
 module.exports = async (interaction, client) => {
     try {
         const customId = interaction.customId || '';
         const guildId = interaction.guild.id;
+
+        if (customId === 'admin_menu_back') {
+            if (adminHandler && adminHandler.renderMainPanel) {
+                return await adminHandler.renderMainPanel(interaction);
+            }
+            return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] });
+        }
 
         // 1. Admin setup panel trigger
         if (customId === 'admin_menu_select' && interaction.isStringSelectMenu() && interaction.values[0] === 'setup_tickets') {
@@ -16,11 +24,15 @@ module.exports = async (interaction, client) => {
                 .setDescription(`Configure support tickets for your players.\n\n• **Support Category:** ${catDisplay}`)
                 .setColor('#3498db');
 
-            const row = new ActionRowBuilder().addComponents(
+            const row1 = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('btn_tk_setcat').setLabel('Set Category').setStyle(ButtonStyle.Primary).setEmoji('📂')
             );
 
-            return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+            const row2 = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+            );
+
+            return interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
         }
 
         // 2. Set category button

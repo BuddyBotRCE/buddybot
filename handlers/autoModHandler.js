@@ -1,5 +1,6 @@
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { GuildConfig } = require('../database/db');
+const adminHandler = require('./adminHandler');
 
 // In-memory session manager
 const amSessions = new Map();
@@ -80,7 +81,7 @@ module.exports = async (interaction, client) => {
                 new ButtonBuilder().setCustomId('btn_am_config').setLabel('Configure Limits').setStyle(ButtonStyle.Primary).setEmoji('⚙️').setDisabled(!session.selectedModule || !AM_MODULES[session.selectedModule].hasLimit),
                 new ButtonBuilder().setCustomId('btn_am_save').setLabel('Save & Enable').setStyle(ButtonStyle.Success).setEmoji('✅').setDisabled(!session.selectedModule),
                 new ButtonBuilder().setCustomId('btn_am_disable').setLabel('Disable Module').setStyle(ButtonStyle.Danger).setEmoji('🗑️').setDisabled(!session.selectedModule),
-                new ButtonBuilder().setCustomId('btn_am_back').setLabel('Back to Admin').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+                new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
             );
 
             const payload = { embeds: [embed], components: [moduleRow, actionRow, btnRow], flags: 64 };
@@ -116,8 +117,11 @@ module.exports = async (interaction, client) => {
 
         // --- HANDLE BUTTONS ---
         if (interaction.isButton()) {
-            if (customId === 'btn_am_back') {
-                return await interaction.update({ content: '🔙 Closed Auto-Mod setup. Type `/adminpanel` to return to the main menu.', embeds: [], components: [] });
+            if (customId === 'admin_menu_back') {
+                if (adminHandler && adminHandler.renderMainPanel) {
+                    return await adminHandler.renderMainPanel(interaction);
+                }
+                return await interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] });
             }
 
             if (customId === 'btn_am_disable') {

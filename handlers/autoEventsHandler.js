@@ -53,8 +53,12 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
             new ButtonBuilder().setCustomId('ae_btn_disable_mode').setLabel('Disable / Enable Event').setStyle(ButtonStyle.Secondary).setEmoji('⚡'),
             new ButtonBuilder().setCustomId('ae_btn_delete_mode').setLabel('Delete Event').setStyle(ButtonStyle.Danger).setEmoji('💀')
         );
+
+        const rowBack = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+        );
         
-        components.push(row1, row2, row3);
+        components.push(row1, row2, row3, rowBack);
     } 
     else if (session.view === 'select_disable' || session.view === 'select_delete') {
         const isDisable = session.view === 'select_disable';
@@ -154,7 +158,6 @@ const autoEventsHandler = async (interaction, client) => {
             return await renderAEPanel(interaction);
         }
 
-        // 👇 UPDATED MODAL SUBMISSION TO READ TIMER INTERVAL 👇
         if (interaction.isModalSubmit() && customId === 'modal_ae_settings') {
             const newName = interaction.fields.getTextInputValue('ev_name').trim() || "Custom Event";
             let amount = parseInt(interaction.fields.getTextInputValue('ev_qty')) || 1;
@@ -220,7 +223,6 @@ const autoEventsHandler = async (interaction, client) => {
                 return await renderAEPanel(interaction);
             }
 
-            // 👇 UPDATED MODAL POPUP TO INCLUDE TIMER INPUT FIELD 👇
             if (customId === 'ae_btn_settings') {
                 const ev = await AutoEvent.findByPk(session.selectedEventId);
                 const modal = new ModalBuilder().setCustomId('modal_ae_settings').setTitle(`Edit Event Settings`);

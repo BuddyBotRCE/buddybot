@@ -170,6 +170,13 @@ module.exports = async (interaction, client) => {
         if (customId === 'hometp_btn_settings' || customId === 'admin_menu_back') {
             return await homeTpHandler(interaction, client);
         }
+        // Inside events/interactionCreate.js button routing:
+        if (customId === 'admin_menu_back') {
+    const adminHandler = require('./adminHandler');
+    if (adminHandler && adminHandler.renderMainPanel) {
+        return await adminHandler.renderMainPanel(interaction);
+    }
+        }  
 
         if (customId === 'hub_hometp_info') {
             return interaction.reply({ 

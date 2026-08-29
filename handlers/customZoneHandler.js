@@ -1,6 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } = require('discord.js');
 const { PveZone } = require('../database/db'); 
 const { queueAdminPos, sendRconCommand } = require('../utils/rconManager'); 
+const adminHandler = require('./adminHandler');
 
 const czSessions = new Map();
 
@@ -48,6 +49,11 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
         
         row1.addComponents(new ButtonBuilder().setCustomId('cz_create_new').setLabel('➕ Create Zone').setStyle(ButtonStyle.Primary));
         components.push(row1);
+
+        const row2 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+        );
+        components.push(row2);
     } 
     else if (session.view === 'zone') {
         const activeZone = await PveZone.findByPk(session.selectedZoneId);
@@ -151,6 +157,13 @@ const customZoneHandler = async (interaction, client) => {
             const payload = await buildPanelPayload(guildId, messageOverride);
             await safeRespond(inter, payload);
         };
+
+        if (customId === 'admin_menu_back') {
+            if (adminHandler && adminHandler.renderMainPanel) {
+                return await adminHandler.renderMainPanel(interaction);
+            }
+            return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] });
+        }
 
         if (customId === 'admin_menu_select' || customId === 'setup_custom_zones') {
             session.view = 'main';

@@ -1,11 +1,19 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { GuildConfig, UserEconomy, PveZone, CustomBind, ShopCooldown, BindCooldown, BountyCooldown, HomeTeleportCooldown, HomeTeleportLocation } = require('../database/db');
 const { sendRconCommand } = require('../utils/rconManager');
+const adminHandler = require('./adminHandler');
 
 module.exports = async (interaction, client) => {
     const customId = interaction.customId || '';
 
     try {
+        if (customId === 'admin_menu_back') {
+            if (adminHandler && adminHandler.renderMainPanel) {
+                return await adminHandler.renderMainPanel(interaction);
+            }
+            return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] });
+        }
+
         if (interaction.isStringSelectMenu() && interaction.values && interaction.values[0] === 'setup_wipe') {
             const embed = new EmbedBuilder()
                 .setTitle('☢️ Server Wipe Manager')
@@ -21,7 +29,11 @@ module.exports = async (interaction, client) => {
                 new ButtonBuilder().setCustomId('btn_wipe_cooldowns').setLabel('Clear All Cooldowns').setStyle(ButtonStyle.Secondary).setEmoji('⏳')
             );
 
-            return interaction.update({ embeds: [embed], components: [row1, row2], content: null });
+            const row3 = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+            );
+
+            return interaction.update({ embeds: [embed], components: [row1, row2, row3], content: null });
         }
 
         if (interaction.isButton()) {

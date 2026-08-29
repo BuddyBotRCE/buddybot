@@ -1,5 +1,6 @@
 const { EmbedBuilder, ActionRowBuilder, ChannelSelectMenuBuilder, RoleSelectMenuBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType } = require('discord.js');
 const { GuildConfig, CustomEmbed, ReactionRole } = require('../database/db');
+const adminHandler = require('./adminHandler');
 
 const embedSessions = new Map();
 const rrSetupSessions = new Map();
@@ -20,6 +21,13 @@ module.exports = async (interaction, client) => {
         if (interaction.isStringSelectMenu()) selectedValue = interaction.values[0] || '';
         else if (interaction.isChannelSelectMenu()) selectedValue = interaction.values[0] || interaction.channels.first()?.id || '';
         else if (interaction.isRoleSelectMenu()) selectedValue = interaction.values[0] || interaction.roles.first()?.id || '';
+
+        if (customId === 'admin_menu_back') {
+            if (adminHandler && adminHandler.renderMainPanel) {
+                return await adminHandler.renderMainPanel(interaction);
+            }
+            return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] });
+        }
 
         // ====================================================================
         // 🚦 INITIAL ROUTING FOR NEW UNIFIED MENU OPTIONS
@@ -138,6 +146,11 @@ module.exports = async (interaction, client) => {
                 actionRow.addComponents(new ButtonBuilder().setCustomId('btn_rr_deploy').setLabel(isAttach ? 'Attach to Message' : 'Deploy Panel').setStyle(ButtonStyle.Success).setEmoji(isAttach ? '📎' : '📦'), new ButtonBuilder().setCustomId('btn_rr_clear').setLabel('Clear Queue').setStyle(ButtonStyle.Danger).setEmoji('🗑️'));
                 components.push(actionRow);
 
+                const backRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+                );
+                components.push(backRow);
+
                 const payload = { embeds: [embed], components, flags: 64 };
                 if (inter.isRepliable() && !inter.replied && !inter.deferred) return await inter.reply(payload);
                 return await inter.editReply(payload).catch(() => inter.followUp(payload));
@@ -230,7 +243,6 @@ module.exports = async (interaction, client) => {
                 }
             }
 
-            // 👇 THE FIX FOR VERIFICATION PERMISSION CRASHES 👇
             if (interaction.isButton() && customId.startsWith('rr_toggle_')) {
                 const rrData = await ReactionRole.findByPk(customId.replace('rr_toggle_', ''));
                 if (!rrData) return await interaction.reply({ content: '❌ This role configuration no longer exists.', flags: 64 });
@@ -256,7 +268,6 @@ module.exports = async (interaction, client) => {
                     }
                 } catch (e) {
                     console.error('[ROLE ASSIGNMENT ERROR]', e);
-                    // Explicitly catch Discord Role Hierarchy errors
                     return await interaction.reply({ content: `❌ **Failed to assign role.**\nMake sure the **BuddyBot role** is placed strictly **higher** than the **${role.name}** role in your Server Settings!`, flags: 64 });
                 }
             }
@@ -300,6 +311,11 @@ module.exports = async (interaction, client) => {
                     : new ButtonBuilder().setCustomId('btn_emb_publish').setLabel('Select Channel & Post').setStyle(ButtonStyle.Success).setEmoji('🚀');
 
                 components.push(new ActionRowBuilder().addComponents(pubBtn));
+
+                const backRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+                );
+                components.push(backRow);
 
                 const payload = { embeds: [configEmbed, previewEmbed], components, flags: 64 };
                 if (inter.isRepliable() && !inter.replied && !inter.deferred) return await inter.reply(payload);
