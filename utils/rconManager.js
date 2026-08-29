@@ -170,7 +170,22 @@ async function connectRcon(guildId, client, targetServerId = null) {
                                         await bindHandler.refreshPanelViaInteraction(setupData.interaction, `✅ **Position Captured!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``, setupData.targetId);
                                     }
                                 } catch (error) {}
+                            } 
+                            else if (setupData.type === 'auto_event') {
+                                try {
+                                    const autoEventsHandler = require('../handlers/autoEventsHandler');
+                                    if (autoEventsHandler && autoEventsHandler.autoSaveLocation) {
+                                        await autoEventsHandler.autoSaveLocation(setupData.interaction.guild.id, posX, posY, posZ, setupData.targetId);
+                                    }
+                                    if (autoEventsHandler && autoEventsHandler.refreshPanelViaInteraction) {
+                                        await autoEventsHandler.refreshPanelViaInteraction(
+                                            setupData.interaction,
+                                            `✅ **Spawn Position Added!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``
+                                        );
+                                    }
+                                } catch (error) {}
                             }
+
                             adminPosQueue.delete(adminId);
                             break;
                         }
@@ -271,9 +286,8 @@ async function connectRcon(guildId, client, targetServerId = null) {
                                     return;
                                 }
 
-                                // A. SET HOME TRIGGER (Any Quick Chat wheel action e.g., 'Can I have a key' / building slot)
+                                // A. SET HOME TRIGGER
                                 if (rawContent.includes('d11_quick_chat_')) {
-                                    // Use Rust Console Edition RCON kill command format
                                     await sendRconCommand(guildId, `kill "${matchedPlayer.inGameName}"`, client);
                                     await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, home set command received! Respawn at your bag to anchor coordinates."`, client);
                                     
@@ -305,7 +319,6 @@ async function connectRcon(guildId, client, targetServerId = null) {
                                     const expiryTime = new Date(now.getTime() + hometpConfig.cooldownMinutes * 60000);
                                     await cd.update({ expiresAt: expiryTime });
 
-                                    // Rust Console Edition Teleport Command Syntax
                                     await sendRconCommand(guildId, `teleportpos "${matchedPlayer.inGameName}" ${homeLoc.posX} ${homeLoc.posY} ${homeLoc.posZ}`, client);
                                     await sendRconCommand(guildId, `say "[Teleport] ${matchedPlayer.inGameName} successfully retreated home!"`, client);
                                     return;
