@@ -665,4 +665,5 @@ const adminHandler = async (interaction, client) => {
     }
 };
 
-module.exports.renderMainPanel = renderMainPanel;
+adminHandler.renderMainPanel = renderMainPanel;
+module.exports = adminHandler;
