@@ -21,9 +21,41 @@ const RUST_CATEGORIES = {
             { name: 'Spas-12 Shotgun', shortname: 'shotgun.spas12', basePrice: 300 },
             { name: 'Double Barrel Shotgun', shortname: 'shotgun.double', basePrice: 150 },
             { name: 'Waterpipe Shotgun', shortname: 'shotgun.waterpipe', basePrice: 50 },
+            { name: 'Nailgun', shortname: 'pistol.nailgun', basePrice: 30 },
             { name: 'Compound Bow', shortname: 'bow.compound', basePrice: 50 },
+            { name: 'Crossbow', shortname: 'crossbow', basePrice: 75 },
             { name: 'Hunting Bow', shortname: 'bow.hunting', basePrice: 25 },
-            { name: 'Rocket Launcher', shortname: 'rocket.launcher', basePrice: 750 }
+            { name: 'Rocket Launcher', shortname: 'rocket.launcher', basePrice: 750 },
+            { name: 'Multiple Grenade Launcher', shortname: 'multiplegrenadelauncher', basePrice: 1500 },
+            { name: 'Weapon Lasersight', shortname: 'weapon.mod.lasersight', basePrice: 100 },
+            { name: 'Weapon Flashlight', shortname: 'weapon.mod.flashlight', basePrice: 50 },
+            { name: 'Holosight', shortname: 'weapon.mod.holosight', basePrice: 150 },
+            { name: 'Silencer', shortname: 'weapon.mod.silencer', basePrice: 100 },
+            { name: '4x Zoom Scope', shortname: 'weapon.mod.small.scope', basePrice: 200 },
+            { name: '8x Zoom Scope', shortname: 'weapon.mod.8x.scope', basePrice: 300 },
+            { name: 'Salvaged Sword', shortname: 'salvaged.sword', basePrice: 50 },
+            { name: 'Machete', shortname: 'machete', basePrice: 40 },
+            { name: 'Bone Knife', shortname: 'knife.bone', basePrice: 20 },
+            { name: 'Combat Knife', shortname: 'knife.combat', basePrice: 50 }
+        ]
+    },
+    tools: {
+        label: 'Tools & Utility',
+        emoji: '⛏️',
+        items: [
+            { name: 'Jackhammer', shortname: 'jackhammer', basePrice: 150 },
+            { name: 'Chainsaw', shortname: 'chainsaw', basePrice: 125 },
+            { name: 'Salvaged Icepick', shortname: 'icepick.salvaged', basePrice: 75 },
+            { name: 'Salvaged Axe', shortname: 'axe.salvaged', basePrice: 75 },
+            { name: 'Pickaxe', shortname: 'pickaxe', basePrice: 50 },
+            { name: 'Hatchet', shortname: 'hatchet', basePrice: 50 },
+            { name: 'Stone Pickaxe', shortname: 'stone.pickaxe', basePrice: 20 },
+            { name: 'Stone Hatchet', shortname: 'stonehatchet', basePrice: 20 },
+            { name: 'Rock', shortname: 'rock', basePrice: 1 },
+            { name: 'Building Plan', shortname: 'building.planner', basePrice: 10 },
+            { name: 'Hammer', shortname: 'hammer', basePrice: 10 },
+            { name: 'Flashlight', shortname: 'flashlight.held', basePrice: 20 },
+            { name: 'Binoculars', shortname: 'binoculars', basePrice: 50 }
         ]
     },
     ammo: {
@@ -40,8 +72,15 @@ const RUST_CATEGORIES = {
             { name: '12 Gauge Buckshot', shortname: 'ammo.shotgun', basePrice: 5 },
             { name: '12 Gauge Slug', shortname: 'ammo.shotgun.slug', basePrice: 10 },
             { name: 'Incendiary Shell', shortname: 'ammo.shotgun.fire', basePrice: 10 },
+            { name: 'Handmade Shell', shortname: 'ammo.handmade.shell', basePrice: 2 },
+            { name: 'Nails', shortname: 'ammo.nailgun.nails', basePrice: 2 },
+            { name: 'Wooden Arrow', shortname: 'arrow.wooden', basePrice: 2 },
+            { name: 'High Velocity Arrow', shortname: 'arrow.hv', basePrice: 5 },
+            { name: 'Bone Arrow', shortname: 'arrow.bone', basePrice: 5 },
+            { name: 'Fire Arrow', shortname: 'arrow.fire', basePrice: 10 },
             { name: 'Rocket', shortname: 'ammo.rocket.basic', basePrice: 150 },
             { name: 'High Velocity Rocket', shortname: 'ammo.rocket.hv', basePrice: 100 },
+            { name: 'Incendiary Rocket', shortname: 'ammo.rocket.fire', basePrice: 150 },
             { name: 'Satchel Charge', shortname: 'explosive.satchel', basePrice: 150 },
             { name: 'Timed Explosive Charge (C4)', shortname: 'explosive.timed', basePrice: 500 },
             { name: 'Beancan Grenade', shortname: 'grenade.beancan', basePrice: 50 },
@@ -59,14 +98,35 @@ const RUST_CATEGORIES = {
             { name: 'Road Sign Jacket', shortname: 'roadsign.jacket', basePrice: 150 },
             { name: 'Road Sign Kilt', shortname: 'roadsign.kilt', basePrice: 150 },
             { name: 'Coffee Can Helmet', shortname: 'coffeecan.helmet', basePrice: 150 },
+            { name: 'Riot Helmet', shortname: 'riot.helmet', basePrice: 100 },
             { name: 'Bucket Helmet', shortname: 'bucket.helmet', basePrice: 50 },
             { name: 'Hazmat Suit', shortname: 'hazmatsuit', basePrice: 200 },
             { name: 'Arctic Suit', shortname: 'hazmatsuit.arcticsuit', basePrice: 250 },
             { name: 'Heavy Plate Helmet', shortname: 'heavy.plate.helmet', basePrice: 300 },
             { name: 'Heavy Plate Jacket', shortname: 'heavy.plate.jacket', basePrice: 400 },
             { name: 'Heavy Plate Pants', shortname: 'heavy.plate.pants', basePrice: 300 },
+            { name: 'Bone Armor', shortname: 'bone.armor.suit', basePrice: 75 },
+            { name: 'Bone Helmet', shortname: 'deer.skull.mask', basePrice: 50 },
+            { name: 'Wood Armor Pants', shortname: 'wood.armor.pants', basePrice: 50 },
+            { name: 'Wood Armor Jacket', shortname: 'wood.armor.jacket', basePrice: 50 },
             { name: 'Hide Pants', shortname: 'attire.hide.pants', basePrice: 25 },
-            { name: 'Hide Vest', shortname: 'attire.hide.vest', basePrice: 25 }
+            { name: 'Hide Vest', shortname: 'attire.hide.vest', basePrice: 25 },
+            { name: 'Hoodie', shortname: 'hoodie', basePrice: 50 },
+            { name: 'Pants', shortname: 'pants', basePrice: 50 },
+            { name: 'Boots', shortname: 'shoes.boots', basePrice: 40 },
+            { name: 'Leather Gloves', shortname: 'burlap.gloves', basePrice: 30 },
+            { name: 'Tactical Gloves', shortname: 'tactical.gloves', basePrice: 100 }
+        ]
+    },
+    medical: {
+        label: 'Medical & Healing',
+        emoji: '⚕️',
+        items: [
+            { name: 'Bandage', shortname: 'bandage', basePrice: 5 },
+            { name: 'Medical Syringe', shortname: 'syringe.medical', basePrice: 25 },
+            { name: 'Large Medkit', shortname: 'largemedkit', basePrice: 50 },
+            { name: 'Anti-Radiation Pills', shortname: 'antiradpills', basePrice: 20 },
+            { name: 'Blood', shortname: 'blood', basePrice: 5 }
         ]
     },
     resources: {
@@ -83,18 +143,121 @@ const RUST_CATEGORIES = {
             { name: 'Stone', shortname: 'stones', basePrice: 1 },
             { name: 'Wood', shortname: 'wood', basePrice: 1 },
             { name: 'Low Grade Fuel', shortname: 'lowgradefuel', basePrice: 2 },
+            { name: 'Crude Oil', shortname: 'crude.oil', basePrice: 5 },
             { name: 'Cloth', shortname: 'cloth', basePrice: 1 },
             { name: 'Leather', shortname: 'leather', basePrice: 1 },
+            { name: 'Bone Fragments', shortname: 'bone.fragments', basePrice: 1 },
+            { name: 'Animal Fat', shortname: 'fat.animal', basePrice: 2 },
+            { name: 'Empty Propane Tank', shortname: 'propanetank', basePrice: 15 },
+            { name: 'Empty Tuna Can', shortname: 'can.tuna.empty', basePrice: 2 },
+            { name: 'Empty Beans Can', shortname: 'can.beans.empty', basePrice: 2 },
             { name: 'Rope', shortname: 'rope', basePrice: 10 },
             { name: 'Sewing Kit', shortname: 'sewingkit', basePrice: 15 },
             { name: 'Gears', shortname: 'gears', basePrice: 25 },
             { name: 'Metal Pipe', shortname: 'metalpipe', basePrice: 25 },
             { name: 'Metal Spring', shortname: 'metalspring', basePrice: 50 },
+            { name: 'Metal Blade', shortname: 'metalblade', basePrice: 15 },
+            { name: 'Road Signs', shortname: 'roadsigns', basePrice: 25 },
             { name: 'Sheet Metal', shortname: 'sheetmetal', basePrice: 50 },
             { name: 'Rifle Body', shortname: 'riflebody', basePrice: 250 },
             { name: 'Semi-Automatic Body', shortname: 'semibody', basePrice: 100 },
             { name: 'SMG Body', shortname: 'smgbody', basePrice: 100 },
             { name: 'Tech Trash', shortname: 'techparts', basePrice: 100 }
+        ]
+    },
+    deployables: {
+        label: 'Base Deployables',
+        emoji: '🏠',
+        items: [
+            { name: 'Tool Cupboard', shortname: 'cupboard.tool', basePrice: 50 },
+            { name: 'Sleeping Bag', shortname: 'sleepingbag', basePrice: 30 },
+            { name: 'Bed', shortname: 'bed', basePrice: 100 },
+            { name: 'Wooden Door', shortname: 'door.hinged.wood', basePrice: 30 },
+            { name: 'Sheet Metal Door', shortname: 'door.hinged.metal', basePrice: 100 },
+            { name: 'Armored Door', shortname: 'door.hinged.toptier', basePrice: 300 },
+            { name: 'Garage Door', shortname: 'wall.frame.garagedoor', basePrice: 250 },
+            { name: 'Wooden Double Door', shortname: 'door.double.hinged.wood', basePrice: 50 },
+            { name: 'Sheet Metal Double Door', shortname: 'door.double.hinged.metal', basePrice: 150 },
+            { name: 'High External Wooden Wall', shortname: 'wall.external.high.wood', basePrice: 150 },
+            { name: 'High External Stone Wall', shortname: 'wall.external.high.stone', basePrice: 300 },
+            { name: 'High External Wooden Gate', shortname: 'gates.external.high.wood', basePrice: 200 },
+            { name: 'High External Stone Gate', shortname: 'gates.external.high.stone', basePrice: 400 },
+            { name: 'Furnace', shortname: 'furnace', basePrice: 50 },
+            { name: 'Large Furnace', shortname: 'furnace.large', basePrice: 300 },
+            { name: 'Small Oil Refinery', shortname: 'small.oil.refinery', basePrice: 250 },
+            { name: 'Repair Bench', shortname: 'box.repair.bench', basePrice: 100 },
+            { name: 'Mixing Table', shortname: 'mixingtable', basePrice: 150 },
+            { name: 'Workbench Level 1', shortname: 'workbench1', basePrice: 100 },
+            { name: 'Workbench Level 2', shortname: 'workbench2', basePrice: 300 },
+            { name: 'Workbench Level 3', shortname: 'workbench3', basePrice: 1000 },
+            { name: 'Wooden Box', shortname: 'box.wooden', basePrice: 20 },
+            { name: 'Large Wooden Box', shortname: 'box.wooden.large', basePrice: 50 },
+            { name: 'Small Stash', shortname: 'stash.small', basePrice: 20 },
+            { name: 'Research Table', shortname: 'research.table', basePrice: 150 }
+        ]
+    },
+    traps: {
+        label: 'Traps & Base Defense',
+        emoji: '🎯',
+        items: [
+            { name: 'Auto Turret', shortname: 'autoturret', basePrice: 500 },
+            { name: 'Flame Turret', shortname: 'flameturret', basePrice: 250 },
+            { name: 'Shotgun Trap', shortname: 'guntrap', basePrice: 150 },
+            { name: 'Bear Trap', shortname: 'trap.bear', basePrice: 50 },
+            { name: 'Landmine', shortname: 'trap.landmine', basePrice: 100 },
+            { name: 'SAM Site', shortname: 'samsite', basePrice: 750 },
+            { name: 'Wooden Barricade', shortname: 'barricade.wood', basePrice: 30 },
+            { name: 'Barbed Wooden Barricade', shortname: 'barricade.woodwire', basePrice: 50 },
+            { name: 'Metal Barricade', shortname: 'barricade.metal', basePrice: 100 }
+        ]
+    },
+    electrical: {
+        label: 'Electricity',
+        emoji: '⚡',
+        items: [
+            { name: 'Wire Tool', shortname: 'wiretool', basePrice: 20 },
+            { name: 'Wind Turbine', shortname: 'generator.wind.scrap', basePrice: 500 },
+            { name: 'Large Solar Panel', shortname: 'solarpanel.large', basePrice: 150 },
+            { name: 'Small Generator', shortname: 'generator.small', basePrice: 200 },
+            { name: 'Large Rechargeable Battery', shortname: 'battery.rechargeable.large', basePrice: 400 },
+            { name: 'Medium Rechargeable Battery', shortname: 'battery.rechargeable.medium', basePrice: 200 },
+            { name: 'Small Rechargeable Battery', shortname: 'battery.rechargeable.small', basePrice: 50 },
+            { name: 'Electrical Branch', shortname: 'electrical.branch', basePrice: 30 },
+            { name: 'Root Combiner', shortname: 'electrical.combiner', basePrice: 30 },
+            { name: 'Splitter', shortname: 'electrical.splitter', basePrice: 30 },
+            { name: 'Switch', shortname: 'electrical.switch', basePrice: 20 },
+            { name: 'Blocker', shortname: 'electrical.blocker', basePrice: 30 },
+            { name: 'Smart Switch', shortname: 'smart.switch', basePrice: 100 },
+            { name: 'Smart Alarm', shortname: 'smart.alarm', basePrice: 100 },
+            { name: 'Ceiling Light', shortname: 'ceilinglight', basePrice: 20 }
+        ]
+    },
+    food: {
+        label: 'Food & Farming',
+        emoji: '🍎',
+        items: [
+            { name: 'Pumpkin', shortname: 'pumpkin', basePrice: 5 },
+            { name: 'Corn', shortname: 'corn', basePrice: 5 },
+            { name: 'Cooked Wolf Meat', shortname: 'meat.wolf.cooked', basePrice: 5 },
+            { name: 'Cooked Pork', shortname: 'meat.pork.cooked', basePrice: 5 },
+            { name: 'Cooked Bear Meat', shortname: 'meat.bear.cooked', basePrice: 5 },
+            { name: 'Apple', shortname: 'apple', basePrice: 5 },
+            { name: 'Water Jug', shortname: 'waterjug', basePrice: 20 },
+            { name: 'Bota Bag', shortname: 'botabag', basePrice: 10 },
+            { name: 'Large Planter Box', shortname: 'planter.large', basePrice: 50 },
+            { name: 'Composter', shortname: 'composter', basePrice: 100 }
+        ]
+    },
+    misc: {
+        label: 'Keycards & Misc',
+        emoji: '🏷️',
+        items: [
+            { name: 'Green Keycard', shortname: 'keycard_green', basePrice: 50 },
+            { name: 'Blue Keycard', shortname: 'keycard_blue', basePrice: 150 },
+            { name: 'Red Keycard', shortname: 'keycard_red', basePrice: 300 },
+            { name: 'Supply Signal', shortname: 'supply.signal', basePrice: 500 },
+            { name: 'Fuses', shortname: 'fuse', basePrice: 20 },
+            { name: 'Blueprints (Paper)', shortname: 'blueprintbase', basePrice: 10 }
         ]
     }
 };
