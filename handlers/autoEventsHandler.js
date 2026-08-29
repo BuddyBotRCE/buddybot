@@ -1,6 +1,6 @@
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } = require('discord.js');
 const { AutoEvent, AutoEventLocation } = require('../database/db');
-const { sendRconCommand } = require('../utils/rconManager'); 
+const { sendRconCommand, queueAdminPos } = require('../utils/rconManager'); 
 
 const aeSessions = new Map();
 
@@ -267,7 +267,6 @@ const autoEventsHandler = async (interaction, client) => {
             }
 
             if (customId === 'ae_btn_getpos') {
-                const { queueAdminPos } = require('../utils/rconManager');
                 const loadingPayload = await buildPanelPayload(guildId, '⏳ **Extracting your position from the server...**');
                 await interaction.update(loadingPayload);
                 await queueAdminPos(interaction, 'auto_event', session.selectedEventId);
