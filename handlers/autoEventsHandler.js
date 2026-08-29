@@ -1,6 +1,6 @@
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } = require('discord.js');
 const { AutoEvent, AutoEventLocation } = require('../database/db');
-const { sendRconCommand, queueAdminPos } = require('../utils/rconManager'); 
+const { sendRconCommand } = require('../utils/rconManager'); 
 
 const aeSessions = new Map();
 
@@ -40,7 +40,6 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
 
         embed.addFields({ name: '🛠️ Controls', value: '👇 **Select an option below to create, manage, or configure event instances.**' });
 
-        // Build a dynamic select menu listing all configured events for management
         const selectOptions = allEvents.length > 0 
             ? allEvents.slice(0, 25).map(ev => ({ label: ev.name.substring(0, 100), description: `Type: ${TYPE_INFO[ev.eventType]?.name || ev.eventType} | Every ${ev.interval}m`, value: `ae_select_${ev.id}`, emoji: TYPE_INFO[ev.eventType]?.emoji || '⚙️' }))
             : [{ label: 'No events created yet', value: 'none', emoji: '❌' }];
@@ -268,6 +267,7 @@ const autoEventsHandler = async (interaction, client) => {
             }
 
             if (customId === 'ae_btn_getpos') {
+                const { queueAdminPos } = require('../utils/rconManager');
                 const loadingPayload = await buildPanelPayload(guildId, '⏳ **Extracting your position from the server...**');
                 await interaction.update(loadingPayload);
                 await queueAdminPos(interaction, 'auto_event', session.selectedEventId);
