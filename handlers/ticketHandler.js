@@ -1,6 +1,70 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionsBitField, AttachmentBuilder, ChannelSelectMenuBuilder, RoleSelectMenuBuilder } = require('discord.js');
-const { GuildConfig } = require('../database/db');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionsBitField, AttachmentBuilder, ChannelSelectMenuBuilder, RoleSelectMenuBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { GuildConfig, TicketCategory } = require('../database/db');
 const adminHandler = require('./adminHandler');
+
+// --- HELPER: RENDER ADMIN MENU ---
+async function renderAdminMenu(interaction, guildId, action = 'reply') {
+    const config = await GuildConfig.findOrCreate({ where: { guildId } });
+    const cfg = config[0];
+    
+    const catDisplay = cfg.ticketCategoryId ? `<#${cfg.ticketCategoryId}>` : '`Not Set`';
+    const logDisplay = cfg.ticketTranscriptChannelId ? `<#${cfg.ticketTranscriptChannelId}>` : '`Not Set`';
+    const roleDisplay = cfg.ticketAdminRoleId ? `<@&${cfg.ticketAdminRoleId}>` : '`Not Set`';
+
+    const embed = new EmbedBuilder()
+        .setTitle('🎫 Ticket System Manager')
+        .setDescription(`Configure support tickets for your players.\n\n**Current Setup:**\n📂 **Category:** ${catDisplay}\n📄 **Transcripts:** ${logDisplay}\n👮 **Support Role:** ${roleDisplay}`)
+        .setColor('#3498db');
+
+    const row1 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('btn_tk_setcat').setLabel('Set Category').setStyle(ButtonStyle.Primary).setEmoji('📂'),
+        new ButtonBuilder().setCustomId('btn_tk_setlog').setLabel('Set Transcript Log').setStyle(ButtonStyle.Primary).setEmoji('📄'),
+        new ButtonBuilder().setCustomId('btn_tk_setrole').setLabel('Set Support Role').setStyle(ButtonStyle.Primary).setEmoji('👮')
+    );
+
+    const row2 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('tk_manage_cats').setLabel('Manage Ticket Categories & Priority').setStyle(ButtonStyle.Success).setEmoji('📑'),
+        new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+    );
+
+    const payload = { content: '', embeds: [embed], components: [row1, row2], flags: 64 };
+    if (action === 'reply') await interaction.reply(payload);
+    else await interaction.update(payload);
+}
+
+// --- HELPER: RENDER CATEGORY MANAGER ---
+async function renderCategoryManager(interaction, guildId, action = 'update') {
+    const cats = await TicketCategory.findAll({ where: { guildId } });
+
+    let catList = cats.length > 0
+        ? cats.map((c, i) => `**${i + 1}. ${c.name}**\n*${c.description}*`).join('\n\n')
+        : '*No custom categories created yet. Players will see default options (General, Report, Priority).*';
+
+    const embed = new EmbedBuilder()
+        .setTitle('📑 Ticket Categories & Priority')
+        .setDescription(`Create custom dropdown options for players when they open a ticket.\n\n💡 **Pro Tip:** *If you include the word **"Priority"** in the category name (e.g. "Priority Issue ⚡"), the bot will automatically flag it, turn the ticket Red, and name the channel \`pri-username\` to grab staff attention!*\n\n${catList}`)
+        .setColor('#f1c40f');
+
+    const components = [];
+
+    if (cats.length > 0) {
+        const delMenu = new StringSelectMenuBuilder()
+            .setCustomId('tk_del_cat')
+            .setPlaceholder('🗑️ Select a category to delete...')
+            .addOptions(cats.slice(0, 25).map(c => ({ label: c.name.substring(0, 100), value: c.id.toString() })));
+        components.push(new ActionRowBuilder().addComponents(delMenu));
+    }
+
+    components.push(new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('tk_add_cat').setLabel('Add Category').setStyle(ButtonStyle.Primary).setEmoji('➕'),
+        new ButtonBuilder().setCustomId('tk_back_main').setLabel('Back to Ticket Setup').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+    ));
+
+    const payload = { content: '', embeds: [embed], components, flags: 64 };
+    if (action === 'reply') await interaction.reply(payload);
+    else await interaction.update(payload);
+}
+
 
 module.exports = async (interaction, client) => {
     try {
@@ -15,35 +79,16 @@ module.exports = async (interaction, client) => {
         }
 
         // ==========================================
-        // 1. ADMIN SETUP PANEL
+        // 1. ADMIN SETUP PANEL & ROUTING
         // ==========================================
         if (customId === 'admin_menu_select' && interaction.isStringSelectMenu() && interaction.values[0] === 'setup_tickets') {
-            const config = await GuildConfig.findOrCreate({ where: { guildId } });
-            const cfg = config[0];
-            
-            const catDisplay = cfg.ticketCategoryId ? `<#${cfg.ticketCategoryId}>` : '`Not Set`';
-            const logDisplay = cfg.ticketTranscriptChannelId ? `<#${cfg.ticketTranscriptChannelId}>` : '`Not Set`';
-            const roleDisplay = cfg.ticketAdminRoleId ? `<@&${cfg.ticketAdminRoleId}>` : '`Not Set`';
-
-            const embed = new EmbedBuilder()
-                .setTitle('🎫 Ticket System Manager')
-                .setDescription(`Configure support tickets for your players.\n\n**Current Setup:**\n📂 **Category:** ${catDisplay}\n📄 **Transcripts:** ${logDisplay}\n👮 **Support Role:** ${roleDisplay}`)
-                .setColor('#3498db');
-
-            const row1 = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('btn_tk_setcat').setLabel('Set Category').setStyle(ButtonStyle.Primary).setEmoji('📂'),
-                new ButtonBuilder().setCustomId('btn_tk_setlog').setLabel('Set Transcript Log').setStyle(ButtonStyle.Primary).setEmoji('📄'),
-                new ButtonBuilder().setCustomId('btn_tk_setrole').setLabel('Set Support Role').setStyle(ButtonStyle.Primary).setEmoji('👮')
-            );
-
-            const row2 = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
-            );
-
-            return interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
+            return await renderAdminMenu(interaction, guildId, 'reply');
         }
 
-        // --- SETUP BUTTONS (Now using modern Dropdown Select Menus!) ---
+        if (customId === 'tk_manage_cats') return await renderCategoryManager(interaction, guildId, 'update');
+        if (customId === 'tk_back_main') return await renderAdminMenu(interaction, guildId, 'update');
+
+        // --- SETUP BUTTONS ---
         if (interaction.isButton()) {
             if (customId === 'btn_tk_setcat') {
                 const embed = new EmbedBuilder().setTitle('📂 Select Ticket Category').setDescription('Please select the Discord category where new support tickets will be spawned.').setColor('#3498db');
@@ -61,6 +106,15 @@ module.exports = async (interaction, client) => {
                 const embed = new EmbedBuilder().setTitle('👮 Select Support Role').setDescription('Please select the role that will be pinged and given access to new tickets.').setColor('#3498db');
                 const menu = new RoleSelectMenuBuilder().setCustomId('tk_sel_role').setPlaceholder('Select support staff role...');
                 return interaction.reply({ embeds: [embed], components: [new ActionRowBuilder().addComponents(menu)], flags: 64 });
+            }
+
+            if (customId === 'tk_add_cat') {
+                const modal = new ModalBuilder().setCustomId('modal_tk_addcat').setTitle('Create Ticket Category');
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cat_name').setLabel("Category Name (e.g. Bug Report 🐛)").setStyle(TextInputStyle.Short).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cat_desc').setLabel("Brief Description").setStyle(TextInputStyle.Short).setRequired(true))
+                );
+                return interaction.showModal(modal);
             }
         }
 
@@ -81,28 +135,79 @@ module.exports = async (interaction, client) => {
             return interaction.update({ content: `✅ Support role set! <@&${interaction.values[0]}> will now have access to tickets.`, embeds: [], components: [] });
         }
 
+        if (interaction.isStringSelectMenu() && customId === 'tk_del_cat') {
+            await TicketCategory.destroy({ where: { id: interaction.values[0], guildId } });
+            return await renderCategoryManager(interaction, guildId, 'update');
+        }
+
+        if (interaction.isModalSubmit() && customId === 'modal_tk_addcat') {
+            const name = interaction.fields.getTextInputValue('cat_name').trim();
+            const description = interaction.fields.getTextInputValue('cat_desc').trim();
+            await TicketCategory.create({ guildId, name, description });
+            return await renderCategoryManager(interaction, guildId, 'update');
+        }
+
+
         // ==========================================
-        // 2. PLAYER CREATE TICKET
+        // 2. PLAYER CREATE TICKET (DROPDOWN)
         // ==========================================
         if (customId === 'ticket_create') {
+            const cats = await TicketCategory.findAll({ where: { guildId } });
+
+            let options = [];
+            if (cats.length === 0) {
+                // Default fallback options if the admin hasn't created any custom ones yet
+                options = [
+                    { label: 'General Support', description: 'Standard server inquiries and help.', value: 'General Support', emoji: '💬' },
+                    { label: 'Player Report', description: 'Report a rule breaker or cheater.', value: 'Player Report', emoji: '⚠️' },
+                    { label: 'Priority Support', description: 'Urgent issues, VIP, or Store support.', value: 'Priority Support', emoji: '⚡' }
+                ];
+            } else {
+                // Map the custom categories from the database
+                options = cats.slice(0, 25).map(c => ({
+                    label: c.name.substring(0, 100),
+                    description: c.description ? c.description.substring(0, 100) : 'Open a ticket for this category.',
+                    value: c.name.substring(0, 100)
+                }));
+            }
+
+            const menu = new StringSelectMenuBuilder()
+                .setCustomId('tk_sel_player_cat')
+                .setPlaceholder('Select a ticket category...')
+                .addOptions(options);
+
+            return interaction.reply({ content: '🎫 **What do you need help with?**\nPlease select a category below to open your ticket:', components: [new ActionRowBuilder().addComponents(menu)], flags: 64 });
+        }
+
+        // ==========================================
+        // 2.5 PLAYER TICKET SPAWN ROUTINE
+        // ==========================================
+        if (interaction.isStringSelectMenu() && customId === 'tk_sel_player_cat') {
+            const selectedCategory = interaction.values[0];
+
             const config = await GuildConfig.findOne({ where: { guildId } });
             if (!config || !config.ticketCategoryId) {
-                return interaction.reply({ content: '❌ **Ticket System Error:** The support ticket system needs to be set up by an admin first!', flags: 64 });
+                return interaction.update({ content: '❌ **Ticket System Error:** The support ticket system needs to be set up by an admin first!', components: [] });
             }
 
-            const guild = interaction.guild;
-            const category = guild.channels.cache.get(config.ticketCategoryId);
+            const category = interaction.guild.channels.cache.get(config.ticketCategoryId);
             if (!category) {
-                return interaction.reply({ content: '❌ **Ticket System Error:** The configured ticket category no longer exists.', flags: 64 });
+                return interaction.update({ content: '❌ **Ticket System Error:** The configured ticket category no longer exists.', components: [] });
             }
 
-            const existingChannel = guild.channels.cache.find(c => c.name === `ticket-${interaction.user.username.toLowerCase()}`);
+            // --- PRIORITY CHECKER LOGIC ---
+            const isPriority = selectedCategory.toLowerCase().includes('priority');
+            const channelPrefix = isPriority ? 'pri' : 'ticket';
+            const embedColor = isPriority ? '#e74c3c' : '#2ecc71';
+            const icon = isPriority ? '🚨' : '🎫';
+
+            const existingChannel = interaction.guild.channels.cache.find(c => c.name === `${channelPrefix}-${interaction.user.username.toLowerCase()}`);
             if (existingChannel) {
-                return interaction.reply({ content: `❌ You already have an open ticket: ${existingChannel}`, flags: 64 });
+                return interaction.update({ content: `❌ You already have an open ticket of this type: ${existingChannel}`, components: [] });
             }
 
             let perms = [
-                { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+                { id: interaction.guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
                 { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] },
                 { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageChannels] }
             ];
@@ -111,8 +216,8 @@ module.exports = async (interaction, client) => {
                 perms.push({ id: config.ticketAdminRoleId, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] });
             }
 
-            const ticketChannel = await guild.channels.create({
-                name: `ticket-${interaction.user.username}`,
+            const ticketChannel = await interaction.guild.channels.create({
+                name: `${channelPrefix}-${interaction.user.username}`,
                 type: ChannelType.GuildText,
                 parent: category.id,
                 topic: interaction.user.id, 
@@ -120,9 +225,9 @@ module.exports = async (interaction, client) => {
             });
 
             const ticketEmbed = new EmbedBuilder()
-                .setTitle(`🎫 Support Ticket — ${interaction.user.tag}`)
-                .setDescription(`Welcome <@${interaction.user.id}>!\n\nPlease describe your issue or question in as much detail as possible. A staff member will be with you shortly.`)
-                .setColor('#2ecc71')
+                .setTitle(`${icon} ${selectedCategory} — ${interaction.user.tag}`)
+                .setDescription(`Welcome <@${interaction.user.id}>!\n\nYou have opened a **${selectedCategory}** ticket.\nPlease describe your issue or question in as much detail as possible. A staff member will be with you shortly.`)
+                .setColor(embedColor)
                 .setTimestamp();
 
             const actionRow = new ActionRowBuilder().addComponents(
@@ -133,8 +238,9 @@ module.exports = async (interaction, client) => {
             const pingMsg = config.ticketAdminRoleId ? `<@${interaction.user.id}> | <@&${config.ticketAdminRoleId}>` : `<@${interaction.user.id}>`;
             
             await ticketChannel.send({ content: pingMsg, embeds: [ticketEmbed], components: [actionRow] });
-            return interaction.reply({ content: `✅ Your ticket has been created! Head over to ${ticketChannel}.`, flags: 64 });
+            return interaction.update({ content: `✅ Your ticket has been successfully created! Head over to ${ticketChannel}.`, components: [] });
         }
+
 
         // ==========================================
         // 3. CLAIM TICKET
