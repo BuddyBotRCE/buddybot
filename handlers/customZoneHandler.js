@@ -64,8 +64,9 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
 
         embed.setTitle(`📍 Managing Zone: ${activeZone.name || 'Unnamed Zone'}`);
         
+        const rotationDisplay = activeZone.shape === 'box' ? `\n**Rotation:** ${activeZone.rotation || '0'}°` : '';
         const posText = (activeZone.posX && activeZone.posZ) 
-            ? `\`X: ${activeZone.posX}, Y: ${activeZone.posY || '0'}, Z: ${activeZone.posZ}\`` 
+            ? `\`X: ${activeZone.posX}, Y: ${activeZone.posY || '0'}, Z: ${activeZone.posZ}\`${rotationDisplay}` 
             : '*No center position saved. Click "Set Zone Center" below.*';
 
         const colorDisplay = ZONE_COLORS.find(c => c.value === activeZone.color)?.label || activeZone.color || 'Red';
@@ -78,11 +79,17 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
             { name: `🎯 Center Coordinates`, value: posText, inline: false }
         );
 
-        components.push(new ActionRowBuilder().addComponents(
+        const shapeRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('cz_btn_settings').setLabel('Name & Size').setStyle(ButtonStyle.Primary).setEmoji('📝'),
             new ButtonBuilder().setCustomId('cz_btn_shape').setLabel(`Shape: ${activeZone.shape === 'box' ? 'Box' : 'Sphere'}`).setStyle(ButtonStyle.Secondary).setEmoji('🔷'),
             new ButtonBuilder().setCustomId('cz_btn_color_menu').setLabel('Select Color').setStyle(ButtonStyle.Primary).setEmoji('🎨')
-        ));
+        );
+        
+        if (activeZone.shape === 'box') {
+            shapeRow.addComponents(new ButtonBuilder().setCustomId('cz_btn_rotation').setLabel('Set Box Rotation').setStyle(ButtonStyle.Primary).setEmoji('🔄'));
+        }
+        
+        components.push(shapeRow);
 
         components.push(new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('cz_btn_messages').setLabel('Set Messages').setStyle(ButtonStyle.Primary).setEmoji('💬'),
@@ -190,6 +197,15 @@ const customZoneHandler = async (interaction, client) => {
             return await renderCZPanel(interaction, `💬 Zone Messages saved!`);
         }
 
+        if (interaction.isModalSubmit() && customId === 'modal_cz_rotation') {
+            let rot = parseInt(interaction.fields.getTextInputValue('cz_rot_val'));
+            if (isNaN(rot)) rot = 0;
+            if (session.selectedZoneId) {
+                await PveZone.update({ rotation: rot.toString() }, { where: { id: session.selectedZoneId } });
+            }
+            return await renderCZPanel(interaction, `🔄 Zone Rotation saved!`);
+        }
+
         if (customId === 'cz_do_color' && interaction.isStringSelectMenu()) {
             const color = interaction.values[0];
             await PveZone.update({ color }, { where: { id: session.selectedZoneId } });
@@ -228,6 +244,17 @@ const customZoneHandler = async (interaction, client) => {
                 modal.addComponents(
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_name').setLabel("Zone Name").setStyle(TextInputStyle.Short).setValue(z.name || 'New Zone').setRequired(true)),
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cz_radius').setLabel("Radius / Size (meters)").setStyle(TextInputStyle.Short).setValue((z.radius || '50')).setRequired(true))
+                );
+                return await interaction.showModal(modal);
+            }
+
+            if (customId === 'cz_btn_rotation') {
+                const z = await PveZone.findByPk(session.selectedZoneId);
+                const modal = new ModalBuilder().setCustomId('modal_cz_rotation').setTitle(`Set Box Rotation`);
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder().setCustomId('cz_rot_val').setLabel("Rotation (0-360)").setStyle(TextInputStyle.Short).setValue((z.rotation || '0').toString()).setRequired(true)
+                    )
                 );
                 return await interaction.showModal(modal);
             }
@@ -298,8 +325,11 @@ const customZoneHandler = async (interaction, client) => {
                         const buildDmgVal = 0; 
                         const buildVal = z.build ? 1 : 0;
                         const showAreaVal = z.visible ? 1 : 0;
+                        
+                        // INJECTING ROTATION HERE (defaults to 0 if none is set)
+                        const rotVal = (z.shape === 'box' && z.rotation) ? z.rotation : '0';
 
-                        const createCmd = `zones.createcustomzone "${z.name}" (${z.posX},${z.posY || 35},${z.posZ}) 0 ${shapeType} ${sizeParam} ${pvpVal} ${pveVal} 0 ${buildDmgVal} ${buildVal}`;
+                        const createCmd = `zones.createcustomzone "${z.name}" (${z.posX},${z.posY || 35},${z.posZ}) ${rotVal} ${shapeType} ${sizeParam} ${pvpVal} ${pveVal} 0 ${buildDmgVal} ${buildVal}`;
                         await sendRconCommand(guildId, createCmd, client);
 
                         await sendRconCommand(guildId, `zones.editcustomzone "${z.name}" "showarea" "${showAreaVal}"`, client);
@@ -335,6 +365,7 @@ const customZoneHandler = async (interaction, client) => {
                 return await renderCZPanel(interaction, `💀 Zone completely deleted from bot database and live server.`);
             }
 
+            // === POSITION LOGIC KEPT EXACTLY THE SAME ===
             if (customId === 'cz_btn_getpos') {
                 const loadingPayload = await buildPanelPayload(guildId, '⏳ **Extracting your position from the server...**');
                 await interaction.update(loadingPayload);
@@ -351,6 +382,7 @@ const customZoneHandler = async (interaction, client) => {
     }
 };
 
+// === LOCATION SAVER KEPT EXACTLY THE SAME ===
 customZoneHandler.autoSaveLocation = async (guildId, x, y, z, zoneId) => {
     if (!zoneId) return;
     await PveZone.update({
@@ -360,6 +392,7 @@ customZoneHandler.autoSaveLocation = async (guildId, x, y, z, zoneId) => {
     }, { where: { id: zoneId } });
 };
 
+// === REFRESH LOGIC KEPT EXACTLY THE SAME ===
 customZoneHandler.refreshPanelViaInteraction = async (interaction, messageOverride, zoneId = null) => {
     try {
         const guildId = interaction.guild.id;
