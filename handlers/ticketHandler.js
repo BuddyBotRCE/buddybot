@@ -1,4 +1,4 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionsBitField, AttachmentBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionsBitField, AttachmentBuilder, ChannelSelectMenuBuilder, RoleSelectMenuBuilder } = require('discord.js');
 const { GuildConfig } = require('../database/db');
 const adminHandler = require('./adminHandler');
 
@@ -43,49 +43,42 @@ module.exports = async (interaction, client) => {
             return interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
         }
 
-        // --- SETUP BUTTONS (Now using foolproof Modals instead of menus) ---
+        // --- SETUP BUTTONS (Now using modern Dropdown Select Menus!) ---
         if (interaction.isButton()) {
             if (customId === 'btn_tk_setcat') {
-                const modal = new ModalBuilder().setCustomId('modal_tk_cat').setTitle('Set Ticket Category');
-                modal.addComponents(new ActionRowBuilder().addComponents(
-                    new TextInputBuilder().setCustomId('input_id').setLabel('Enter the Category ID').setStyle(TextInputStyle.Short).setRequired(true)
-                ));
-                return interaction.showModal(modal);
+                const embed = new EmbedBuilder().setTitle('📂 Select Ticket Category').setDescription('Please select the Discord category where new support tickets will be spawned.').setColor('#3498db');
+                const menu = new ChannelSelectMenuBuilder().setCustomId('tk_sel_cat').setPlaceholder('Select target category...').addChannelTypes(ChannelType.GuildCategory);
+                return interaction.reply({ embeds: [embed], components: [new ActionRowBuilder().addComponents(menu)], flags: 64 });
             }
 
             if (customId === 'btn_tk_setlog') {
-                const modal = new ModalBuilder().setCustomId('modal_tk_log').setTitle('Set Transcript Channel');
-                modal.addComponents(new ActionRowBuilder().addComponents(
-                    new TextInputBuilder().setCustomId('input_id').setLabel('Enter the Text Channel ID').setStyle(TextInputStyle.Short).setRequired(true)
-                ));
-                return interaction.showModal(modal);
+                const embed = new EmbedBuilder().setTitle('📄 Select Transcript Log').setDescription('Please select the text channel where closed ticket transcripts will be sent.').setColor('#3498db');
+                const menu = new ChannelSelectMenuBuilder().setCustomId('tk_sel_log').setPlaceholder('Select transcript channel...').addChannelTypes(ChannelType.GuildText);
+                return interaction.reply({ embeds: [embed], components: [new ActionRowBuilder().addComponents(menu)], flags: 64 });
             }
 
             if (customId === 'btn_tk_setrole') {
-                const modal = new ModalBuilder().setCustomId('modal_tk_role').setTitle('Set Support Role');
-                modal.addComponents(new ActionRowBuilder().addComponents(
-                    new TextInputBuilder().setCustomId('input_id').setLabel('Enter the Role ID').setStyle(TextInputStyle.Short).setRequired(true)
-                ));
-                return interaction.showModal(modal);
+                const embed = new EmbedBuilder().setTitle('👮 Select Support Role').setDescription('Please select the role that will be pinged and given access to new tickets.').setColor('#3498db');
+                const menu = new RoleSelectMenuBuilder().setCustomId('tk_sel_role').setPlaceholder('Select support staff role...');
+                return interaction.reply({ embeds: [embed], components: [new ActionRowBuilder().addComponents(menu)], flags: 64 });
             }
         }
 
-        // --- SETUP MODAL SAVERS ---
-        if (interaction.isModalSubmit()) {
-            const inputId = interaction.fields.getTextInputValue('input_id').trim();
+        // --- SETUP DROPDOWN SAVERS ---
+        if (interaction.isChannelSelectMenu()) {
+            if (customId === 'tk_sel_cat') {
+                await GuildConfig.update({ ticketCategoryId: interaction.values[0] }, { where: { guildId } });
+                return interaction.update({ content: `✅ Ticket category successfully set to <#${interaction.values[0]}>!`, embeds: [], components: [] });
+            }
+            if (customId === 'tk_sel_log') {
+                await GuildConfig.update({ ticketTranscriptChannelId: interaction.values[0] }, { where: { guildId } });
+                return interaction.update({ content: `✅ Transcripts will now be sent to <#${interaction.values[0]}>!`, embeds: [], components: [] });
+            }
+        }
 
-            if (customId === 'modal_tk_cat') {
-                await GuildConfig.update({ ticketCategoryId: inputId }, { where: { guildId } });
-                return interaction.reply({ content: `✅ Ticket category successfully set to <#${inputId}>!`, flags: 64 });
-            }
-            if (customId === 'modal_tk_log') {
-                await GuildConfig.update({ ticketTranscriptChannelId: inputId }, { where: { guildId } });
-                return interaction.reply({ content: `✅ Transcripts will now be sent to <#${inputId}>!`, flags: 64 });
-            }
-            if (customId === 'modal_tk_role') {
-                await GuildConfig.update({ ticketAdminRoleId: inputId }, { where: { guildId } });
-                return interaction.reply({ content: `✅ Support role set! <@&${inputId}> will now have access to tickets.`, flags: 64 });
-            }
+        if (interaction.isRoleSelectMenu() && customId === 'tk_sel_role') {
+            await GuildConfig.update({ ticketAdminRoleId: interaction.values[0] }, { where: { guildId } });
+            return interaction.update({ content: `✅ Support role set! <@&${interaction.values[0]}> will now have access to tickets.`, embeds: [], components: [] });
         }
 
         // ==========================================
