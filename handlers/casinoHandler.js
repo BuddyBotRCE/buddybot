@@ -50,12 +50,16 @@ module.exports = async (interaction, client) => {
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
             const isPremium = config?.isPremiumServer || false;
 
+            // Free Tier (5 Games)
             let games = [
                 { label: 'Coinflip', val: 'coinflip', emoji: '🪙' },
                 { label: 'Slots', val: 'slots', emoji: '🎰' },
-                { label: 'Dice Roll', val: 'dice', emoji: '🎲' }
+                { label: 'Dice Roll', val: 'dice', emoji: '🎲' },
+                { label: 'Scratchcard', val: 'scratchcard', emoji: '🎟️' },
+                { label: 'Rock Paper Scissors', val: 'rps', emoji: '✂️' }
             ];
 
+            // Premium Tier (20 Games)
             if (isPremium) {
                 games.push(
                     { label: 'Roulette', val: 'roulette', emoji: '🎡' }, { label: 'Blackjack', val: 'blackjack', emoji: '🃏' },
@@ -66,20 +70,43 @@ module.exports = async (interaction, client) => {
                     { label: 'Lucky Numbers', val: 'luckynum', emoji: '🔢' }, { label: 'Craps', val: 'craps', emoji: '🎲' },
                     { label: 'Sic Bo', val: 'sicbo', emoji: '🏮' }, { label: 'Video Poker', val: 'videopoker', emoji: '💻' },
                     { label: 'Pai Gow', val: 'paigow', emoji: '🀄' }, { label: 'Rai Raid Gamble', val: 'raidgamble', emoji: '💣' },
-                    { label: 'Scrap Scavenger', val: 'scavenger', emoji: '⚙️' }
+                    { label: 'Scrap Scavenger', val: 'scavenger', emoji: '⚙️' }, { label: 'Horse Racing', val: 'horseracing', emoji: '🐎' },
+                    { label: 'Mines', val: 'mines', emoji: '💣' }, { label: 'Plinko', val: 'plinko', emoji: '🔴' }
                 );
             }
 
             const row = new ActionRowBuilder().addComponents(
                 new StringSelectMenuBuilder()
                     .setCustomId('casino_game_select')
-                    .setPlaceholder(isPremium ? 'Select a Minigame (All 20 Unlocked)...' : 'Select a Minigame (Free Tier: 3 Games)...')
+                    .setPlaceholder(isPremium ? 'Select a Minigame (All 25 Unlocked)...' : 'Select a Minigame (Free Tier: 5 Games)...')
                     .addOptions(games.map(g => ({ label: g.label, value: g.val, emoji: g.emoji })))
             );
 
-            const footerText = isPremium ? '⭐ **Premium Tier Active:** All 20 minigames are unlocked!' : '💡 **Free Tier:** Upgrade to Premium in the Admin Panel to unlock all 20 minigames!';
+            const footerText = isPremium ? '⭐ **Premium Tier Active:** All 25 minigames are unlocked!' : '💡 **Free Tier:** Upgrade to Premium in the Admin Panel to unlock all 25 minigames!';
             return interaction.reply({ content: `🎰 **Server Casino Hub:**\n${footerText}`, components: [row], flags: 64 });
         }
+    }
+
+    // 👇 CATCHES THE DROPDOWN AND OPENS THE BETTING MODAL 👇
+    if (interaction.isStringSelectMenu() && customId === 'casino_game_select') {
+        const gameType = interaction.values[0];
+        
+        const modal = new ModalBuilder()
+            .setCustomId(`modal_play_${gameType}`)
+            .setTitle(`Place Your Bet`);
+
+        modal.addComponents(
+            new ActionRowBuilder().addComponents(
+                new TextInputBuilder()
+                    .setCustomId('bet')
+                    .setLabel('Bet Amount')
+                    .setStyle(TextInputStyle.Short)
+                    .setPlaceholder('e.g. 100')
+                    .setRequired(true)
+            )
+        );
+        
+        return interaction.showModal(modal);
     }
 
     // --- MODAL SUBMISSIONS ---
@@ -138,9 +165,13 @@ module.exports = async (interaction, client) => {
                     resultMsg = winDice ? `🎲 Rolled **${roll}** (High)! Won **+${payout - bet} ${currency}**!` : `🎲 Rolled **${roll}** (Low). Lost **-${bet} ${currency}**.`;
                     break;
                 default:
+                    // Generic fallback for Scratchcard, RPS, and all 20 premium games!
                     const genericWin = Math.random() < 0.45;
                     payout = genericWin ? Math.round(bet * 2) : 0;
-                    resultMsg = genericWin ? `🎮 **${gameType.toUpperCase()} WON!** You won **+${bet} ${currency}**!` : `🎮 **${gameType.toUpperCase()} LOST!** You lost **-${bet} ${currency}**.`;
+                    
+                    // Format the gameType string to look nice (e.g. 'rockpaperscissors' -> 'ROCKPAPERSCISSORS')
+                    const displayName = gameType.toUpperCase();
+                    resultMsg = genericWin ? `🎮 **${displayName} WON!** You won **+${bet} ${currency}**!` : `🎮 **${displayName} LOST!** You lost **-${bet} ${currency}**.`;
                     break;
             }
 
