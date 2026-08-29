@@ -1,4 +1,4 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionsBitField, AttachmentBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionsBitField, AttachmentBuilder, ChannelSelectMenuBuilder, RoleSelectMenuBuilder } = require('discord.js');
 const { GuildConfig } = require('../database/db');
 const adminHandler = require('./adminHandler');
 
@@ -42,62 +42,53 @@ module.exports = async (interaction, client) => {
             return interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
         }
 
-        // --- SETUP BUTTONS (Restored original working class structures) ---
+        // --- SETUP BUTTONS (Clean, Native DJS v14 Builders) ---
         if (interaction.isButton() && customId === 'btn_tk_setcat') {
             const embed = new EmbedBuilder().setTitle('📂 Select Ticket Category').setDescription('Please select the Discord category where new support tickets will be spawned.').setColor('#3498db');
-            const row = new ActionRowBuilder().addComponents(
-                new class extends require('discord.js').ChannelSelectMenuBuilder {
-                    constructor() {
-                        super();
-                        this.setCustomId('select_tk_category');
-                        this.setPlaceholder('Select target category...');
-                        this.addChannelTypes(ChannelType.GuildCategory);
-                    }
-                }()
-            );
+            
+            const menu = new ChannelSelectMenuBuilder()
+                .setCustomId('select_tk_category')
+                .setPlaceholder('Select target category...')
+                .addChannelTypes(ChannelType.GuildCategory);
+                
+            const row = new ActionRowBuilder().addComponents(menu);
             return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
         }
 
         if (interaction.isButton() && customId === 'btn_tk_setlog') {
             const embed = new EmbedBuilder().setTitle('📄 Select Transcript Log').setDescription('Please select the text channel where closed ticket transcripts will be sent.').setColor('#3498db');
-            const row = new ActionRowBuilder().addComponents(
-                new class extends require('discord.js').ChannelSelectMenuBuilder {
-                    constructor() {
-                        super();
-                        this.setCustomId('select_tk_log');
-                        this.setPlaceholder('Select transcript channel...');
-                        this.addChannelTypes(ChannelType.GuildText);
-                    }
-                }()
-            );
+            
+            const menu = new ChannelSelectMenuBuilder()
+                .setCustomId('select_tk_log')
+                .setPlaceholder('Select transcript channel...')
+                .addChannelTypes(ChannelType.GuildText);
+                
+            const row = new ActionRowBuilder().addComponents(menu);
             return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
         }
 
         if (interaction.isButton() && customId === 'btn_tk_setrole') {
             const embed = new EmbedBuilder().setTitle('👮 Select Support Role').setDescription('Please select the role that will be pinged and given access to new tickets.').setColor('#3498db');
-            const row = new ActionRowBuilder().addComponents(
-                new class extends require('discord.js').RoleSelectMenuBuilder {
-                    constructor() {
-                        super();
-                        this.setCustomId('select_tk_role');
-                        this.setPlaceholder('Select support staff role...');
-                    }
-                }()
-            );
+            
+            const menu = new RoleSelectMenuBuilder()
+                .setCustomId('select_tk_role')
+                .setPlaceholder('Select support staff role...');
+                
+            const row = new ActionRowBuilder().addComponents(menu);
             return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
         }
 
-        // --- SETUP SAVERS (Stripped strict type checks, swapped upsert to update) ---
+        // --- SETUP SAVERS ---
         if (customId === 'select_tk_category') {
-            await GuildConfig.update({ ticketCategory: interaction.values[0] }, { where: { guildId } });
+            await GuildConfig.upsert({ guildId, ticketCategory: interaction.values[0] });
             return interaction.update({ content: `✅ Ticket category successfully set to <#${interaction.values[0]}>!`, embeds: [], components: [] });
         }
         if (customId === 'select_tk_log') {
-            await GuildConfig.update({ ticketTranscriptChannel: interaction.values[0] }, { where: { guildId } });
+            await GuildConfig.upsert({ guildId, ticketTranscriptChannel: interaction.values[0] });
             return interaction.update({ content: `✅ Transcripts will now be sent to <#${interaction.values[0]}>!`, embeds: [], components: [] });
         }
         if (customId === 'select_tk_role') {
-            await GuildConfig.update({ ticketSupportRole: interaction.values[0] }, { where: { guildId } });
+            await GuildConfig.upsert({ guildId, ticketSupportRole: interaction.values[0] });
             return interaction.update({ content: `✅ Support role set! <@&${interaction.values[0]}> will now have access to tickets.`, embeds: [], components: [] });
         }
 
@@ -121,12 +112,14 @@ module.exports = async (interaction, client) => {
                 return interaction.reply({ content: `❌ You already have an open ticket: ${existingChannel}`, flags: 64 });
             }
 
+            // Core Permissions
             let perms = [
                 { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
                 { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] },
                 { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageChannels] }
             ];
 
+            // Add support role if configured
             if (config.ticketSupportRole) {
                 perms.push({ id: config.ticketSupportRole, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] });
             }
@@ -135,7 +128,7 @@ module.exports = async (interaction, client) => {
                 name: `ticket-${interaction.user.username}`,
                 type: ChannelType.GuildText,
                 parent: category.id,
-                topic: interaction.user.id, 
+                topic: interaction.user.id, // Saves the user ID so we can DM them the transcript later
                 permissionOverwrites: perms
             });
 
@@ -204,10 +197,12 @@ module.exports = async (interaction, client) => {
             const config = await GuildConfig.findOne({ where: { guildId } });
             const ticketCreatorId = interaction.channel.topic; 
             
+            // 1. Lock the channel so the player can't send more messages while we process
             if (ticketCreatorId) {
                 await interaction.channel.permissionOverwrites.edit(ticketCreatorId, { SendMessages: false }).catch(()=>{});
             }
 
+            // 2. Build the Transcript
             let messages = await interaction.channel.messages.fetch({ limit: 100 });
             messages = Array.from(messages.values()).reverse(); 
 
@@ -221,6 +216,7 @@ module.exports = async (interaction, client) => {
             const buffer = Buffer.from(`TICKET TRANSCRIPT: ${interaction.channel.name}\nGenerated on: ${new Date().toLocaleString()}\n-------------------------------------------------\n\n${logContent}`, 'utf-8');
             const attachment = new AttachmentBuilder(buffer, { name: `${interaction.channel.name}-transcript.txt` });
 
+            // 3. Send to Server Log Channel
             if (config?.ticketTranscriptChannel) {
                 const logChannel = interaction.guild.channels.cache.get(config.ticketTranscriptChannel);
                 if (logChannel) {
@@ -235,6 +231,7 @@ module.exports = async (interaction, client) => {
                 }
             }
 
+            // 4. DM to the Player
             if (ticketCreatorId) {
                 try {
                     const user = await client.users.fetch(ticketCreatorId);
@@ -247,6 +244,7 @@ module.exports = async (interaction, client) => {
                 }
             }
 
+            // 5. Delete Channel
             setTimeout(() => {
                 interaction.channel.delete().catch(() => {});
             }, 5000);
