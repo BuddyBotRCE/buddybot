@@ -74,7 +74,8 @@ const RUST_CATEGORIES = {
         emoji: '🪨',
         items: [
             { name: 'Scrap', shortname: 'scrap', basePrice: 1 },
-            { name: 'High Quality Metal', shortname: 'hq.metal', basePrice: 5 },
+            { name: 'HQM', shortname: 'metal.refined', basePrice: 10 },
+            { name: 'HQM Ore', shortname: 'hq.metal', basePrice: 5 },
             { name: 'Metal Fragments', shortname: 'metal.fragments', basePrice: 2 },
             { name: 'Sulfur', shortname: 'sulfur', basePrice: 2 },
             { name: 'Sulfur Ore', shortname: 'sulfur.ore', basePrice: 1 },
