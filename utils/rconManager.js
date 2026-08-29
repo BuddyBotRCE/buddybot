@@ -4,7 +4,7 @@ const { EmbedBuilder } = require('discord.js');
 
 const activeConnections = new Map();
 const adminPosQueue = new Map(); 
-const homeTpPosQueue = new Map(); // Queue specifically for catching home coords after suicide
+const homeTpPosQueue = new Map(); // Queue for catching home coords after console kill
 
 function registerEventParser(rconMock, emit) {
     rconMock.on('message', (msg) => {
@@ -44,7 +44,7 @@ async function connectRcon(guildId, client, targetServerId = null) {
     }
 
     if (!rconIp || !rconPort || !rconPassword) {
-        throw new Error("Missing RCON credentials for this server! Please add a game server or configure them using the RCON setup panel.");
+        throw new Error("Missing RCON credentials for this server!");
     }
     
     if (activeConnections.has(guildId)) {
@@ -59,7 +59,7 @@ async function connectRcon(guildId, client, targetServerId = null) {
         
         const timeout = setTimeout(() => { 
             try { ws.close(); } catch(e){}
-            reject(new Error(`RCON Connection timed out to ${rconIp}:${rconPort}. Check your IP, Port, and Password.`)); 
+            reject(new Error(`RCON Connection timed out to ${rconIp}:${rconPort}.`)); 
         }, 10000);
 
         ws.on('open', () => {
@@ -113,9 +113,19 @@ async function connectRcon(guildId, client, targetServerId = null) {
                 if (!parsed) return;
                 
                 const msg = parsed.Message || '';
-                const username = parsed.Username || '';
                 const msgLower = msg.toLowerCase();
-                const userLower = username.toLowerCase();
+
+                let rawUsername = '';
+                let rawContent = msg;
+
+                // Parse Rust Console Edition chat format: "[CHAT LOCAL] Username : message"
+                if (msg.includes('[chat local]')) {
+                    const parts = msg.split(':');
+                    if (parts.length >= 2) {
+                        rawUsername = parts[0].replace('[chat local]', '').trim();
+                        rawContent = parts.slice(1).join(':').trim().toLowerCase();
+                    }
+                }
 
                 const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
                 const guild = client ? client.guilds.cache.get(guildId) : null;
@@ -136,7 +146,7 @@ async function connectRcon(guildId, client, targetServerId = null) {
                             foundPos = true;
                         }
 
-                        if (!foundPos && (userLower === setupData.inGameName.toLowerCase() || msgLower.includes(setupData.inGameName.toLowerCase())) && msgLower.includes('teleport')) {
+                        if (!foundPos && (rawUsername.toLowerCase() === setupData.inGameName.toLowerCase() || msgLower.includes(setupData.inGameName.toLowerCase())) && msgLower.includes('teleport')) {
                             const matches = msg.match(/-?\d+(\.\d+)?/g);
                             if (matches && matches.length >= 3) {
                                 const len = matches.length;
@@ -152,7 +162,7 @@ async function connectRcon(guildId, client, targetServerId = null) {
                                 try {
                                     const bind = await CustomBind.findByPk(setupData.targetId);
                                     if (bind) {
-                                        let command = bind.actionType === 'teleport' ? `global.teleportpos (${posX},${posY},${posZ}) "{player}"` : `spawn recycler_static (${posX},${posY},${posZ})`;
+                                        let command = bind.actionType === 'teleport' ? `teleportpos "${setupData.inGameName}" ${posX} ${posY} ${posZ}` : `spawn recycler_static (${posX},${posY},${posZ})`;
                                         await bind.update({ command });
                                     }
                                     const bindHandler = require('../handlers/bindHandler');
@@ -161,29 +171,6 @@ async function connectRcon(guildId, client, targetServerId = null) {
                                     }
                                 } catch (error) {}
                             }
-                            else if (setupData.type === 'custom_zone') {
-                                try {
-                                    const customZoneHandler = require('../handlers/customZoneHandler');
-                                    if (customZoneHandler && customZoneHandler.autoSaveLocation) {
-                                        await customZoneHandler.autoSaveLocation(guildId, posX, posY, posZ, setupData.targetId);
-                                    }
-                                    if (customZoneHandler && customZoneHandler.refreshPanelViaInteraction) {
-                                        await customZoneHandler.refreshPanelViaInteraction(setupData.interaction, `✅ **Zone Center Captured!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``, setupData.targetId);
-                                    }
-                                } catch (error) {}
-                            }
-                            else if (setupData.type === 'auto_event') {
-                                try {
-                                    const autoEventsHandler = require('../handlers/autoEventsHandler');
-                                    if (autoEventsHandler && autoEventsHandler.autoSaveLocation) {
-                                        await autoEventsHandler.autoSaveLocation(guildId, posX, posY, posZ, setupData.targetId);
-                                    }
-                                    if (autoEventsHandler && autoEventsHandler.refreshPanelViaInteraction) {
-                                        await autoEventsHandler.refreshPanelViaInteraction(setupData.interaction, `✅ **Spawn Position Captured!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``);
-                                    }
-                                } catch (error) {}
-                            }
-
                             adminPosQueue.delete(adminId);
                             break;
                         }
@@ -195,7 +182,7 @@ async function connectRcon(guildId, client, targetServerId = null) {
                 // ==========================================
                 if (homeTpPosQueue.size > 0) {
                     for (const [userId, tpData] of homeTpPosQueue.entries()) {
-                        if ((userLower === tpData.inGameName.toLowerCase() || msgLower.includes(tpData.inGameName.toLowerCase())) && (msgLower.includes('spawn') || msgLower.includes('teleport') || msgLower.includes('respawn'))) {
+                        if ((rawUsername.toLowerCase() === tpData.inGameName.toLowerCase() || msgLower.includes(tpData.inGameName.toLowerCase())) && (msgLower.includes('spawn') || msgLower.includes('teleport') || msgLower.includes('respawn') || msgLower.includes('printpos'))) {
                             const nakedCoordMatch = msg.match(/\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)/);
                             if (nakedCoordMatch) {
                                 const posX = parseFloat(nakedCoordMatch[1]).toFixed(2);
@@ -205,7 +192,7 @@ async function connectRcon(guildId, client, targetServerId = null) {
                                 await HomeTeleportLocation.upsert({ guildId, userId, posX, posY, posZ });
                                 if (tpData.timeoutTimer) clearTimeout(tpData.timeoutTimer);
                                 homeTpPosQueue.delete(userId);
-                                await sendRconCommand(guildId, `say "${tpData.inGameName}, your Home location has been successfully anchored to your respawn position!"`, client);
+                                await sendRconCommand(guildId, `say "${tpData.inGameName}, your Home location has been successfully anchored!"`, client);
                                 break;
                             }
                         }
@@ -213,145 +200,120 @@ async function connectRcon(guildId, client, targetServerId = null) {
                 }
 
                 // ==========================================
-                // 2. LIVE GAME FEEDS
+                // 2. KILLFEED, BOUNTIES & KILL REWARDS (SCIENTISTS & PLAYERS)
                 // ==========================================
-                if (currentConfig && guild) {
-                    if (/(giving |spawned |teleport|kick |ban |inventory\.giveto)/i.test(msg)) {
-                        if (currentConfig.logAdminChannelId) {
-                            const chan = guild.channels.cache.get(currentConfig.logAdminChannelId);
-                            if (chan) chan.send({ embeds: [new EmbedBuilder().setColor('#e67e22').setDescription(`🛠️ **Admin / System Action:**\n\`\`\`${msg}\`\`\``).setTimestamp()] }).catch(()=>{});
+                if ((msgLower.includes('killed') || msgLower.includes('murdered') || msgLower.includes('suicide') || msgLower.includes('died') || msgLower.includes('slain')) && !msg.includes('[Killfeed]')) {
+                    await sendRconCommand(guildId, `say "[Killfeed] ${msg}"`, client);
+                    
+                    let killerDb = null; 
+                    let victimDb = null;
+                    const currency = currentConfig?.economyCurrency || 'Scrap';
+                    const playersList = await UserEconomy.findAll({ where: { guildId: guildId } });
+
+                    if (msgLower.includes('scientist') && (msgLower.includes('killed') || msgLower.includes('murdered'))) {
+                        for (const p of playersList) {
+                            if (p.inGameName && msg.indexOf(p.inGameName) < msg.indexOf('killed') && msg.indexOf(p.inGameName) !== -1) {
+                                killerDb = p;
+                                break;
+                            }
+                        }
+                        if (killerDb) {
+                            const reward = currentConfig?.scientistKillReward ?? 10;
+                            await killerDb.update({ wallet: (killerDb.wallet || 0) + reward });
+                            await sendRconCommand(guildId, `say "${killerDb.inGameName} earned +${reward} ${currency} for killing a Scientist!"`, client);
+                        }
+                    } else {
+                        for (const p of playersList) {
+                            if (p.inGameName && msg.includes(p.inGameName)) {
+                                if (msgLower.includes('killed') && msg.indexOf(p.inGameName) < msg.indexOf('killed')) {
+                                    await p.update({ pvpKills: (p.pvpKills || 0) + 1 }); 
+                                    killerDb = p; 
+                                } else if (msgLower.includes('killed') || msgLower.includes('murdered')) {
+                                    await p.update({ deaths: (p.deaths || 0) + 1, currentKillstreak: 0 }); 
+                                    victimDb = p; 
+                                }
+                            }
+                        }
+
+                        if (killerDb && victimDb && killerDb.userId !== victimDb.userId) {
+                            const reward = currentConfig?.playerKillReward ?? 50;
+                            await killerDb.update({ wallet: (killerDb.wallet || 0) + reward });
+                            await sendRconCommand(guildId, `say "${killerDb.inGameName} earned +${reward} ${currency} for eliminating ${victimDb.inGameName}!"`, client);
+                            await processBountyLogic(guildId, killerDb, victimDb, client, currentConfig);
                         }
                     }
                 }
 
                 // ==========================================
-// 3. KILLFEED, BOUNTIES & KILL REWARDS
-// ==========================================
-if ((msgLower.includes('killed') || msgLower.includes('murdered') || msgLower.includes('suicide') || msgLower.includes('died') || msgLower.includes('slain')) && !msg.includes('[Killfeed]')) {
-    await sendRconCommand(guildId, `say "[Killfeed] ${msg}"`, client);
-    
-    let killerDb = null; 
-    let victimDb = null;
-    const currency = currentConfig?.economyCurrency || 'Scrap';
-    const playersList = await UserEconomy.findAll({ where: { guildId: guildId } });
-
-    // Check if a player killed a Scientist NPC
-    if (msgLower.includes('scientist') && (msgLower.includes('killed') || msgLower.includes('murdered'))) {
-        for (const p of playersList) {
-            if (p.inGameName && msg.indexOf(p.inGameName) < msg.indexOf('killed') && msg.indexOf(p.inGameName) !== -1) {
-                killerDb = p;
-                break;
-            }
-        }
-        if (killerDb) {
-            const reward = currentConfig?.scientistKillReward || 10;
-            await killerDb.update({ wallet: (killerDb.wallet || 0) + reward });
-            await sendRconCommand(guildId, `say "${killerDb.inGameName} earned +${reward} ${currency} for killing a Scientist!"`, client);
-        }
-    } else {
-        // Standard Player vs Player kill tracking
-        for (const p of playersList) {
-            if (p.inGameName && msg.includes(p.inGameName)) {
-                if (msgLower.includes('killed') && msg.indexOf(p.inGameName) < msg.indexOf('killed')) {
-                    await p.update({ pvpKills: (p.pvpKills || 0) + 1 }); 
-                    killerDb = p; 
-                } else if (msgLower.includes('killed') || msgLower.includes('murdered')) {
-                    await p.update({ deaths: (p.deaths || 0) + 1, currentKillstreak: 0 }); 
-                    victimDb = p; 
-                }
-            }
-        }
-
-        if (killerDb && victimDb && killerDb.userId !== victimDb.userId) {
-            const reward = currentConfig?.playerKillReward || 50;
-            await killerDb.update({ wallet: (killerDb.wallet || 0) + reward });
-            await sendRconCommand(guildId, `say "${killerDb.inGameName} earned +${reward} ${currency} for eliminating ${victimDb.inGameName}!"`, client);
-            await processBountyLogic(guildId, killerDb, victimDb, client, currentConfig);
-        }
-    }
-}
-
+                // 4. RUST CONSOLE QUICK-CHAT WHEEL INTERCEPTOR
                 // ==========================================
-// 4. RUST CONSOLE QUICK-CHAT WHEEL INTERCEPTOR
-// ==========================================
-if (msgLower.includes('d11_quick_chat_') || msgLower.includes('retreat') || msgLower.includes('key')) {
-    let rawUsername = '';
-    let rawContent = msg;
+                if (msgLower.includes('d11_quick_chat_') || msgLower.includes('retreat')) {
+                    const registeredPlayers = await UserEconomy.findAll({ where: { guildId: guildId } });
+                    let matchedPlayer = null;
 
-    // Parse Rust Console Edition's "[CHAT LOCAL] Username : message" format
-    if (msg.includes('[chat local]')) {
-        const parts = msg.split(':');
-        if (parts.length >= 2) {
-            const leftSide = parts[0].replace('[chat local]', '').trim();
-            rawUsername = leftSide;
-            rawContent = parts.slice(1).join(':').trim().toLowerCase();
-        }
-    }
-
-    const registeredPlayers = await UserEconomy.findAll({ where: { guildId: guildId } });
-    let matchedPlayer = null;
-
-    for (const player of registeredPlayers) {
-        if (player.inGameName && (rawUsername.toLowerCase() === player.inGameName.toLowerCase() || msgLower.includes(player.inGameName.toLowerCase()))) {
-            matchedPlayer = player;
-            break;
-        }
-    }
-
-    if (matchedPlayer && client) {
-        const guildObj = client.guilds.cache.get(guildId);
-        const memberObj = await guildObj?.members.fetch(matchedPlayer.userId).catch(() => null);
-
-        if (memberObj) {
-            const hometpConfig = await HomeTeleportConfig.findOne({ where: { guildId } });
-            if (hometpConfig) {
-                // Check Role Requirement
-                if (hometpConfig.requiredRoleId && !memberObj.roles.cache.has(hometpConfig.requiredRoleId)) {
-                    await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, you lack the required Discord role to use Home Teleport!"`, client);
-                    return;
-                }
-
-                // A. SET HOME TRIGGER (Any quick-chat wheel slot or key keyword anchors home)
-                if (rawContent.includes('d11_quick_chat_') || rawContent.includes('key')) {
-                    await sendRconCommand(guildId, `dmg.suicide "${matchedPlayer.inGameName}"`, client);
-                    await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, home set command received! Respawn at your bag to anchor coordinates."`, client);
-                    
-                    if (homeTpPosQueue.has(matchedPlayer.userId)) clearTimeout(homeTpPosQueue.get(matchedPlayer.userId).timeoutTimer);
-                    const timeoutTimer = setTimeout(() => homeTpPosQueue.delete(matchedPlayer.userId), 30000);
-                    homeTpPosQueue.set(matchedPlayer.userId, { userId: matchedPlayer.userId, inGameName: matchedPlayer.inGameName, timeoutTimer });
-                    
-                    await sendRconCommand(guildId, `printpos "${matchedPlayer.inGameName}"`, client);
-                    return;
-                }
-
-                // B. RETREAT TELEPORT TRIGGER
-                if (rawContent.includes('retreat')) {
-                    const now = new Date();
-                    const [cd] = await HomeTeleportCooldown.findOrCreate({ where: { guildId, userId: matchedPlayer.userId }, defaults: { expiresAt: now } });
-                    
-                    if (new Date(cd.expiresAt) > now) {
-                        const minsLeft = Math.ceil((new Date(cd.expiresAt) - now) / 60000);
-                        await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, Home Teleport is on cooldown for another ${minsLeft} minutes!"`, client);
-                        return;
+                    for (const player of registeredPlayers) {
+                        if (player.inGameName && (rawUsername.toLowerCase() === player.inGameName.toLowerCase() || msgLower.includes(player.inGameName.toLowerCase()))) {
+                            matchedPlayer = player;
+                            break;
+                        }
                     }
 
-                    const homeLoc = await HomeTeleportLocation.findOne({ where: { guildId, userId: matchedPlayer.userId } });
-                    if (!homeLoc) {
-                        await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, you have not set a home yet! Use the quick-chat wheel first."`, client);
-                        return;
+                    if (matchedPlayer && client) {
+                        const guildObj = client.guilds.cache.get(guildId);
+                        const memberObj = await guildObj?.members.fetch(matchedPlayer.userId).catch(() => null);
+
+                        if (memberObj) {
+                            const hometpConfig = await HomeTeleportConfig.findOne({ where: { guildId } });
+                            if (hometpConfig) {
+                                // Check Role Requirement
+                                if (hometpConfig.requiredRoleId && !memberObj.roles.cache.has(hometpConfig.requiredRoleId)) {
+                                    await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, you lack the required Discord role to use Home Teleport!"`, client);
+                                    return;
+                                }
+
+                                // A. SET HOME TRIGGER (Any Quick Chat wheel action e.g., 'Can I have a key' / building slot)
+                                if (rawContent.includes('d11_quick_chat_')) {
+                                    // Use Rust Console Edition RCON kill command format
+                                    await sendRconCommand(guildId, `kill "${matchedPlayer.inGameName}"`, client);
+                                    await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, home set command received! Respawn at your bag to anchor coordinates."`, client);
+                                    
+                                    if (homeTpPosQueue.has(matchedPlayer.userId)) clearTimeout(homeTpPosQueue.get(matchedPlayer.userId).timeoutTimer);
+                                    const timeoutTimer = setTimeout(() => homeTpPosQueue.delete(matchedPlayer.userId), 30000);
+                                    homeTpPosQueue.set(matchedPlayer.userId, { userId: matchedPlayer.userId, inGameName: matchedPlayer.inGameName, timeoutTimer });
+                                    
+                                    await sendRconCommand(guildId, `printpos "${matchedPlayer.inGameName}"`, client);
+                                    return;
+                                }
+
+                                // B. RETREAT TELEPORT TRIGGER
+                                if (rawContent.includes('retreat') || rawContent.includes('combat_slot_1')) {
+                                    const now = new Date();
+                                    const [cd] = await HomeTeleportCooldown.findOrCreate({ where: { guildId, userId: matchedPlayer.userId }, defaults: { expiresAt: now } });
+                                    
+                                    if (new Date(cd.expiresAt) > now) {
+                                        const minsLeft = Math.ceil((new Date(cd.expiresAt) - now) / 60000);
+                                        await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, Home Teleport is on cooldown for another ${minsLeft} minutes!"`, client);
+                                        return;
+                                    }
+
+                                    const homeLoc = await HomeTeleportLocation.findOne({ where: { guildId, userId: matchedPlayer.userId } });
+                                    if (!homeLoc) {
+                                        await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, you have not set a home yet! Use the quick-chat wheel first."`, client);
+                                        return;
+                                    }
+
+                                    const expiryTime = new Date(now.getTime() + hometpConfig.cooldownMinutes * 60000);
+                                    await cd.update({ expiresAt: expiryTime });
+
+                                    // Rust Console Edition Teleport Command Syntax
+                                    await sendRconCommand(guildId, `teleportpos "${matchedPlayer.inGameName}" ${homeLoc.posX} ${homeLoc.posY} ${homeLoc.posZ}`, client);
+                                    await sendRconCommand(guildId, `say "[Teleport] ${matchedPlayer.inGameName} successfully retreated home!"`, client);
+                                    return;
+                                }
+                            }
+                        }
                     }
-
-                    const expiryTime = new Date(now.getTime() + hometpConfig.cooldownMinutes * 60000);
-                    await cd.update({ expiresAt: expiryTime });
-
-                    await sendRconCommand(guildId, `global.teleportpos (${homeLoc.posX},${homeLoc.posY},${homeLoc.posZ}) "${matchedPlayer.inGameName}"`, client);
-                    await sendRconCommand(guildId, `say "[Teleport] ${matchedPlayer.inGameName} successfully retreated home!"`, client);
-                    return;
                 }
-            }
-        }
-    }
-}
 
                 // ==========================================
                 // 5. CUSTOM BINDS CATCHER
@@ -363,10 +325,10 @@ if (msgLower.includes('d11_quick_chat_') || msgLower.includes('retreat') || msgL
                 for (const bind of serverBinds) {
                     if (!bind.targetValue) continue;
                     const phrase = bind.targetValue.toLowerCase();
-                    if (msgLower.includes(phrase)) {
+                    if (rawContent.includes(phrase) || msgLower.includes(phrase)) {
                         let matchedPlayer = null;
                         for (const player of registeredPlayers) {
-                            if (player.inGameName && (userLower === player.inGameName.toLowerCase() || msgLower.includes(player.inGameName.toLowerCase()))) { matchedPlayer = player; break; }
+                            if (player.inGameName && (rawUsername.toLowerCase() === player.inGameName.toLowerCase() || msgLower.includes(player.inGameName.toLowerCase()))) { matchedPlayer = player; break; }
                         }
                         if (matchedPlayer) {
                             if (bind.cost > 0 && matchedPlayer.wallet < bind.cost) {
