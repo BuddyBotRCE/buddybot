@@ -296,9 +296,10 @@ module.exports = async (interaction, client) => {
     }
 
     // 👇 NEW: CATCH THE BUDDY DAYS TYPE SELECTION AND POP THE CUSTOMIZED MODAL!
+        // 👇 FIXED: CLEANLY ACKNOWLEDGE THE DROPDOWN BEFORE SHOWING THE MODAL 👇
     if (interaction.isStringSelectMenu()) {
         if (customId === 'select_buddydays_type') {
-            const type = value.replace('type_', ''); // gets 'currency', 'xp', 'item', or 'kit'
+            const type = value.replace('type_', ''); 
             
             let title = '';
             let showItemField = false;
@@ -321,9 +322,10 @@ module.exports = async (interaction, client) => {
                 );
             }
             
-            return interaction.showModal(modal);
+            return await interaction.showModal(modal);
         }
     }
+    
 
     // ==========================================
     // 4. MODAL SUBMISSIONS
