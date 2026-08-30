@@ -295,11 +295,11 @@ module.exports = async (interaction, client) => {
         }
     }
 
-    // 👇 NEW: CATCH THE BUDDY DAYS TYPE SELECTION AND POP THE CUSTOMIZED MODAL!
-        // 👇 FIXED: CLEANLY ACKNOWLEDGE THE DROPDOWN BEFORE SHOWING THE MODAL 👇
+    // 👇 FIXED: PROPERLY GRAB THE VALUE FROM interaction.values[0] 👇
     if (interaction.isStringSelectMenu()) {
         if (customId === 'select_buddydays_type') {
-            const type = value.replace('type_', ''); 
+            const selectedVal = interaction.values[0]; // e.g., 'type_currency'
+            const type = selectedVal.replace('type_', ''); // becomes 'currency', 'xp', 'item', or 'kit'
             
             let title = '';
             let showItemField = false;
