@@ -42,6 +42,9 @@ const GuildConfig = sequelize.define('GuildConfig', {
     ticketVipRoleId: { type: DataTypes.STRING, allowNull: true },
     ticketSendUserTranscript: { type: DataTypes.BOOLEAN, defaultValue: true },
     economyCurrency: { type: DataTypes.STRING, defaultValue: 'Scrap' },
+    buddyDaysConfig: { type: DataTypes.TEXT, defaultValue: '{}' },
+    dailyMin: { type: DataTypes.INTEGER, defaultValue: 50 },
+    dailyMax: { type: DataTypes.INTEGER, defaultValue: 250 },
     shopMultiplier: { type: DataTypes.INTEGER, defaultValue: 100 },
     bankInterestRate: { type: DataTypes.FLOAT, defaultValue: 0 },
     bankInterestHours: { type: DataTypes.INTEGER, defaultValue: 24 },
@@ -73,6 +76,8 @@ const GuildConfig = sequelize.define('GuildConfig', {
     suggestionPingRoleId: { type: DataTypes.STRING, allowNull: true },
     bountyKillsToActivate: { type: DataTypes.INTEGER, defaultValue: 5 },
     bountyRewardAmount: { type: DataTypes.INTEGER, defaultValue: 500 },
+    buddyDaysStreak: { type: DataTypes.INTEGER, defaultValue: 0 },
+    lastBuddyDaysClaim: { type: DataTypes.DATE, allowNull: true },
     bountyCooldownMinutes: { type: DataTypes.INTEGER, defaultValue: 60 },
     clanCreationCost: { type: DataTypes.INTEGER, defaultValue: 1000 },
     clanDefaultMaxMembers: { type: DataTypes.INTEGER, defaultValue: 4 },
@@ -106,6 +111,7 @@ const GuildConfig = sequelize.define('GuildConfig', {
     skipNightEmote: { type: DataTypes.STRING, defaultValue: 'Wait Here' },
     ticketTranscriptChannel: { type: DataTypes.STRING, allowNull: true },
     ticketSupportRole: { type: DataTypes.STRING, allowNull: true }, 
+    
 });
 
 const GameServer = sequelize.define('GameServer', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, serverName: { type: DataTypes.STRING, allowNull: false }, rconIp: { type: DataTypes.STRING, allowNull: false }, rconPort: { type: DataTypes.STRING, allowNull: false }, rconPassword: { type: DataTypes.STRING, allowNull: false }});
