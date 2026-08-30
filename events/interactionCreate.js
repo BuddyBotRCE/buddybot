@@ -28,6 +28,7 @@ const autoModHandler = require(handlerPath('autoModHandler'));
 const wipeHandler = require(handlerPath('wipeHandler')); 
 const homeTpHandler = require(handlerPath('homeTpHandler'));
 const skipNightHandler = require(handlerPath('skipNightHandler'));
+const leaderboardHandler = require(handlerPath('leaderboardHandler'));
 
 module.exports = async (interaction, client) => {
     try {
@@ -111,7 +112,9 @@ module.exports = async (interaction, client) => {
             if (customId === 'modal_setup_economy' || customId === 'modal_econ_daily' || customId === 'modal_econ_buddydays' || customId.startsWith('modal_econ_bd_') || customId === 'modal_econ_scientist_reward' || customId === 'modal_econ_player_reward' || customId === 'modal_econ_interest' || customId === 'modal_hub_deposit' || customId === 'modal_hub_withdraw' || customId.startsWith('modal_admin_give_exec_') || customId.startsWith('modal_admin_take_exec_')) {
                 return await economyHandler(interaction, client);
             }
-
+            if (customId === 'hub_leaderboards' || customId === 'hub_lb_select' || customId.startsWith('lb_refresh_')) {
+                return await leaderboardHandler(interaction, client);
+            }
             if (customId === 'modal_ae_settings' || customId.startsWith('modal_ae_')) return await autoEventsHandler(interaction, client);
             if (customId === 'modal_casino_config') return await casinoHandler(interaction, client);
             if (customId.startsWith('modal_emb_') || customId === 'modal_admin_embed' || customId.startsWith('modal_rr_') || customId === 'modal_edit_embed_prompt' || customId === 'modal_attach_rr_prompt') return await postEmbedHandler(interaction, client);
