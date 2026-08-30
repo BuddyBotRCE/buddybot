@@ -259,38 +259,7 @@ const adminHandler = async (interaction, client) => {
             modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ign').setLabel("Your exact in-game Rust name").setStyle(TextInputStyle.Short).setRequired(true)));
             return interaction.showModal(modal);
         }
-        
-        if (customId === 'hub_lb_select') {
-            const category = selectedValue;
-            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-            const currency = config ? config.economyCurrency : 'Scrap';
-            const allPlayers = await UserEconomy.findAll({ where: { guildId: interaction.guild.id } });
-            let leaderboardText = ''; let embedTitle = ''; let embedColor = '';
 
-            if (category === 'wealth') {
-                const sortedPlayers = allPlayers.sort((a, b) => (b.wallet + b.bank) - (a.wallet + a.bank)).slice(0, 10);
-                embedTitle = '💰 Wealth Leaderboard'; embedColor = '#FFD700';
-                sortedPlayers.forEach((player, index) => { const rank = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `**#${index + 1}**`; const ign = player.inGameName ? `**${player.inGameName}**` : 'Unlinked'; leaderboardText += `${rank} ${ign} (<@${player.userId}>) - **${player.wallet + player.bank}** ${currency}\n`; });
-            } else if (category === 'level') {
-                const sortedPlayers = allPlayers.sort((a, b) => { if (b.level === a.level) return b.xp - a.xp; return b.level - a.level; }).slice(0, 10);
-                embedTitle = '⭐ BuddyPass Leaderboard'; embedColor = '#00ff00';
-                sortedPlayers.forEach((player, index) => { const rank = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `**#${index + 1}**`; const ign = player.inGameName ? `**${player.inGameName}**` : 'Unlinked'; leaderboardText += `${rank} ${ign} (<@${player.userId}>) - **Level ${player.level || 1}** (${player.xp || 0} XP)\n`; });
-            } else if (category === 'pvp') {
-                const sortedPlayers = allPlayers.sort((a, b) => {
-                    const kdRatioA = a.deaths === 0 ? a.pvpKills : (a.pvpKills / a.deaths); const kdRatioB = a.deaths === 0 ? b.pvpKills : (b.pvpKills / b.deaths);
-                    if (kdRatioB === kdRatioA) return b.pvpKills - a.pvpKills; return kdRatioB - kdRatioA;
-                }).slice(0, 10);
-                embedTitle = '⚔️ PvP K/D Leaderboard'; embedColor = '#e74c3c';
-                sortedPlayers.forEach((player, index) => {
-                    const rank = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `**#${index + 1}**`; const ign = player.inGameName ? `**${player.inGameName}**` : 'Unlinked';
-                    const kills = player.pvpKills || 0; const deaths = player.deaths || 0; const kd = deaths === 0 ? kills.toFixed(2) : (kills / deaths).toFixed(2);
-                    leaderboardText += `${rank} ${ign} (<@${player.userId}>) — **K: ${kills} | D: ${deaths} | KD: ${kd}**\n`;
-                });
-            }
-            const embed = new EmbedBuilder().setTitle(embedTitle).setDescription(leaderboardText || 'No data recorded yet.').setColor(embedColor).setTimestamp();
-            const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`lb_refresh_${category}`).setLabel('Refresh').setStyle(ButtonStyle.Secondary).setEmoji('🔄'));
-            return interaction.update({ content: null, embeds: [embed], components: [row] });
-        }
         if (customId === 'admin_item_category_select') {
             const parts = selectedValue.replace('admin_item_cat_', '').split('_');
             const targetUserId = parts[0]; const catKey = parts.slice(1).join('_');
@@ -489,36 +458,7 @@ const adminHandler = async (interaction, client) => {
             const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('select_link_server_target').setPlaceholder('Select which server to link your account to...').addOptions(options));
             return interaction.reply({ content: '🔗 **Account Linking:** Please select the specific server you want to link your gamertag to:', components: [row], flags: 64 });
         }
-        if (customId.startsWith('lb_refresh_')) {
-            const category = customId.replace('lb_refresh_', '');
-            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-            const currency = config ? config.economyCurrency : 'Scrap';
-            const allPlayers = await UserEconomy.findAll({ where: { guildId: interaction.guild.id } });
-            let leaderboardText = ''; let embedTitle = ''; let embedColor = '';
-            if (category === 'wealth') {
-                const sortedPlayers = allPlayers.sort((a, b) => (b.wallet + b.bank) - (a.wallet + a.bank)).slice(0, 10);
-                embedTitle = '💰 Wealth Leaderboard (Refreshed)'; embedColor = '#FFD700';
-                sortedPlayers.forEach((player, index) => { const rank = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `**#${index + 1}**`; const ign = player.inGameName ? `**${player.inGameName}**` : 'Unlinked'; leaderboardText += `${rank} ${ign} (<@${player.userId}>) - **${player.wallet + player.bank}** ${currency}\n`; });
-            } else if (category === 'level') {
-                const sortedPlayers = allPlayers.sort((a, b) => { if (b.level === a.level) return b.xp - a.xp; return b.level - a.level; }).slice(0, 10);
-                embedTitle = '⭐ BuddyPass Leaderboard (Refreshed)'; embedColor = '#00ff00';
-                sortedPlayers.forEach((player, index) => { const rank = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `**#${index + 1}**`; const ign = player.inGameName ? `**${player.inGameName}**` : 'Unlinked'; leaderboardText += `${rank} ${ign} (<@${player.userId}>) - **Level ${player.level || 1}** (${player.xp || 0} XP)\n`; });
-            } else if (category === 'pvp') {
-                const sortedPlayers = allPlayers.sort((a, b) => {
-                    const kdRatioA = a.deaths === 0 ? a.pvpKills : (a.pvpKills / a.deaths); const kdRatioB = a.deaths === 0 ? b.pvpKills : (b.pvpKills / b.deaths);
-                    if (kdRatioB === kdRatioA) return b.pvpKills - a.pvpKills; return kdRatioB - kdRatioA;
-                }).slice(0, 10);
-                embedTitle = '⚔️ PvP K/D Leaderboard (Refreshed)'; embedColor = '#e74c3c';
-                sortedPlayers.forEach((player, index) => {
-                    const rank = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `**#${index + 1}**`; const ign = player.inGameName ? `**${player.inGameName}**` : 'Unlinked';
-                    const kills = player.pvpKills || 0; const deaths = player.deaths || 0; const kd = deaths === 0 ? kills.toFixed(2) : (kills / deaths).toFixed(2);
-                    leaderboardText += `${rank} ${ign} (<@${player.userId}>) — **K: ${kills} | D: ${deaths} | KD: ${kd}**\n`;
-                });
-            }
-            const embed = new EmbedBuilder().setTitle(embedTitle).setDescription(leaderboardText || 'No data recorded yet.').setColor(embedColor).setTimestamp();
-            const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`lb_refresh_${category}`).setLabel('Refresh Leaderboard').setStyle(ButtonStyle.Secondary).setEmoji('🔄'));
-            return interaction.update({ embeds: [embed], components: [row] });
-        }
+
         if (customId === 'btn_ai_set_key') {
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
             const modal = new ModalBuilder().setCustomId('modal_ai_credentials').setTitle('Configure AI Credentials');
