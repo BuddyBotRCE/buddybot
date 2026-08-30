@@ -4,21 +4,15 @@ const path = require('path');
 let sequelize;
 
 if (process.env.DATABASE_URL) {
-    // 👇 ADDED: POOLING SETTINGS FOR MASSIVE SCALE 👇
     sequelize = new Sequelize(process.env.DATABASE_URL, {
         dialect: 'postgres',
         logging: false,
-        dialectOptions: { 
-            ssl: { 
-                require: true, 
-                rejectUnauthorized: false 
-            } 
-        },
+        dialectOptions: {},
         pool: {
-            max: 15,       // Max open connections
-            min: 2,        // Keep 2 open for instant speed
-            acquire: 60000, // Max time to wait for a connection
-            idle: 10000    // Release connection if unused for 10s
+            max: 15,
+            min: 2,
+            acquire: 60000,
+            idle: 10000
         }
     });
     console.log('[DATABASE] Connected to production PostgreSQL database.');
