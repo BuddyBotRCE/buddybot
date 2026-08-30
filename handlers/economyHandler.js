@@ -373,14 +373,20 @@ module.exports = async (interaction, client) => {
         if (customId === 'modal_econ_scientist_reward') {
             const amount = parseInt(interaction.fields.getTextInputValue('scientist_reward_amount'));
             const finalAmount = isNaN(amount) || amount < 0 ? 0 : amount;
-            await GuildConfig.upsert({ guildId: interaction.guild.id, scientistKillReward: finalAmount });
+            
+            let [config] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
+            await config.update({ scientistKillReward: finalAmount });
+            
             return interaction.reply({ content: `✅ Scientist Kill Reward updated to **${finalAmount}** currency!`, flags: 64 });
         }
 
         if (customId === 'modal_econ_player_reward') {
             const amount = parseInt(interaction.fields.getTextInputValue('player_reward_amount'));
             const finalAmount = isNaN(amount) || amount < 0 ? 0 : amount;
-            await GuildConfig.upsert({ guildId: interaction.guild.id, playerKillReward: finalAmount });
+            
+            let [config] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
+            await config.update({ playerKillReward: finalAmount });
+            
             return interaction.reply({ content: `✅ Player Kill Reward updated to **${finalAmount}** currency!`, flags: 64 });
         }
 
