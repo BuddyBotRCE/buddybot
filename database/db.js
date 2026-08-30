@@ -4,13 +4,30 @@ const path = require('path');
 let sequelize;
 
 if (process.env.DATABASE_URL) {
+    // 👇 ADDED: POOLING SETTINGS FOR MASSIVE SCALE 👇
     sequelize = new Sequelize(process.env.DATABASE_URL, {
         dialect: 'postgres',
         logging: false,
-        dialectOptions: { ssl: { require: true, rejectUnauthorized: false } }
+        dialectOptions: { 
+            ssl: { 
+                require: true, 
+                rejectUnauthorized: false 
+            } 
+        },
+        pool: {
+            max: 15,       // Max open connections
+            min: 2,        // Keep 2 open for instant speed
+            acquire: 60000, // Max time to wait for a connection
+            idle: 10000    // Release connection if unused for 10s
+        }
     });
     console.log('[DATABASE] Connected to production PostgreSQL database.');
 } else {
+    // 👇 ADDED: SAFETY NET IF URL IS MISSING ON RAILWAY 👇
+    if (process.env.NODE_ENV === 'production') {
+        console.error("❌ CRITICAL ERROR: DATABASE_URL is missing from your Railway environment variables! The bot cannot start.");
+        process.exit(1); 
+    }
     const storagePath = process.env.DATABASE_STORAGE || path.join(__dirname, '../database.sqlite');
     sequelize = new Sequelize({ dialect: 'sqlite', storage: storagePath, logging: false });
     console.log('[DATABASE] Connected to local SQLite database.');
@@ -88,7 +105,6 @@ const GuildConfig = sequelize.define('GuildConfig', {
     amWordsAction: { type: DataTypes.STRING, defaultValue: 'delete' },
     adminRoleId: { type: DataTypes.STRING, allowNull: true },
     modRoleId: { type: DataTypes.STRING, allowNull: true },
-    // Inside your GuildConfig definition in database/db.js:
     scientistKillReward: { type: DataTypes.INTEGER, defaultValue: 10 },
     playerKillReward: { type: DataTypes.INTEGER, defaultValue: 50 },
     skipNightEnabled: { type: DataTypes.BOOLEAN, defaultValue: false },
