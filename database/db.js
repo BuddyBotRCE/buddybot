@@ -42,9 +42,9 @@ const GuildConfig = sequelize.define('GuildConfig', {
     ticketVipRoleId: { type: DataTypes.STRING, allowNull: true },
     ticketSendUserTranscript: { type: DataTypes.BOOLEAN, defaultValue: true },
     economyCurrency: { type: DataTypes.STRING, defaultValue: 'Scrap' },
-    buddyDaysConfig: { type: DataTypes.TEXT, defaultValue: '{}' },
-    dailyMin: { type: DataTypes.INTEGER, defaultValue: 50 },
-    dailyMax: { type: DataTypes.INTEGER, defaultValue: 250 },
+    buddyDaysConfig: { type: DataTypes.TEXT, defaultValue: '{}' }, // ✅ Correctly placed here!
+    dailyMin: { type: DataTypes.INTEGER, defaultValue: 50 }, // ✅ Correctly placed here!
+    dailyMax: { type: DataTypes.INTEGER, defaultValue: 250 }, // ✅ Correctly placed here!
     shopMultiplier: { type: DataTypes.INTEGER, defaultValue: 100 },
     bankInterestRate: { type: DataTypes.FLOAT, defaultValue: 0 },
     bankInterestHours: { type: DataTypes.INTEGER, defaultValue: 24 },
@@ -76,8 +76,6 @@ const GuildConfig = sequelize.define('GuildConfig', {
     suggestionPingRoleId: { type: DataTypes.STRING, allowNull: true },
     bountyKillsToActivate: { type: DataTypes.INTEGER, defaultValue: 5 },
     bountyRewardAmount: { type: DataTypes.INTEGER, defaultValue: 500 },
-    buddyDaysStreak: { type: DataTypes.INTEGER, defaultValue: 0 },
-    lastBuddyDaysClaim: { type: DataTypes.DATE, allowNull: true },
     bountyCooldownMinutes: { type: DataTypes.INTEGER, defaultValue: 60 },
     clanCreationCost: { type: DataTypes.INTEGER, defaultValue: 1000 },
     clanDefaultMaxMembers: { type: DataTypes.INTEGER, defaultValue: 4 },
@@ -111,11 +109,13 @@ const GuildConfig = sequelize.define('GuildConfig', {
     skipNightEmote: { type: DataTypes.STRING, defaultValue: 'Wait Here' },
     ticketTranscriptChannel: { type: DataTypes.STRING, allowNull: true },
     ticketSupportRole: { type: DataTypes.STRING, allowNull: true }, 
-    
 });
 
 const GameServer = sequelize.define('GameServer', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, serverName: { type: DataTypes.STRING, allowNull: false }, rconIp: { type: DataTypes.STRING, allowNull: false }, rconPort: { type: DataTypes.STRING, allowNull: false }, rconPassword: { type: DataTypes.STRING, allowNull: false }});
-const UserEconomy = sequelize.define('UserEconomy', { guildId: { type: DataTypes.STRING, primaryKey: true }, userId: { type: DataTypes.STRING, primaryKey: true }, wallet: { type: DataTypes.INTEGER, defaultValue: 0 }, bank: { type: DataTypes.INTEGER, defaultValue: 0 }, inGameName: { type: DataTypes.STRING, allowNull: true }, lastDaily: { type: DataTypes.DATE, allowNull: true }, lastVoteTime: { type: DataTypes.DATE, allowNull: true }, xp: { type: DataTypes.INTEGER, defaultValue: 0 }, level: { type: DataTypes.INTEGER, defaultValue: 1 }, pvpKills: { type: DataTypes.INTEGER, defaultValue: 0 }, pveKills: { type: DataTypes.INTEGER, defaultValue: 0 }, deaths: { type: DataTypes.INTEGER, defaultValue: 0 }, currentKillstreak: { type: DataTypes.INTEGER, defaultValue: 0 } });
+
+// 👇 FIXED: Added buddyDaysStreak and lastBuddyDaysClaim to the UserEconomy table so it tracks per-player!
+const UserEconomy = sequelize.define('UserEconomy', { guildId: { type: DataTypes.STRING, primaryKey: true }, userId: { type: DataTypes.STRING, primaryKey: true }, wallet: { type: DataTypes.INTEGER, defaultValue: 0 }, bank: { type: DataTypes.INTEGER, defaultValue: 0 }, inGameName: { type: DataTypes.STRING, allowNull: true }, lastDaily: { type: DataTypes.DATE, allowNull: true }, lastVoteTime: { type: DataTypes.DATE, allowNull: true }, xp: { type: DataTypes.INTEGER, defaultValue: 0 }, level: { type: DataTypes.INTEGER, defaultValue: 1 }, pvpKills: { type: DataTypes.INTEGER, defaultValue: 0 }, pveKills: { type: DataTypes.INTEGER, defaultValue: 0 }, deaths: { type: DataTypes.INTEGER, defaultValue: 0 }, currentKillstreak: { type: DataTypes.INTEGER, defaultValue: 0 }, buddyDaysStreak: { type: DataTypes.INTEGER, defaultValue: 0 }, lastBuddyDaysClaim: { type: DataTypes.DATE, allowNull: true } });
+
 const Giveaway = sequelize.define('Giveaway', { messageId: { type: DataTypes.STRING, primaryKey: true }, guildId: { type: DataTypes.STRING }, channelId: { type: DataTypes.STRING }, prize: { type: DataTypes.STRING }, endTime: { type: DataTypes.DATE }, winnersCount: { type: DataTypes.INTEGER, defaultValue: 1 }, entries: { type: DataTypes.TEXT, defaultValue: '[]' }, isActive: { type: DataTypes.BOOLEAN, defaultValue: true } });
 const CustomBind = sequelize.define('CustomBind', { guildId: { type: DataTypes.STRING, allowNull: false }, name: { type: DataTypes.STRING, defaultValue: 'Custom Bind' }, actionType: { type: DataTypes.STRING, defaultValue: 'custom' }, targetValue: { type: DataTypes.TEXT, allowNull: true }, rotation: { type: DataTypes.STRING, allowNull: true }, emote: { type: DataTypes.STRING, defaultValue: '⭐' }, command: { type: DataTypes.TEXT, allowNull: true }, cooldown: { type: DataTypes.INTEGER, defaultValue: 0 }, cost: { type: DataTypes.INTEGER, defaultValue: 0 }, roleId: { type: DataTypes.STRING, allowNull: true } });
 const BindCooldown = sequelize.define('BindCooldown', { guildId: { type: DataTypes.STRING, primaryKey: true }, userId: { type: DataTypes.STRING, primaryKey: true }, bindId: { type: DataTypes.INTEGER, primaryKey: true }, expiresAt: { type: DataTypes.DATE } });
