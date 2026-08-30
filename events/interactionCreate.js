@@ -311,4 +311,4 @@ module.exports = async (interaction, client) => {
             await interaction.reply({ content: '❌ An error occurred processing this interaction.', flags: 64 }).catch(() => {});
         }
     }
-};
+}; // 👈 Correctly ends with just one closing bracket!

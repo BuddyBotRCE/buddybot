@@ -4,7 +4,7 @@ const adminHandler = require('./adminHandler');
 
 module.exports = async (interaction, client) => {
     const customId = interaction.customId || '';
-    const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
+    const selectedValue = interaction.isStringSelectMenu() && interaction.values ? interaction.values[0] : '';
 
     if (customId === 'admin_menu_back') {
         if (adminHandler && adminHandler.renderMainPanel) {
@@ -13,7 +13,7 @@ module.exports = async (interaction, client) => {
         return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] });
     }
 
-    // 👇 ADMIN PANEL SETUP ROUTE 👇
+    // --- ADMIN SETUP ROUTE ---
     if (customId === 'admin_menu_select' && selectedValue === 'setup_minigames') {
         const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
         const currency = config?.economyCurrency || 'Scrap';
@@ -50,7 +50,6 @@ module.exports = async (interaction, client) => {
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
             const isPremium = config?.isPremiumServer || false;
 
-            // Free Tier (5 Games)
             let games = [
                 { label: 'Coinflip', val: 'coinflip', emoji: '🪙' },
                 { label: 'Slots', val: 'slots', emoji: '🎰' },
@@ -59,7 +58,6 @@ module.exports = async (interaction, client) => {
                 { label: 'Rock Paper Scissors', val: 'rps', emoji: '✂️' }
             ];
 
-            // Premium Tier (20 Games)
             if (isPremium) {
                 games.push(
                     { label: 'Roulette', val: 'roulette', emoji: '🎡' }, { label: 'Blackjack', val: 'blackjack', emoji: '🃏' },
@@ -87,7 +85,7 @@ module.exports = async (interaction, client) => {
         }
     }
 
-    // 👇 CATCHES THE DROPDOWN AND OPENS THE BETTING MODAL 👇
+    // --- SELECT MENU (OPENS BETTING MODAL) ---
     if (interaction.isStringSelectMenu() && customId === 'casino_game_select') {
         const gameType = interaction.values[0];
         
@@ -120,63 +118,89 @@ module.exports = async (interaction, client) => {
         }
 
         if (customId.startsWith('modal_play_')) {
-            const gameType = customId.replace('modal_play_', '');
-            const bet = parseInt(interaction.fields.getTextInputValue('bet'));
-            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-            const currency = config?.economyCurrency || 'Scrap';
-            const maxBet = config?.casinoMaxBet || 1000;
+            try {
+                const gameType = customId.replace('modal_play_', '');
+                const betInput = interaction.fields.getTextInputValue('bet');
+                const bet = parseInt(betInput);
 
-            if (isNaN(bet) || bet <= 0) return interaction.reply({ content: '❌ Please enter a valid bet amount.', flags: 64 });
-            if (bet > maxBet) return interaction.reply({ content: `❌ Bet exceeds the server max bet limit of **${maxBet} ${currency}**!`, flags: 64 });
+                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+                const currency = config?.economyCurrency || 'Scrap';
+                const maxBet = config?.casinoMaxBet || 1000;
 
-            const user = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
-            if (!user || user.wallet < bet) return interaction.reply({ content: '❌ You do not have enough funds in your wallet!', flags: 64 });
+                if (isNaN(bet) || bet <= 0) {
+                    return interaction.reply({ content: '❌ Please enter a valid number for your bet.', flags: 64 });
+                }
+                if (bet > maxBet) {
+                    return interaction.reply({ content: `❌ Bet exceeds the server max bet limit of **${maxBet} ${currency}**!`, flags: 64 });
+                }
 
-            const now = new Date();
-            const [cd] = await CasinoCooldown.findOrCreate({ where: { guildId: interaction.guild.id, userId: interaction.user.id }, defaults: { expiresAt: now } });
-            if (new Date(cd.expiresAt) > now) {
-                const secondsLeft = Math.ceil((new Date(cd.expiresAt) - now) / 1000);
-                return interaction.reply({ content: `⏳ Please wait **${secondsLeft}s** before playing again!`, flags: 64 });
+                const [user] = await UserEconomy.findOrCreate({ 
+                    where: { guildId: interaction.guild.id, userId: interaction.user.id },
+                    defaults: { wallet: 0, bank: 0 }
+                });
+
+                if (user.wallet < bet) {
+                    return interaction.reply({ content: `❌ You do not have enough funds in your wallet! You have **${user.wallet} ${currency}**.`, flags: 64 });
+                }
+
+                const now = new Date();
+                const [cd] = await CasinoCooldown.findOrCreate({ where: { guildId: interaction.guild.id, userId: interaction.user.id }, defaults: { expiresAt: now } });
+                if (new Date(cd.expiresAt) > now) {
+                    const secondsLeft = Math.ceil((new Date(cd.expiresAt) - now) / 1000);
+                    return interaction.reply({ content: `⏳ Please wait **${secondsLeft}s** before playing again!`, flags: 64 });
+                }
+
+                const cooldownSec = config?.casinoCooldownSeconds || 5;
+                await cd.update({ expiresAt: new Date(now.getTime() + cooldownSec * 1000) });
+
+                let resultMsg = '';
+                let payout = 0;
+
+                switch (gameType) {
+                    case 'coinflip':
+                        const winCF = Math.random() < 0.5;
+                        payout = winCF ? bet * 2 : 0;
+                        resultMsg = winCF ? `🪙 **COINFLIP WON!** You won **+${bet} ${currency}**!` : `🪙 **COINFLIP LOST!** You lost **-${bet} ${currency}**.`;
+                        break;
+                    case 'slots':
+                        const icons = ['🍒', '🍋', '🔔', '💎', '7️⃣'];
+                        const r1 = icons[Math.floor(Math.random() * icons.length)]; 
+                        const r2 = icons[Math.floor(Math.random() * icons.length)]; 
+                        const r3 = icons[Math.floor(Math.random() * icons.length)];
+                        if (r1 === r2 && r2 === r3) { 
+                            payout = bet * 5; 
+                            resultMsg = `🎰 | ${r1}|${r2}|${r3} | **JACKPOT!** Won **+${bet * 4} ${currency}**!`; 
+                        } else if (r1 === r2 || r2 === r3 || r1 === r3) { 
+                            payout = Math.round(bet * 1.5); 
+                            resultMsg = `🎰 | ${r1}|${r2}|${r3} | **Partial Match!** Won **+${Math.round(bet * 0.5)} ${currency}**!`; 
+                        } else { 
+                            payout = 0; 
+                            resultMsg = `🎰 | ${r1}|${r2}|${r3} | **Loss!** Lost **-${bet} ${currency}**.`; 
+                        }
+                        break;
+                    case 'dice':
+                        const roll = Math.floor(Math.random() * 6) + 1;
+                        const winDice = roll > 3;
+                        payout = winDice ? Math.round(bet * 1.8) : 0;
+                        resultMsg = winDice ? `🎲 Rolled **${roll}** (High)! Won **+${payout - bet} ${currency}**!` : `🎲 Rolled **${roll}** (Low). Lost **-${bet} ${currency}**.`;
+                        break;
+                    default:
+                        const genericWin = Math.random() < 0.45;
+                        payout = genericWin ? Math.round(bet * 2) : 0;
+                        const displayName = gameType.toUpperCase();
+                        resultMsg = genericWin ? `🎮 **${displayName} WON!** You won **+${bet} ${currency}**!` : `🎮 **${displayName} LOST!** You lost **-${bet} ${currency}**.`;
+                        break;
+                }
+
+                await user.update({ wallet: (user.wallet - bet) + payout });
+                return interaction.reply({ content: resultMsg, flags: 64 });
+
+            } catch (err) {
+                console.error("Casino Play Error:", err);
+                if (!interaction.replied && !interaction.deferred) {
+                    return interaction.reply({ content: '❌ An error occurred while processing your casino bet.', flags: 64 }).catch(() => {});
+                }
             }
-
-            const cooldownSec = config?.casinoCooldownSeconds || 5;
-            await cd.update({ expiresAt: new Date(now.getTime() + cooldownSec * 1000) });
-
-            let resultMsg = '';
-            let payout = 0;
-
-            switch (gameType) {
-                case 'coinflip':
-                    const winCF = Math.random() < 0.5;
-                    payout = winCF ? bet * 2 : 0;
-                    resultMsg = winCF ? `🪙 **COINFLIP WON!** You won **+${bet} ${currency}**!` : `🪙 **COINFLIP LOST!** You lost **-${bet} ${currency}**.`;
-                    break;
-                case 'slots':
-                    const icons = ['🍒', '🍋', '🔔', '💎', '7️⃣'];
-                    const r1 = icons[Math.floor(Math.random() * icons.length)]; const r2 = icons[Math.floor(Math.random() * icons.length)]; const r3 = icons[Math.floor(Math.random() * icons.length)];
-                    if (r1 === r2 && r2 === r3) { payout = bet * 5; resultMsg = `🎰 | ${r1}|${r2}|${r3} | **JACKPOT!** Won **+${bet * 4} ${currency}**!`; }
-                    else if (r1 === r2 || r2 === r3 || r1 === r3) { payout = Math.round(bet * 1.5); resultMsg = `🎰 | ${r1}|${r2}|${r3} | **Partial Match!** Won **+${Math.round(bet * 0.5)} ${currency}**!`; }
-                    else { payout = 0; resultMsg = `🎰 | ${r1}|${r2}|${r3} | **Loss!** Lost **-${bet} ${currency}**.`; }
-                    break;
-                case 'dice':
-                    const roll = Math.floor(Math.random() * 6) + 1;
-                    const winDice = roll > 3;
-                    payout = winDice ? Math.round(bet * 1.8) : 0;
-                    resultMsg = winDice ? `🎲 Rolled **${roll}** (High)! Won **+${payout - bet} ${currency}**!` : `🎲 Rolled **${roll}** (Low). Lost **-${bet} ${currency}**.`;
-                    break;
-                default:
-                    // Generic fallback for Scratchcard, RPS, and all 20 premium games!
-                    const genericWin = Math.random() < 0.45;
-                    payout = genericWin ? Math.round(bet * 2) : 0;
-                    
-                    // Format the gameType string to look nice (e.g. 'rockpaperscissors' -> 'ROCKPAPERSCISSORS')
-                    const displayName = gameType.toUpperCase();
-                    resultMsg = genericWin ? `🎮 **${displayName} WON!** You won **+${bet} ${currency}**!` : `🎮 **${displayName} LOST!** You lost **-${bet} ${currency}**.`;
-                    break;
-            }
-
-            await user.update({ wallet: (user.wallet - bet) + payout });
-            return interaction.reply({ content: resultMsg, flags: 64 });
         }
     }
 };
