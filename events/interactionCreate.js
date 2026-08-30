@@ -58,7 +58,12 @@ module.exports = async (interaction, client) => {
             if (customId === 'modal_link_account_global' || customId.startsWith('modal_link_account_')) return await adminHandler(interaction, client);
             if (customId.startsWith('modal_sug_') || customId === 'modal_player_submit_suggestion' || customId.startsWith('modal_sug_decline_reason_')) return await suggestionHandler(interaction, client);
             if (customId === 'modal_verify_email' || customId === 'modal_transfer_license') return await premiumHandler(interaction, client);
-            if (customId === 'modal_setup_economy' || customId === 'modal_econ_interest' || customId === 'modal_hub_deposit' || customId === 'modal_hub_withdraw' || customId.startsWith('modal_admin_give_exec_') || customId.startsWith('modal_admin_take_exec_')) return await economyHandler(interaction, client);
+            
+            // 👇 FIXED: Explicitly catch ALL economy, daily, kill reward, and buddy days modals here! 👇
+            if (customId === 'modal_setup_economy' || customId === 'modal_econ_daily' || customId === 'modal_econ_buddydays' || customId.startsWith('modal_econ_bd_') || customId === 'modal_econ_scientist_reward' || customId === 'modal_econ_player_reward' || customId === 'modal_econ_interest' || customId === 'modal_hub_deposit' || customId === 'modal_hub_withdraw' || customId.startsWith('modal_admin_give_exec_') || customId.startsWith('modal_admin_take_exec_')) {
+                return await economyHandler(interaction, client);
+            }
+
             if (customId === 'modal_ae_settings' || customId.startsWith('modal_ae_')) return await autoEventsHandler(interaction, client);
             if (customId === 'modal_casino_config') return await casinoHandler(interaction, client);
             if (customId.startsWith('modal_emb_') || customId === 'modal_admin_embed' || customId.startsWith('modal_rr_') || customId === 'modal_edit_embed_prompt' || customId === 'modal_attach_rr_prompt') return await postEmbedHandler(interaction, client);
@@ -169,12 +174,10 @@ module.exports = async (interaction, client) => {
         // 🚦 4. BUTTONS & COMPONENT ROUTING
         // ====================================================================
         
-        // Skip Night Buttons
         if (customId === 'btn_toggle_skipnight' || customId === 'btn_set_skipnight_percentage') {
             return await skipNightHandler(interaction, client);
         }
 
-        // Home TP Buttons & Player Panel Home Info
         if (customId === 'hometp_btn_settings' || customId === 'admin_menu_back') {
             return await homeTpHandler(interaction, client);
         }
@@ -204,7 +207,7 @@ module.exports = async (interaction, client) => {
                 } 
             });
 
-            let pvpText = '### ⚔️ Live Active PvP Areas & Monuments\n\n\`All areas are currently Safe PvE (No active PvP zones).\`';
+            let pvpText = '### ⚔️ Live Active PvP Areas & Monuments\n\n`All areas are currently Safe PvE (No active PvP zones).`';
             
             if (activePvpZones && activePvpZones.length > 0) {
                 pvpText = '### ⚔️ Live Active PvP Areas & Monuments\n\n' + 
@@ -227,7 +230,8 @@ module.exports = async (interaction, client) => {
             return await clanHandler(interaction, client);
         }
 
-        if (customId === 'hub_economy_menu' || customId === 'hub_balance' || customId === 'hub_daily' || customId === 'hub_deposit' || customId === 'hub_withdraw' || customId.includes('bank') || customId.includes('econ') || customId === 'btn_admin_give' || customId === 'btn_admin_take' || customId === 'select_admin_give_target' || customId === 'select_admin_take_target') {
+        // 👇 FIXED: Explicitly route ALL economy, daily, buddy days, and kill reward buttons/select menus here! 👇
+        if (customId === 'hub_economy_menu' || customId === 'hub_balance' || customId === 'hub_daily' || customId === 'hub_buddydays' || customId === 'select_buddydays_type' || customId === 'btn_econ_daily' || customId === 'btn_econ_buddydays' || customId === 'btn_econ_scientist_reward' || customId === 'btn_econ_player_reward' || customId === 'hub_deposit' || customId === 'hub_withdraw' || customId.includes('bank') || customId.includes('econ') || customId === 'btn_admin_give' || customId === 'btn_admin_take' || customId === 'select_admin_give_target' || customId === 'select_admin_take_target') {
             return await economyHandler(interaction, client);
         }
 
