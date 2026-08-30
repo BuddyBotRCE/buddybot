@@ -1,4 +1,4 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder, StringSelectMenuBuilder } = require('discord.js');
 const { GuildConfig, UserEconomy, GameServer } = require('../database/db');
 const { sendRconCommand } = require('../utils/rconManager');
 const adminHandler = require('./adminHandler');
@@ -80,16 +80,19 @@ module.exports = async (interaction, client) => {
             return interaction.showModal(modal);
         }
 
-        // --- BUDDY DAYS CONFIGURATION MODAL ---
+        // 👇 NEW: OPENS A DROPDOWN INSTEAD OF A CLUNKY MODAL!
         if (customId === 'btn_econ_buddydays') {
-            const modal = new ModalBuilder().setCustomId('modal_econ_buddydays').setTitle('Configure Buddy Day Reward');
-            modal.addComponents(
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('day_number').setLabel("Day Number (1 to 30)").setStyle(TextInputStyle.Short).setPlaceholder("e.g. 7").setRequired(true)),
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reward_type').setLabel("Type: 'currency', 'xp', 'kit', or 'item'").setStyle(TextInputStyle.Short).setPlaceholder("currency / xp / kit / item").setRequired(true)),
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reward_amount').setLabel("Amount / Quantity").setStyle(TextInputStyle.Short).setPlaceholder("e.g. 1000 (Scrap/XP/Items) or 1 for Kits").setRequired(true)),
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('target_item_name').setLabel("Kit / Item Name (Blank for Currency/XP)").setStyle(TextInputStyle.Short).setPlaceholder("e.g. wood, sulfur, or VIPKit").setRequired(false))
+            const row = new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder().setCustomId('select_buddydays_type')
+                    .setPlaceholder('Step 1: Select Reward Type...')
+                    .addOptions([
+                        { label: 'Currency Reward', value: 'type_currency', description: 'Give wallet currency', emoji: '💰' },
+                        { label: 'BuddyPass XP', value: 'type_xp', description: 'Give battlepass XP', emoji: '⭐' },
+                        { label: 'In-Game Resource/Item', value: 'type_item', description: 'Give Rust items', emoji: '🪵' },
+                        { label: 'Server Kit', value: 'type_kit', description: 'Give a configured kit', emoji: '📦' }
+                    ])
             );
-            return interaction.showModal(modal);
+            return interaction.reply({ content: '🗓️ **Buddy Days Setup:** What kind of reward do you want to give players?', components: [row], flags: 64 });
         }
 
         if (customId === 'btn_econ_scientist_reward') {
@@ -180,7 +183,6 @@ module.exports = async (interaction, client) => {
             return interaction.reply({ content: `🎁 Successfully claimed **${rewardAmount} ${currency}** for your daily reward!`, flags: 64 });
         }
 
-        // --- BUDDY DAYS CLAIM (CURRENCY, XP, KITS, RESOURCES) ---
         if (customId === 'hub_buddydays') {
             const [user] = await UserEconomy.findOrCreate({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
@@ -219,7 +221,6 @@ module.exports = async (interaction, client) => {
 
             let rewardDescription = '';
 
-            // Handle reward types
             if (rType === 'xp') {
                 const newXp = (user.xp || 0) + rAmount;
                 const newLevel = Math.floor(newXp / 100) + 1;
@@ -248,7 +249,6 @@ module.exports = async (interaction, client) => {
                     return interaction.reply({ content: `❌ RCON Error sending items: \`${err.message}\`. Make sure the server is online.`, flags: 64 });
                 }
             } else {
-                // Default Currency
                 await user.update({ wallet: user.wallet + rAmount, buddyDaysStreak: streak, lastBuddyDaysClaim: now });
                 rewardDescription = `💰 **+${rAmount} ${currency}** added to your wallet!`;
             }
@@ -274,7 +274,7 @@ module.exports = async (interaction, client) => {
     }
 
     // ==========================================
-    // 3. USER SELECT MENUS
+    // 3. SELECT MENUS
     // ==========================================
     if (interaction.isUserSelectMenu()) {
         if (customId === 'select_admin_give_target') {
@@ -291,6 +291,36 @@ module.exports = async (interaction, client) => {
             const displayName = targetUser?.inGameName || `<@${targetUserId}>`;
             const modal = new ModalBuilder().setCustomId(`modal_admin_take_exec_${targetUserId}`).setTitle(`Take Currency from ${displayName}`);
             modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel("Amount to TAKE").setStyle(TextInputStyle.Short).setRequired(true)));
+            return interaction.showModal(modal);
+        }
+    }
+
+    // 👇 NEW: CATCH THE BUDDY DAYS TYPE SELECTION AND POP THE CUSTOMIZED MODAL!
+    if (interaction.isStringSelectMenu()) {
+        if (customId === 'select_buddydays_type') {
+            const type = value.replace('type_', ''); // gets 'currency', 'xp', 'item', or 'kit'
+            
+            let title = '';
+            let showItemField = false;
+
+            if (type === 'currency') title = '💰 Configure Currency Reward';
+            if (type === 'xp') title = '⭐ Configure XP Reward';
+            if (type === 'item') { title = '🪵 Configure Item Reward'; showItemField = true; }
+            if (type === 'kit') { title = '📦 Configure Kit Reward'; showItemField = true; }
+
+            const modal = new ModalBuilder().setCustomId(`modal_econ_bd_${type}`).setTitle(title);
+            
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('day_number').setLabel("Day Number (1 to 30)").setStyle(TextInputStyle.Short).setRequired(true)),
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reward_amount').setLabel(type === 'kit' ? "Amount (Usually 1)" : "Amount / Quantity").setStyle(TextInputStyle.Short).setRequired(true))
+            );
+
+            if (showItemField) {
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('target_item_name').setLabel(type === 'kit' ? "Exact Kit Name (e.g. VIPKit)" : "Item Shortname (e.g. wood)").setStyle(TextInputStyle.Short).setRequired(true))
+                );
+            }
+            
             return interaction.showModal(modal);
         }
     }
@@ -313,28 +343,27 @@ module.exports = async (interaction, client) => {
             return interaction.reply({ content: `✅ Daily Reward updated! Players will now get a randomized amount between **${min}** and **${max}** currency!`, flags: 64 });
         }
 
-        // --- SAVING BUDDY DAYS REWARDS ---
-        if (customId === 'modal_econ_buddydays') {
+        // 👇 NEW: CATCHES ALL 4 BUDDY DAYS MODALS
+        if (customId.startsWith('modal_econ_bd_')) {
+            const type = customId.replace('modal_econ_bd_', '');
             const dayNum = parseInt(interaction.fields.getTextInputValue('day_number'));
-            const type = interaction.fields.getTextInputValue('reward_type').trim().toLowerCase();
             const amount = parseInt(interaction.fields.getTextInputValue('reward_amount')) || 1;
-            const itemOrKit = interaction.fields.getTextInputValue('target_item_name')?.trim() || '';
+            
+            let itemOrKit = '';
+            if (type === 'item' || type === 'kit') {
+                itemOrKit = interaction.fields.getTextInputValue('target_item_name').trim();
+                if (!itemOrKit) return interaction.reply({ content: `❌ You must specify an Item Shortname or Kit Name!`, flags: 64 });
+            }
 
             if (isNaN(dayNum) || dayNum < 1 || dayNum > 30) return interaction.reply({ content: `❌ Invalid Day! Please enter a day between 1 and 30.`, flags: 64 });
-            if (!['currency', 'xp', 'kit', 'item', 'resource'].includes(type)) {
-                return interaction.reply({ content: `❌ Invalid Type! Must be one of: \`currency\`, \`xp\`, \`kit\`, or \`item\`.`, flags: 64 });
-            }
-            if ((type === 'kit' || type === 'item' || type === 'resource') && !itemOrKit) {
-                return interaction.reply({ content: `❌ You must specify a Kit or Item shortname when selecting \`${type}\`!`, flags: 64 });
-            }
 
             const [config] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
             let currentConfig = {};
             try { currentConfig = JSON.parse(config.buddyDaysConfig || '{}'); } catch(e){}
 
             currentConfig[dayNum.toString()] = { type, amount, itemOrKit };
-
             await config.update({ buddyDaysConfig: JSON.stringify(currentConfig) });
+            
             const itemLabel = itemOrKit ? ` (${itemOrKit})` : '';
             return interaction.reply({ content: `✅ **Buddy Day ${dayNum} Configured!**\n• Type: \`${type.toUpperCase()}\`\n• Amount / Target: \`${amount}\`${itemLabel}`, flags: 64 });
         }
