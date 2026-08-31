@@ -1,4 +1,4 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, UserSelectMenuBuilder, ChannelSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, UserSelectMenuBuilder, ChannelSelectMenuBuilder, RoleSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { GuildConfig, Giveaway } = require('../database/db');
 const adminHandler = require('./adminHandler');
 
@@ -21,6 +21,7 @@ module.exports = async (interaction, client) => {
             .addOptions([
                 { label: 'Start Giveaway', value: 'ga_start', emoji: '🚀' }, 
                 { label: 'Set Default Channel', value: 'ga_channel', emoji: '📺' }, 
+                { label: 'Set Ping Role', value: 'ga_ping_role', description: 'Select the role to ping (e.g. Server Member)', emoji: '🔔' },
                 { label: 'Set Default Banner', value: 'ga_banner', emoji: '🖼️' }, 
                 { label: 'Reroll Winner', value: 'ga_reroll', emoji: '🎲' }, 
                 { label: 'View Participants', value: 'ga_players', emoji: '👥' }, 
@@ -38,6 +39,11 @@ module.exports = async (interaction, client) => {
     if (customId === 'select_giveaway_channel') {
         await GuildConfig.upsert({ guildId: interaction.guild.id, giveawayChannelId: interaction.values[0] });
         return interaction.update({ content: `✅ Default Giveaway channel linked!`, components: [] });
+    }
+
+    if (customId === 'select_ga_ping_role') {
+        await GuildConfig.upsert({ guildId: interaction.guild.id, giveawayPingRoleId: interaction.values[0] });
+        return interaction.update({ content: `✅ Giveaway ping role successfully linked!`, components: [] });
     }
 
     if (customId.startsWith('select_ga_reroll_')) {
@@ -68,13 +74,20 @@ module.exports = async (interaction, client) => {
             return interaction.showModal(modal);
         }
         if (selectedValue === 'ga_channel') return interaction.reply({ content: '📺 Select default giveaway channel:', components: [new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_giveaway_channel').setPlaceholder('Select Channel...'))], flags: 64 });
+        
+        if (selectedValue === 'ga_ping_role') {
+            return interaction.reply({ 
+                content: '🔔 Select the role to ping when a giveaway starts (e.g. your Server Member role):', 
+                components: [new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder().setCustomId('select_ga_ping_role').setPlaceholder('Select Role...'))], 
+                flags: 64 
+            });
+        }
+
         if (selectedValue === 'ga_banner') {
             const modal = new ModalBuilder().setCustomId('modal_ga_banner').setTitle('Set Banner URL');
             modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('banner_url').setLabel("Image URL").setStyle(TextInputStyle.Short).setRequired(true)));
             return interaction.showModal(modal);
         }
-        
-        // 👇 CHANGED: Input fields now ask for the short Giveaway ID 👇
         if (selectedValue === 'ga_reroll') {
             const modal = new ModalBuilder().setCustomId('modal_ga_reroll').setTitle('Reroll Giveaway');
             modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ga_id').setLabel("Giveaway ID (e.g. 1, 2, 3)").setStyle(TextInputStyle.Short).setRequired(true)));
@@ -94,9 +107,12 @@ module.exports = async (interaction, client) => {
 
     if (customId === 'enter_giveaway') {
         const giveaway = await Giveaway.findOne({ where: { messageId: interaction.message.id } });
-        if (!giveaway || !giveaway.isActive) return interaction.reply({ content: '❌ This giveaway has ended or does not exist!', flags: 64 });
+        // Assume active if isActive is null (in case of old databases) or true
+        if (!giveaway || giveaway.isActive === false) return interaction.reply({ content: '❌ This giveaway has ended or does not exist!', flags: 64 });
         
-        let entries = JSON.parse(giveaway.entries || '[]');
+        let entries = [];
+        try { entries = JSON.parse(giveaway.entries || '[]'); } catch (e) {}
+
         if (!entries.includes(interaction.user.id)) { 
             entries.push(interaction.user.id); 
             await giveaway.update({ entries: JSON.stringify(entries) }); 
@@ -119,7 +135,6 @@ module.exports = async (interaction, client) => {
             const prize = interaction.fields.getTextInputValue('prize');
             const endTime = new Date(Date.now() + minutes * 60000);
 
-            // 1. Send the message first with a pending footer
             const embed = new EmbedBuilder()
                 .setTitle('🎉 GIVEAWAY TIME 🎉')
                 .setDescription(`**Prize:** ${prize}\n**Winners:** ${winners}\n**Ends:** <t:${Math.floor(endTime.getTime()/1000)}:R>`)
@@ -128,29 +143,34 @@ module.exports = async (interaction, client) => {
 
             if (config?.giveawayBannerUrl) embed.setImage(config.giveawayBannerUrl);
             
+            // Generate the ping text based on config
+            let pingText = '🎊 **New Giveaway Started!**';
+            if (config?.giveawayPingRoleId) {
+                pingText += ` <@&${config.giveawayPingRoleId}>`;
+            }
+            
             const msg = await targetChannel.send({ 
-                content: '🎊 **New Giveaway Started!**',
+                content: pingText,
                 embeds: [embed], 
                 components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('enter_giveaway').setLabel('Enter Giveaway').setStyle(ButtonStyle.Success).setEmoji('🎁'))] 
             });
             
-            // 2. Create the Database Entry to generate the sequential ID
+            // 👇 Reverted to original .create structure to prevent DB crashes 👇
             const ga = await Giveaway.create({ 
                 messageId: msg.id, 
                 guildId: interaction.guild.id, 
                 channelId: targetChannel.id, 
                 prize: prize, 
                 endTime: endTime, 
-                winnersCount: winners,
-                entries: '[]',
-                isActive: true
+                winnersCount: winners 
             });
             
-            // 3. Edit the embed to show the newly generated ID
-            embed.setFooter({ text: `Giveaway ID: #${ga.id} | Click the button below to enter!` });
-            await msg.edit({ embeds: [embed] });
+            const displayId = ga?.id || msg.id.slice(-4);
+            
+            embed.setFooter({ text: `Giveaway ID: #${displayId} | Click the button below to enter!` });
+            await msg.edit({ embeds: [embed] }).catch(() => {});
 
-            return interaction.reply({ content: `✅ Giveaway successfully started in <#${targetChannel.id}>!\n**Giveaway ID:** \`#${ga.id}\``, flags: 64 });
+            return interaction.reply({ content: `✅ Giveaway successfully started in <#${targetChannel.id}>!\n**Giveaway ID:** \`#${displayId}\``, flags: 64 });
         }
 
         if (customId === 'modal_ga_banner') {
@@ -158,7 +178,6 @@ module.exports = async (interaction, client) => {
             return interaction.reply({ content: `✅ Giveaway banner URL successfully updated!`, flags: 64 });
         }
 
-        // Helper function to find a giveaway safely by either the short ID or the long Message ID
         const fetchGiveawaySafely = async (input) => {
             let ga = null;
             if (!isNaN(input)) { ga = await Giveaway.findOne({ where: { id: parseInt(input), guildId: interaction.guild.id } }).catch(() => null); }
@@ -171,7 +190,7 @@ module.exports = async (interaction, client) => {
             const ga = await fetchGiveawaySafely(inputId);
             
             if (!ga) return interaction.reply({ content: '❌ Giveaway not found. Make sure you entered a valid Giveaway ID (e.g. 1).', flags: 64 });
-            return interaction.reply({ content: `🎲 Select the winner you want to replace for **Giveaway #${ga.id}**:`, components: [new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId(`select_ga_reroll_${ga.id}`).setPlaceholder('Select winner to replace...'))], flags: 64 });
+            return interaction.reply({ content: `🎲 Select the winner you want to replace for **Giveaway #${ga.id || inputId}**:`, components: [new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId(`select_ga_reroll_${ga.id || ga.messageId}`).setPlaceholder('Select winner to replace...'))], flags: 64 });
         }
 
         if (customId === 'modal_ga_cancel') {
@@ -181,7 +200,7 @@ module.exports = async (interaction, client) => {
             if (!ga) return interaction.reply({ content: '❌ Giveaway not found. Make sure you entered a valid Giveaway ID (e.g. 1).', flags: 64 });
             
             await ga.update({ isActive: false });
-            return interaction.reply({ content: `✅ Giveaway **#${ga.id}** (${ga.prize}) has been successfully cancelled.`, flags: 64 });
+            return interaction.reply({ content: `✅ Giveaway **#${ga.id || inputId}** (${ga.prize}) has been successfully cancelled.`, flags: 64 });
         }
 
         if (customId === 'modal_ga_players') {
@@ -190,10 +209,12 @@ module.exports = async (interaction, client) => {
             
             if (!ga) return interaction.reply({ content: '❌ Giveaway not found. Make sure you entered a valid Giveaway ID (e.g. 1).', flags: 64 });
             
-            const entries = JSON.parse(ga.entries || '[]');
-            if (entries.length === 0) return interaction.reply({ content: `👥 **Participants for Giveaway #${ga.id}:** None yet!`, flags: 64 });
+            let entries = [];
+            try { entries = JSON.parse(ga.entries || '[]'); } catch(e) {}
+
+            if (entries.length === 0) return interaction.reply({ content: `👥 **Participants for Giveaway #${ga.id || inputId}:** None yet!`, flags: 64 });
             
-            return interaction.reply({ content: `👥 **Participants for #${ga.id} (${entries.length}):**\n${entries.map(id => `<@${id}>`).join(', ')}`, flags: 64 });
+            return interaction.reply({ content: `👥 **Participants for #${ga.id || inputId} (${entries.length}):**\n${entries.map(id => `<@${id}>`).join(', ')}`, flags: 64 });
         }
     }
 };
