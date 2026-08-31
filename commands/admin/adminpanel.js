@@ -33,6 +33,8 @@ module.exports = {
             new StringSelectMenuBuilder().setCustomId('admin_menu_select').setPlaceholder('⚙️ Basic Systems & Upgrades...')
                 .addOptions([
                     { label: '⭐ Buy / Upgrade to Premium', value: 'setup_tier', description: 'Unlock all advanced modules and features', emoji: '⭐' },
+                    // 👇 NEW: BOT SETTINGS TOGGLES 👇
+                    { label: 'Bot Settings (Toggles)', value: 'setup_bot_settings', description: 'Enable or disable bot features', emoji: '⚙️' },
                     { label: 'RCON & Servers', value: 'setup_multiserver', emoji: '🌐' },
                     { label: 'Live Admin Tools', value: 'admin_tools', emoji: '🧰' },
                     { label: 'Shop & Store Manager', value: 'setup_shop', emoji: '🛒' },
