@@ -8,7 +8,11 @@ const WebSocket = require('ws');
 // Helper to fetch player position via RCON
 async function fetchPlayerPosition(guildId) {
     return new Promise((resolve) => {
-        const ws = activeConnections.get(guildId);
+        // Safe check so it doesn't crash if activeConnections or the connection is missing
+        const ws = activeConnections && typeof activeConnections.get === 'function' 
+            ? activeConnections.get(guildId) 
+            : null;
+
         if (!ws || ws.readyState !== WebSocket.OPEN) return resolve(null);
 
         let coords = null;
@@ -17,7 +21,6 @@ async function fetchPlayerPosition(guildId) {
                 const parsed = JSON.parse(data);
                 if (!parsed || !parsed.Message) return;
                 const msg = parsed.Message;
-                // Looks for vector coordinates like (100.5, 20.0, -450.2) or similar RCON output formats
                 const match = msg.match(/\((-?\d+\.?\d*),\s*(-?\d+\.?\d*),\s*(-?\d+\.?\d*)\)/);
                 if (match) {
                     coords = { x: parseFloat(match[1]), y: parseFloat(match[2]), z: parseFloat(match[3]) };
@@ -26,7 +29,6 @@ async function fetchPlayerPosition(guildId) {
         };
 
         ws.on('message', listener);
-        // Request admin player position or print position command
         ws.send(JSON.stringify({ Identifier: 8888, Message: "printpos", Name: "AdminWizard" }));
 
         setTimeout(() => {
