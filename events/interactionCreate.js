@@ -31,13 +31,26 @@ const skipNightHandler = require(handlerPath('skipNightHandler'));
 const leaderboardHandler = require(handlerPath('leaderboardHandler'));
 const orpHandler = require(handlerPath('orpHandler'));
 
-// 👇 NEW: BUDDY GAMES IMPORTS 👇
+// 👇 BUDDY GAMES IMPORTS 👇
 const buddyGamesHandler = require(handlerPath('buddyGamesHandler'));
 const gunGameHandler = require(handlerPath('gunGameHandler'));
 const battleRoyaleHandler = require(handlerPath('battleRoyaleHandler'));
 
 module.exports = async (interaction, client) => {
     try {
+        // 🚨 ABSOLUTE TOP ROUTING FOR BUDDY GAMES 🚨
+        const rawCustomId = interaction.customId || '';
+        const rawSelectedValue = interaction.isStringSelectMenu() && interaction.values ? interaction.values[0] : '';
+        
+        if (rawCustomId === 'admin_menu_select_2' && rawSelectedValue === 'setup_buddy_games') {
+            return await buddyGamesHandler(interaction, client);
+        }
+        if (rawCustomId === 'buddy_games_hub_select' || rawCustomId.startsWith('gg_') || rawCustomId.startsWith('br_')) {
+            if (rawCustomId.startsWith('gg_') || rawSelectedValue === 'hub_goto_gungame') return await gunGameHandler(interaction, client);
+            if (rawCustomId.startsWith('br_') || rawSelectedValue === 'hub_goto_br') return await battleRoyaleHandler(interaction, client);
+            return await buddyGamesHandler(interaction, client);
+        }
+
         // 🚨 DROPDOWN 2 ALIAS FIX 🚨
         if (interaction.customId === 'admin_menu_select_2') {
             Object.defineProperty(interaction, 'customId', { value: 'admin_menu_select', writable: true, configurable: true });
@@ -57,7 +70,6 @@ module.exports = async (interaction, client) => {
         // 🚦 0. MODAL SUBMISSION ROUTER
         // ====================================================================
         if (interaction.isModalSubmit()) {
-            // 👇 NEW: BUDDY GAMES MODALS ROUTING 👇
             if (customId.startsWith('modal_gg_')) return await gunGameHandler(interaction, client);
             if (customId.startsWith('modal_br_')) return await battleRoyaleHandler(interaction, client);
 
@@ -76,7 +88,7 @@ module.exports = async (interaction, client) => {
 
             if (customId === 'modal_ae_settings' || customId.startsWith('modal_ae_')) return await autoEventsHandler(interaction, client);
             if (customId === 'modal_casino_config') return await casinoHandler(interaction, client);
-            if (customId.startsWith('modal_emb_') || customId === 'modal_admin_embed' || customId.startsWith('modal_rr_') || customId.startsWith('modal_edit_embed_prompt' ) || customId.startsWith('modal_attach_rr_prompt')) return await postEmbedHandler(interaction, client);
+            if (customId.startsWith('modal_emb_') || customId === 'modal_admin_embed' || customId.startsWith('modal_rr_') || customId.startsWith('modal_edit_embed_prompt') || customId.startsWith('modal_attach_rr_prompt')) return await postEmbedHandler(interaction, client);
             if (customId.startsWith('modal_am_') || customId === 'modal_automod_config') return await autoModHandler(interaction, client);
             if (customId.startsWith('modal_cz_')) return await customZoneHandler(interaction, client);
             if (customId.startsWith('modal_clan_') || customId.startsWith('clan_modal_')) return await clanHandler(interaction, client);
@@ -90,11 +102,6 @@ module.exports = async (interaction, client) => {
         // 🚦 1. ADMIN MENU DROPDOWN SELECT ROUTER
         // ====================================================================
         if (customId === 'admin_menu_select') {
-            // 👇 INTERCEPT BUDDY GAMES IMMEDIATELY HERE 👇
-            if (selectedValue === 'setup_buddy_games' || selectedValue === 'hub_goto_gungame' || selectedValue === 'hub_goto_br' || customId === 'buddy_games_hub_select') {
-                return await buddyGamesHandler(interaction, client);
-            }
-
             if (selectedValue === 'setup_server_roles') {
                 const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
                 const adminRoleDisplay = config?.adminRoleId ? `<@&${config.adminRoleId}>` : '`Not Set`';
@@ -188,18 +195,6 @@ module.exports = async (interaction, client) => {
         // ====================================================================
         // 🚦 4. BUTTONS & COMPONENT ROUTING
         // ====================================================================
-        
-        // 👇 BUDDY GAMES BUTTONS & SELECT MENUS ROUTING 👇
-        if (customId === 'buddy_games_hub_select' || customId === 'setup_buddy_games') {
-            return await buddyGamesHandler(interaction, client);
-        }
-        if (customId.startsWith('gg_')) {
-            return await gunGameHandler(interaction, client);
-        }
-        if (customId.startsWith('br_')) {
-            return await battleRoyaleHandler(interaction, client);
-        }
-
         if (customId === 'btn_toggle_skipnight' || customId === 'btn_set_skipnight_percentage') {
             return await skipNightHandler(interaction, client);
         }
