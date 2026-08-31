@@ -2,6 +2,39 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelect
 const db = require('../database/db');
 const adminHandler = require('./adminHandler');
 const { RUST_CATEGORIES } = require('../utils/rustCatalog');
+const { activeConnections, sendRconCommand } = require('../utils/rconManager');
+const WebSocket = require('ws');
+
+// Helper to fetch player position via RCON
+async function fetchPlayerPosition(guildId) {
+    return new Promise((resolve) => {
+        const ws = activeConnections.get(guildId);
+        if (!ws || ws.readyState !== WebSocket.OPEN) return resolve(null);
+
+        let coords = null;
+        const listener = (data) => {
+            try {
+                const parsed = JSON.parse(data);
+                if (!parsed || !parsed.Message) return;
+                const msg = parsed.Message;
+                // Looks for vector coordinates like (100.5, 20.0, -450.2) or similar RCON output formats
+                const match = msg.match(/\((-?\d+\.?\d*),\s*(-?\d+\.?\d*),\s*(-?\d+\.?\d*)\)/);
+                if (match) {
+                    coords = { x: parseFloat(match[1]), y: parseFloat(match[2]), z: parseFloat(match[3]) };
+                }
+            } catch (e) {}
+        };
+
+        ws.on('message', listener);
+        // Request admin player position or print position command
+        ws.send(JSON.stringify({ Identifier: 8888, Message: "printpos", Name: "AdminWizard" }));
+
+        setTimeout(() => {
+            ws.off('message', listener);
+            resolve(coords);
+        }, 2000);
+    });
+}
 
 module.exports = async (interaction, client) => {
     const customId = interaction.customId || '';
@@ -16,7 +49,7 @@ module.exports = async (interaction, client) => {
 
     if (customId === 'admin_menu_select' && selectedValue === 'setup_battleroyale') {
         const ArenaCratePoint = db.ArenaCratePoint;
-        const ArenaSpawn = db.ArenaSpawn; // Using dedicated or general arena spawns
+        const ArenaSpawn = db.ArenaSpawn;
         const ArenaConfig = db.ArenaConfig;
         const ArenaPrize = db.ArenaPrize;
 
@@ -34,8 +67,8 @@ module.exports = async (interaction, client) => {
         const row1 = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder().setCustomId('br_action_select').setPlaceholder('Select Battle Royale configuration...')
                 .addOptions([
-                    { label: '📍 Add Player Spawn Point', value: 'br_add_spawn', description: 'Logs your current position as a match start spawn', emoji: '📍' },
-                    { label: '📦 Add Elite Crate Spawn Point', value: 'br_add_crate', description: 'Logs your current position as a potential crate drop site', emoji: '📦' },
+                    { label: '📍 Add Player Spawn Point (Button)', value: 'br_add_spawn', description: 'Capture your current in-game position as a player spawn', emoji: '📍' },
+                    { label: '📦 Add Elite Crate Spawn Point (Button)', value: 'br_add_crate', description: 'Capture your current in-game position as an elite crate', emoji: '📦' },
                     { label: '⚙️ Set Crate Fill Percentage', value: 'br_set_percentage', description: 'Configure what % of crates spawn per match (e.g. 35%)', emoji: '⚙️' },
                     { label: '🎁 Manage Equal-% Lucky Dip Prizes', value: 'br_prizes', description: 'Shared prize pool with Gun Game', emoji: '🎁' },
                     { label: '🗑️ Clear Mapped Points', value: 'br_clear_all', description: 'Clear all spawns and crates', emoji: '🗑️' }
@@ -56,11 +89,17 @@ module.exports = async (interaction, client) => {
 
     if (customId === 'br_action_select') {
         if (selectedValue === 'br_add_spawn') {
-            return interaction.reply({ content: '📍 **BR Setup:** Stand at your desired player spawn location in-game and type `/arenaspawn brspawn` to log your coordinates.', flags: 64 });
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('btn_capture_br_spawn').setLabel('📍 Capture My Current Position (Spawn)').setStyle(ButtonStyle.Success)
+            );
+            return interaction.reply({ content: '📍 **Battle Royale Spawn Setup:** Stand at your desired player spawn position in-game and click the button below to capture your coordinates automatically via RCON:', components: [row], flags: 64 });
         }
 
         if (selectedValue === 'br_add_crate') {
-            return interaction.reply({ content: '📦 **BR Setup:** Stand at your desired elite crate location in-game and type `/arenaspawn brcrate` to log the coordinates.', flags: 64 });
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('btn_capture_br_crate').setLabel('📦 Capture My Current Position (Crate)').setStyle(ButtonStyle.Success)
+            );
+            return interaction.reply({ content: '📦 **Battle Royale Crate Setup:** Stand at your desired elite crate location in-game and click the button below to capture your coordinates automatically via RCON:', components: [row], flags: 64 });
         }
 
         if (selectedValue === 'br_set_percentage') {
@@ -90,6 +129,37 @@ module.exports = async (interaction, client) => {
             if (db.ArenaCratePoint) await db.ArenaCratePoint.destroy({ where: { guildId: interaction.guild.id } });
             if (db.ArenaSpawn) await db.ArenaSpawn.destroy({ where: { guildId: interaction.guild.id } });
             return interaction.reply({ content: '✅ All mapped Battle Royale spawn points and crate points have been cleared.', flags: 64 });
+        }
+    }
+
+    // Button Click Handlers for Live Position Capture
+    if (interaction.isButton()) {
+        if (customId === 'btn_capture_br_spawn') {
+            await interaction.reply({ content: '⏳ Grabbing your in-game coordinates via RCON...', flags: 64 });
+            const pos = await fetchPlayerPosition(interaction.guild.id);
+            if (!pos) {
+                return interaction.editReply({ content: '❌ Could not retrieve coordinates. Ensure your RCON connection is active and you are logged in as admin in-game.' });
+            }
+
+            if (db.ArenaSpawn) {
+                await db.ArenaSpawn.create({ guildId: interaction.guild.id, x: pos.x, y: pos.y, z: pos.z });
+                const total = await db.ArenaSpawn.count({ where: { guildId: interaction.guild.id } });
+                return interaction.editReply({ content: `✅ **Player Spawn Mapped Successfully!**\n• Coordinates: \`X: ${pos.x}, Y: ${pos.y}, Z: ${pos.z}\`\n• Total Mapped Spawns: \`${total}\`` });
+            }
+        }
+
+        if (customId === 'btn_capture_br_crate') {
+            await interaction.reply({ content: '⏳ Grabbing your in-game coordinates via RCON...', flags: 64 });
+            const pos = await fetchPlayerPosition(interaction.guild.id);
+            if (!pos) {
+                return interaction.editReply({ content: '❌ Could not retrieve coordinates. Ensure your RCON connection is active and you are logged in as admin in-game.' });
+            }
+
+            if (db.ArenaCratePoint) {
+                await db.ArenaCratePoint.create({ guildId: interaction.guild.id, x: pos.x, y: pos.y, z: pos.z });
+                const total = await db.ArenaCratePoint.count({ where: { guildId: interaction.guild.id } });
+                return interaction.editReply({ content: `✅ **Elite Crate Point Mapped Successfully!**\n• Coordinates: \`X: ${pos.x}, Y: ${pos.y}, Z: ${pos.z}\`\n• Total Mapped Crates: \`${total}\`` });
+            }
         }
     }
 
