@@ -90,6 +90,7 @@ module.exports = async (interaction, client) => {
         if (
             customId.startsWith('br_') || 
             customId.startsWith('modal_br_') || 
+            customId.startsWith('btn_capture_br_') ||
             customId === 'br_action_select' || 
             customId === 'br_prize_category_select' || 
             customId === 'br_prize_item_select' ||
