@@ -15,6 +15,7 @@ module.exports = async (interaction, client) => {
             return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] }).catch(() => {});
         }
 
+        // 1. Show the Buddy Games Hub Menu
         if (selectedValue === 'setup_buddy_games' || customId === 'buddy_games_hub_select') {
             const embed = new EmbedBuilder()
                 .setTitle('🎮 Buddy Games: Arena Event Suite')
@@ -38,21 +39,26 @@ module.exports = async (interaction, client) => {
             }
         }
 
+        // 2. Directly trigger Gun Game
         if (selectedValue === 'hub_goto_gungame') {
-            interaction.values = ['setup_gungame'];
+            // Force values and customId so gunGameHandler's internal check passes instantly
             interaction.customId = 'admin_menu_select';
+            interaction.values = ['setup_gungame'];
             return await gunGameHandler(interaction, client);
         }
 
+        // 3. Directly trigger Battle Royale
         if (selectedValue === 'hub_goto_br') {
-            interaction.values = ['setup_battleroyale'];
+            // Force values and customId so battleRoyaleHandler's internal check passes instantly
             interaction.customId = 'admin_menu_select';
+            interaction.values = ['setup_battleroyale'];
             return await battleRoyaleHandler(interaction, client);
         }
+
     } catch (error) {
-        console.error('[BUDDY GAMES ERROR]', error);
+        console.error('[BUDDY GAMES HANDLER ERROR]', error);
         if (interaction && !interaction.replied && !interaction.deferred) {
-            await interaction.reply({ content: '❌ An error occurred loading the Buddy Games panel.', flags: 64 }).catch(() => {});
+            await interaction.reply({ content: `❌ Error loading panel: ${error.message}`, flags: 64 }).catch(() => {});
         }
     }
 };
