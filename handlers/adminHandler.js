@@ -200,6 +200,11 @@ const adminHandler = async (interaction, client) => {
         return await renderMainPanel(interaction);
     }
 
+    // 👇 INTERCEPT BOT SETTINGS SELECT INSTANTLY HERE 👇
+    if (customId === 'admin_menu_select' && selectedValue === 'setup_bot_settings') {
+        return await renderBotSettings(interaction, interaction.guild.id, 'reply');
+    }
+
     if (customId === 'select_multiserver_remove_target') {
         try {
             const serverId = selectedValue.replace('remove_server_', '');
@@ -224,11 +229,6 @@ const adminHandler = async (interaction, client) => {
         const backRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
         );
-
-        // 👇 CATCHING THE NEW BOT SETTINGS OPTION 👇
-        if (selectedValue === 'setup_bot_settings') {
-            return await renderBotSettings(interaction, interaction.guild.id, 'reply');
-        }
 
         if (selectedValue === 'setup_logging') {
             const embed = new EmbedBuilder().setTitle('📊 Server Logging Manager').setDescription('Route different types of logs to specific channels.').setColor('#3498db');
@@ -289,20 +289,16 @@ const adminHandler = async (interaction, client) => {
     }
 
     if (interaction.isStringSelectMenu()) {
-        // 👇 NEW: CATCHING THE SWITCHBOARD DROPDOWN SAVES 👇
         if (customId === 'bot_settings_toggle_select') {
             const selectedModules = interaction.values || []; // Which ones are checked
             const updateData = {};
             
-            // Loop through all possible modules, set true if selected, false if omitted
             MODULES_LIST.forEach(m => {
                 updateData[m.id] = selectedModules.includes(m.id);
             });
 
-            // Update the database in one quick save
             await GuildConfig.upsert({ guildId: interaction.guild.id, ...updateData });
             
-            // Re-render the panel to visually confirm changes
             return await renderBotSettings(interaction, interaction.guild.id, 'update');
         }
 
