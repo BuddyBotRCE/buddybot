@@ -8,18 +8,14 @@ module.exports = async (interaction, client) => {
         const customId = interaction.customId || '';
         const selectedValue = interaction.isStringSelectMenu() && interaction.values ? interaction.values[0] : '';
 
-        // Handle Back button
         if (customId === 'admin_menu_back') {
             if (adminHandler && adminHandler.renderMainPanel) {
                 return await adminHandler.renderMainPanel(interaction);
             }
-            if (!interaction.deferred && !interaction.replied) {
-                return await interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] }).catch(() => {});
-            }
+            return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] }).catch(() => {});
         }
 
-        // 1. Triggered from Dropdown 2: Shows the main Buddy Games menu
-        if ((customId === 'admin_menu_select_2' || customId === 'admin_menu_select') && selectedValue === 'setup_buddy_games') {
+        if (selectedValue === 'setup_buddy_games' || customId === 'buddy_games_hub_select') {
             const embed = new EmbedBuilder()
                 .setTitle('🎮 Buddy Games: Arena Event Suite')
                 .setDescription('Manage your Rust Console Edition automated arena minigames below:')
@@ -42,22 +38,19 @@ module.exports = async (interaction, client) => {
             }
         }
 
-        // 2. Handles selection from the Buddy Games hub dropdown
-        if (customId === 'buddy_games_hub_select') {
-            if (selectedValue === 'hub_goto_gungame') {
-                interaction.values = ['setup_gungame'];
-                interaction.customId = 'admin_menu_select';
-                return await gunGameHandler(interaction, client);
-            }
+        if (selectedValue === 'hub_goto_gungame') {
+            interaction.values = ['setup_gungame'];
+            interaction.customId = 'admin_menu_select';
+            return await gunGameHandler(interaction, client);
+        }
 
-            if (selectedValue === 'hub_goto_br') {
-                interaction.values = ['setup_battleroyale'];
-                interaction.customId = 'admin_menu_select';
-                return await battleRoyaleHandler(interaction, client);
-            }
+        if (selectedValue === 'hub_goto_br') {
+            interaction.values = ['setup_battleroyale'];
+            interaction.customId = 'admin_menu_select';
+            return await battleRoyaleHandler(interaction, client);
         }
     } catch (error) {
-        console.error('[BUDDY GAMES CRITICAL ERROR]', error);
+        console.error('[BUDDY GAMES ERROR]', error);
         if (interaction && !interaction.replied && !interaction.deferred) {
             await interaction.reply({ content: '❌ An error occurred loading the Buddy Games panel.', flags: 64 }).catch(() => {});
         }
