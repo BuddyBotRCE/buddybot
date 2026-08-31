@@ -34,11 +34,8 @@ module.exports = async (interaction, client) => {
                 new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
             );
 
-            if (interaction.isableToReply && !interaction.replied && !interaction.deferred) {
-                return await interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
-            } else {
-                return await interaction.update({ embeds: [embed], components: [row1, row2] }).catch(() => {});
-            }
+            // Use update since this is triggered by a select menu choice
+            return await interaction.update({ embeds: [embed], components: [row1, row2] }).catch(() => {});
         }
 
         // 2. Handles selection from the Buddy Games hub dropdown
