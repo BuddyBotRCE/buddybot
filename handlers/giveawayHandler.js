@@ -88,6 +88,7 @@ module.exports = async (interaction, client) => {
             modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('banner_url').setLabel("Image URL").setStyle(TextInputStyle.Short).setRequired(true)));
             return interaction.showModal(modal);
         }
+        
         if (selectedValue === 'ga_reroll') {
             const modal = new ModalBuilder().setCustomId('modal_ga_reroll').setTitle('Reroll Giveaway');
             modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ga_id').setLabel("Giveaway ID (e.g. 1, 2, 3)").setStyle(TextInputStyle.Short).setRequired(true)));
@@ -116,6 +117,13 @@ module.exports = async (interaction, client) => {
         if (!entries.includes(interaction.user.id)) { 
             entries.push(interaction.user.id); 
             await giveaway.update({ entries: JSON.stringify(entries) }); 
+
+            // 👇 UPDATED: Live embed refresh to display new participant count 👇
+            const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
+                .setDescription(`**Prize:** ${giveaway.prize}\n**Winners:** ${giveaway.winnersCount}\n**Participants:** ${entries.length}\n**Ends:** <t:${Math.floor(new Date(giveaway.endTime).getTime()/1000)}:R>`);
+            
+            await interaction.message.edit({ embeds: [updatedEmbed] }).catch(() => {});
+
             return interaction.reply({ content: `🎉 You have successfully entered the giveaway for **${giveaway.prize}**! Good luck!`, flags: 64 });
         } else {
             return interaction.reply({ content: '❌ You are already entered into this giveaway!', flags: 64 });
@@ -135,9 +143,10 @@ module.exports = async (interaction, client) => {
             const prize = interaction.fields.getTextInputValue('prize');
             const endTime = new Date(Date.now() + minutes * 60000);
 
+            // 👇 UPDATED: Start with "Participants: 0" inside the embed description 👇
             const embed = new EmbedBuilder()
                 .setTitle('🎉 GIVEAWAY TIME 🎉')
-                .setDescription(`**Prize:** ${prize}\n**Winners:** ${winners}\n**Ends:** <t:${Math.floor(endTime.getTime()/1000)}:R>`)
+                .setDescription(`**Prize:** ${prize}\n**Winners:** ${winners}\n**Participants:** 0\n**Ends:** <t:${Math.floor(endTime.getTime()/1000)}:R>`)
                 .setColor('#9b59b6')
                 .setFooter({ text: 'Giveaway ID: Pending... | Click below to enter!' });
 
@@ -155,7 +164,6 @@ module.exports = async (interaction, client) => {
                 components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('enter_giveaway').setLabel('Enter Giveaway').setStyle(ButtonStyle.Success).setEmoji('🎁'))] 
             });
             
-            // 👇 Reverted to original .create structure to prevent DB crashes 👇
             const ga = await Giveaway.create({ 
                 messageId: msg.id, 
                 guildId: interaction.guild.id, 
