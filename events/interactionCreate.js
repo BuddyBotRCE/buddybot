@@ -38,11 +38,16 @@ const battleRoyaleHandler = require(handlerPath('battleRoyaleHandler'));
 
 module.exports = async (interaction, client) => {
     try {
-        // 🔍 DEBUG LOG: Check what interaction comes in
         const rawCustomId = interaction.customId || '';
         const rawSelectedValue = interaction.isStringSelectMenu() && interaction.values ? interaction.values[0] : '';
         console.log(`[INTERACTION DEBUG] CustomId: "${rawCustomId}" | SelectedValue: "${rawSelectedValue}"`);
 
+        // 🚨 BULLETPROOF SELECT MENU & BUTTON INTERCEPTOR 🚨
+        if (interaction.isStringSelectMenu() || interaction.isButton()) {
+            if (!interaction.deferred && !interaction.replied) {
+                await interaction.deferUpdate().catch(() => {});
+            }
+        }
         // 🚨 ABSOLUTE TOP ROUTING FOR BUDDY GAMES, GUN GAME, & BR 🚨
         if (rawCustomId === 'admin_menu_select_2' && rawSelectedValue === 'setup_buddy_games') {
             return await buddyGamesHandler(interaction, client);
