@@ -8,15 +8,18 @@ module.exports = async (interaction, client) => {
         const customId = interaction.customId || '';
         const selectedValue = interaction.isStringSelectMenu() && interaction.values ? interaction.values[0] : '';
 
+        // Handle Back button
         if (customId === 'admin_menu_back') {
             if (adminHandler && adminHandler.renderMainPanel) {
                 return await adminHandler.renderMainPanel(interaction);
             }
-            return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] }).catch(() => {});
+            if (!interaction.deferred && !interaction.replied) {
+                return await interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] }).catch(() => {});
+            }
         }
 
         // 1. Triggered from Dropdown 2: Shows the main Buddy Games menu
-        if (customId === 'admin_menu_select_2' && selectedValue === 'setup_buddy_games') {
+        if ((customId === 'admin_menu_select_2' || customId === 'admin_menu_select') && selectedValue === 'setup_buddy_games') {
             const embed = new EmbedBuilder()
                 .setTitle('🎮 Buddy Games: Arena Event Suite')
                 .setDescription('Manage your Rust Console Edition automated arena minigames below:')
@@ -34,8 +37,15 @@ module.exports = async (interaction, client) => {
                 new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
             );
 
-            // Use update since this is triggered by a select menu choice
-            return await interaction.update({ embeds: [embed], components: [row1, row2] }).catch(() => {});
+            // Safe update check for Discord components
+            if (interaction.isStringSelectMenu() || interaction.isButton()) {
+                if (!interaction.deferred && !interaction.replied) {
+                    return await interaction.update({ embeds: [embed], components: [row1, row2] }).catch(async () => {
+                        // Fallback if update fails
+                        await interaction.followUp({ embeds: [embed], components: [row1, row2], flags: 64 }).catch(() => {});
+                    });
+                }
+            }
         }
 
         // 2. Handles selection from the Buddy Games hub dropdown
@@ -53,8 +63,8 @@ module.exports = async (interaction, client) => {
             }
         }
     } catch (error) {
-        console.error('[BUDDY GAMES ERROR]', error);
-        if (!interaction.replied && !interaction.deferred) {
+        console.error('[BUDDY GAMES CRITICAL ERROR]', error);
+        if (interaction && !interaction.replied && !interaction.deferred) {
             await interaction.reply({ content: '❌ An error occurred loading the Buddy Games panel.', flags: 64 }).catch(() => {});
         }
     }
