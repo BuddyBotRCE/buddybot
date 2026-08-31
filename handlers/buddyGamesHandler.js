@@ -34,14 +34,11 @@ module.exports = async (interaction, client) => {
                 new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
             );
 
-            if (interaction.isStringSelectMenu() && !interaction.deferred && !interaction.replied) {
-                await interaction.deferUpdate().catch(() => {});
+            if (interaction.isableToReply && !interaction.replied && !interaction.deferred) {
+                return await interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
+            } else {
+                return await interaction.update({ embeds: [embed], components: [row1, row2] }).catch(() => {});
             }
-
-            if (interaction.deferred || interaction.replied) {
-                return await interaction.editReply({ embeds: [embed], components: [row1, row2] }).catch(() => {});
-            }
-            return await interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 }).catch(() => {});
         }
 
         // 2. Handles selection from the Buddy Games hub dropdown
