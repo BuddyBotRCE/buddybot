@@ -38,17 +38,25 @@ const battleRoyaleHandler = require(handlerPath('battleRoyaleHandler'));
 
 module.exports = async (interaction, client) => {
     try {
-        // 🚨 ABSOLUTE TOP ROUTING FOR BUDDY GAMES 🚨
+        // 🔍 DEBUG LOG: Check what interaction comes in
         const rawCustomId = interaction.customId || '';
         const rawSelectedValue = interaction.isStringSelectMenu() && interaction.values ? interaction.values[0] : '';
-        
+        console.log(`[INTERACTION DEBUG] CustomId: "${rawCustomId}" | SelectedValue: "${rawSelectedValue}"`);
+
+        // 🚨 ABSOLUTE TOP ROUTING FOR BUDDY GAMES, GUN GAME, & BR 🚨
         if (rawCustomId === 'admin_menu_select_2' && rawSelectedValue === 'setup_buddy_games') {
             return await buddyGamesHandler(interaction, client);
         }
-        if (rawCustomId === 'buddy_games_hub_select' || rawCustomId.startsWith('gg_') || rawCustomId.startsWith('br_')) {
-            if (rawCustomId.startsWith('gg_') || rawSelectedValue === 'hub_goto_gungame') return await gunGameHandler(interaction, client);
-            if (rawCustomId.startsWith('br_') || rawSelectedValue === 'hub_goto_br') return await battleRoyaleHandler(interaction, client);
+        if (rawCustomId === 'buddy_games_hub_select') {
+            if (rawSelectedValue === 'hub_goto_gungame') return await gunGameHandler(interaction, client);
+            if (rawSelectedValue === 'hub_goto_br') return await battleRoyaleHandler(interaction, client);
             return await buddyGamesHandler(interaction, client);
+        }
+        if (rawCustomId.startsWith('gg_') || rawCustomId.startsWith('modal_gg_') || rawSelectedValue === 'setup_gungame') {
+            return await gunGameHandler(interaction, client);
+        }
+        if (rawCustomId.startsWith('br_') || rawCustomId.startsWith('modal_br_') || rawSelectedValue === 'setup_battleroyale') {
+            return await battleRoyaleHandler(interaction, client);
         }
 
         // 🚨 DROPDOWN 2 ALIAS FIX 🚨
