@@ -1,6 +1,6 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const db = require('../database/db');
-const adminHandler = require('./adminHandler');
+const adminHandler = require('../handlers/adminHandler');
 const { RUST_CATEGORIES } = require('../utils/rustCatalog');
 const { queueAdminPos } = require('../utils/rconManager');
 
