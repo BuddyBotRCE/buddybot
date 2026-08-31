@@ -1,5 +1,5 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { ArenaCratePoint, ArenaConfig, ArenaPrize } = require('../database/db');
+const db = require('../database/db');
 const adminHandler = require('./adminHandler');
 
 module.exports = async (interaction, client) => {
@@ -13,16 +13,19 @@ module.exports = async (interaction, client) => {
         return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] });
     }
 
-    // --- MAIN BATTLE ROYALE DASHBOARD ---
     if (customId === 'admin_menu_select' && selectedValue === 'setup_battleroyale') {
-        const cratesMapped = await ArenaCratePoint.count({ where: { guildId: interaction.guild.id } });
-        const [config] = await ArenaConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
-        const prizes = await ArenaPrize.count({ where: { guildId: interaction.guild.id } });
+        const ArenaCratePoint = db.ArenaCratePoint;
+        const ArenaConfig = db.ArenaConfig;
+        const ArenaPrize = db.ArenaPrize;
+
+        const cratesMapped = ArenaCratePoint ? await ArenaCratePoint.count({ where: { guildId: interaction.guild.id } }).catch(() => 0) : 0;
+        const [config] = ArenaConfig ? await ArenaConfig.findOrCreate({ where: { guildId: interaction.guild.id } }).catch(() => [{}]) : [{}];
+        const prizes = ArenaPrize ? await ArenaPrize.count({ where: { guildId: interaction.guild.id } }).catch(() => 0) : 0;
         const prizeShare = prizes > 0 ? (100 / prizes).toFixed(1) : 0;
 
         const embed = new EmbedBuilder()
             .setTitle('🛡️ Battle Royale Event Manager')
-            .setDescription(`Manage Rust Console Edition randomized crate-spawn Battle Royale arenas.\n\n• **Elite Crate Points Mapped:** \`${cratesMapped}\`\n• **Active Crate Fill Rate:** \`${config.crateSpawnPercentage}% of mapped points\`\n• **Lucky Dip Prizes:** \`${prizes} items (${prizeShare}% each)\``)
+            .setDescription(`Manage Rust Console Edition randomized crate-spawn Battle Royale arenas.\n\n• **Elite Crate Points Mapped:** \`${cratesMapped}\`\n• **Active Crate Fill Rate:** \`${config.crateSpawnPercentage || 35}% of mapped points\`\n• **Lucky Dip Prizes:** \`${prizes} items (${prizeShare}% each)\``)
             .setColor('#3498db');
 
         const row1 = new ActionRowBuilder().addComponents(
@@ -70,24 +73,24 @@ module.exports = async (interaction, client) => {
         }
 
         if (selectedValue === 'br_clear_crates') {
-            await ArenaCratePoint.destroy({ where: { guildId: interaction.guild.id } });
+            if (db.ArenaCratePoint) await db.ArenaCratePoint.destroy({ where: { guildId: interaction.guild.id } });
             return interaction.reply({ content: '✅ All mapped Battle Royale elite crate points have been cleared.', flags: 64 });
         }
     }
 
     if (interaction.isModalSubmit()) {
-        if (customId === 'modal_br_percentage') {
+        if (customId === 'modal_br_percentage' && db.ArenaConfig) {
             const val = parseInt(interaction.fields.getTextInputValue('percentage')) || 35;
-            await ArenaConfig.upsert({ guildId: interaction.guild.id, crateSpawnPercentage: val });
+            await db.ArenaConfig.upsert({ guildId: interaction.guild.id, crateSpawnPercentage: val });
             return interaction.reply({ content: `✅ Battle Royale crate spawn fill rate successfully updated to **${val}%** of mapped points per match!`, flags: 64 });
         }
 
-        if (customId === 'modal_br_add_prize') {
+        if (customId === 'modal_br_add_prize' && db.ArenaPrize) {
             const prizeName = interaction.fields.getTextInputValue('name').trim();
             const command = interaction.fields.getTextInputValue('command').trim();
 
-            await ArenaPrize.create({ guildId: interaction.guild.id, prizeName, command });
-            const totalPrizes = await ArenaPrize.count({ where: { guildId: interaction.guild.id } });
+            await db.ArenaPrize.create({ guildId: interaction.guild.id, prizeName, command });
+            const totalPrizes = await db.ArenaPrize.count({ where: { guildId: interaction.guild.id } });
             const share = (100 / totalPrizes).toFixed(1);
 
             return interaction.reply({ content: `✅ Added **${prizeName}** to the prize pool! Pool now has ${totalPrizes} items (**${share}%** chance each).`, flags: 64 });

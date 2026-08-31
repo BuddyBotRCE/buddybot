@@ -1,8 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { ArenaSpawn, GunGameWeapon, GunGamePreset, ArenaPrize } = require('../database/db');
+const db = require('../database/db');
 const adminHandler = require('./adminHandler');
 
-// --- 5 BUILT-IN RUST CONSOLE EDITION GUN GAME PRESETS ---
 const BUILT_IN_PRESETS = {
     standard: [
         { tier: 1, weapon: 'pistol.eoka', ammo: 'ammo.handmade.shell' },
@@ -25,7 +24,7 @@ const BUILT_IN_PRESETS = {
         { tier: 18, weapon: 'lmg.m249', ammo: 'ammo.rifle' },
         { tier: 19, weapon: 'grenade.f1', ammo: null },
         { tier: 20, weapon: 'crossbow', ammo: 'arrow.wooden' },
-        { tier: 21, weapon: 'knife.combat', ammo: null } // The Knife Finish
+        { tier: 21, weapon: 'knife.combat', ammo: null }
     ]
 };
 
@@ -40,11 +39,14 @@ module.exports = async (interaction, client) => {
         return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] });
     }
 
-    // --- MAIN GUN GAME DASHBOARD ---
     if (customId === 'admin_menu_select' && selectedValue === 'setup_gungame') {
-        const spawns = await ArenaSpawn.count({ where: { guildId: interaction.guild.id } });
-        const weapons = await GunGameWeapon.count({ where: { guildId: interaction.guild.id } });
-        const prizes = await ArenaPrize.count({ where: { guildId: interaction.guild.id } });
+        const ArenaSpawn = db.ArenaSpawn;
+        const GunGameWeapon = db.GunGameWeapon;
+        const ArenaPrize = db.ArenaPrize;
+
+        const spawns = ArenaSpawn ? await ArenaSpawn.count({ where: { guildId: interaction.guild.id } }).catch(() => 0) : 0;
+        const weapons = GunGameWeapon ? await GunGameWeapon.count({ where: { guildId: interaction.guild.id } }).catch(() => 0) : 0;
+        const prizes = ArenaPrize ? await ArenaPrize.count({ where: { guildId: interaction.guild.id } }).catch(() => 0) : 0;
         const prizeShare = prizes > 0 ? (100 / prizes).toFixed(1) : 0;
 
         const embed = new EmbedBuilder()
@@ -81,15 +83,17 @@ module.exports = async (interaction, client) => {
         }
 
         if (selectedValue === 'gg_load_preset') {
-            await GunGameWeapon.destroy({ where: { guildId: interaction.guild.id } });
-            for (const tierData of BUILT_IN_PRESETS.standard) {
-                await GunGameWeapon.create({
-                    guildId: interaction.guild.id,
-                    tier: tierData.tier,
-                    weaponName: tierData.weapon,
-                    ammoName: tierData.ammo,
-                    ammoAmount: 30
-                });
+            if (db.GunGameWeapon) {
+                await db.GunGameWeapon.destroy({ where: { guildId: interaction.guild.id } });
+                for (const tierData of BUILT_IN_PRESETS.standard) {
+                    await db.GunGameWeapon.create({
+                        guildId: interaction.guild.id,
+                        tier: tierData.tier,
+                        weaponName: tierData.weapon,
+                        ammoName: tierData.ammo,
+                        ammoAmount: 30
+                    });
+                }
             }
             return interaction.reply({ content: '⚡ Successfully loaded the Standard 21-Tier Gun Game ladder preset!', flags: 64 });
         }
@@ -114,27 +118,27 @@ module.exports = async (interaction, client) => {
         }
 
         if (selectedValue === 'gg_clear_spawns') {
-            await ArenaSpawn.destroy({ where: { guildId: interaction.guild.id } });
+            if (db.ArenaSpawn) await db.ArenaSpawn.destroy({ where: { guildId: interaction.guild.id } });
             return interaction.reply({ content: '✅ All Gun Game arena spawn points cleared.', flags: 64 });
         }
     }
 
     if (interaction.isModalSubmit()) {
-        if (customId === 'modal_gg_add_weapon') {
+        if (customId === 'modal_gg_add_weapon' && db.GunGameWeapon) {
             const tier = parseInt(interaction.fields.getTextInputValue('tier'));
             const weaponName = interaction.fields.getTextInputValue('weapon').trim();
             const ammoName = interaction.fields.getTextInputValue('ammo')?.trim() || null;
 
-            await GunGameWeapon.upsert({ guildId: interaction.guild.id, tier, weaponName, ammoName });
+            await db.GunGameWeapon.upsert({ guildId: interaction.guild.id, tier, weaponName, ammoName });
             return interaction.reply({ content: `✅ Successfully saved **Tier ${tier}**: \`${weaponName}\`!`, flags: 64 });
         }
 
-        if (customId === 'modal_gg_add_prize') {
+        if (customId === 'modal_gg_add_prize' && db.ArenaPrize) {
             const prizeName = interaction.fields.getTextInputValue('name').trim();
             const command = interaction.fields.getTextInputValue('command').trim();
 
-            await ArenaPrize.create({ guildId: interaction.guild.id, prizeName, command });
-            const totalPrizes = await ArenaPrize.count({ where: { guildId: interaction.guild.id } });
+            await db.ArenaPrize.create({ guildId: interaction.guild.id, prizeName, command });
+            const totalPrizes = await db.ArenaPrize.count({ where: { guildId: interaction.guild.id } });
             const share = (100 / totalPrizes).toFixed(1);
 
             return interaction.reply({ content: `✅ Added **${prizeName}** to the prize pool! Pool now has ${totalPrizes} items (**${share}%** chance each).`, flags: 64 });

@@ -173,7 +173,11 @@ const ReactionRole = sequelize.define('ReactionRole', { id: { type: DataTypes.IN
 
 const AutoEvent = sequelize.define('AutoEvent', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, name: { type: DataTypes.STRING, allowNull: false }, eventType: { type: DataTypes.STRING, defaultValue: 'hackable' }, interval: { type: DataTypes.INTEGER, defaultValue: 60 }, amount: { type: DataTypes.INTEGER, defaultValue: 1 }, isEnabled: { type: DataTypes.BOOLEAN, defaultValue: false } });
 const AutoEventLocation = sequelize.define('AutoEventLocation', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, eventId: { type: DataTypes.INTEGER, allowNull: false }, slot: { type: DataTypes.INTEGER, allowNull: false }, posX: { type: DataTypes.STRING, allowNull: false }, posY: { type: DataTypes.STRING, allowNull: false }, posZ: { type: DataTypes.STRING, allowNull: false } });
-
+const ArenaCratePoint = sequelize.define('ArenaCratePoint', { guildId: { type: DataTypes.STRING }, x: { type: DataTypes.FLOAT }, y: { type: DataTypes.FLOAT }, z: { type: DataTypes.FLOAT } });
+const ArenaConfig = sequelize.define('ArenaConfig', { guildId: { type: DataTypes.STRING, primaryKey: true }, crateSpawnPercentage: { type: DataTypes.INTEGER, defaultValue: 35 } });
+const ArenaPrize = sequelize.define('ArenaPrize', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING }, prizeName: { type: DataTypes.STRING }, command: { type: DataTypes.TEXT } });
+const ArenaSpawn = sequelize.define('ArenaSpawn', { guildId: { type: DataTypes.STRING }, x: { type: DataTypes.FLOAT }, y: { type: DataTypes.FLOAT }, z: { type: DataTypes.FLOAT } });
+const GunGameWeapon = sequelize.define('GunGameWeapon', { guildId: { type: DataTypes.STRING }, tier: { type: DataTypes.INTEGER }, weaponName: { type: DataTypes.STRING }, ammoName: { type: DataTypes.STRING, allowNull: true }, ammoAmount: { type: DataTypes.INTEGER, defaultValue: 30 } });
 const CustomEmbed = sequelize.define('CustomEmbed', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, templateName: { type: DataTypes.STRING, defaultValue: 'Custom Announcement' }, title: { type: DataTypes.STRING, defaultValue: '📢 Server Announcement' }, description: { type: DataTypes.TEXT, allowNull: true }, color: { type: DataTypes.STRING, defaultValue: '#3498db' }, thumbnailUrl: { type: DataTypes.STRING, allowNull: true }, imageUrl: { type: DataTypes.STRING, allowNull: true }, footerText: { type: DataTypes.STRING, allowNull: true } });
 
 const HomeTeleportConfig = sequelize.define('HomeTeleportConfig', {
@@ -205,5 +209,5 @@ initDb();
 
 module.exports = { 
     sequelize, GuildConfig, GameServer, UserEconomy, Giveaway, CustomBind, BindCooldown, ServerKit, ShopItem, ShopCooldown, CasinoCooldown, OrpConfig, PlayerOrpBase, BuddyPassChallenge, BuddyPassReward, TicketCategory, PveZone, AutoEvent, AutoEventLocation, ActiveBounty, BountyCooldown, Clan, ClanMember, ClanInvite, ClanWar, ReactionRole, CustomEmbed,
-    HomeTeleportConfig, HomeTeleportCooldown, HomeTeleportLocation 
+    HomeTeleportConfig, HomeTeleportCooldown, HomeTeleportLocation, ArenaCratePoint, ArenaConfig, ArenaPrize, ArenaSpawn, GunGameWeapon,
 };
