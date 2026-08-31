@@ -52,6 +52,7 @@ module.exports = {
         const row2 = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder().setCustomId('admin_menu_select_2').setPlaceholder('⭐ Premium & Advanced Features...')
                 .addOptions([
+                    { label: '🎮 Buddy Games (Gun Game & BR)', value: 'setup_buddy_games', description: 'Configure automated Rust Console Edition arena events', emoji: '🎮' },
                     { label: 'Auto-Events (Premium)', value: 'setup_autoevents', emoji: '🚁' },
                     { label: 'Auto-Moderation Suite', value: 'setup_automod', emoji: '🛡️' },
                     { label: 'BuddyPass Manager', value: 'setup_buddypass', emoji: '⭐' },
