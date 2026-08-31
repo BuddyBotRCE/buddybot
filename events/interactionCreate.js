@@ -37,32 +37,44 @@ const gunGameHandler = require(handlerPath('gunGameHandler'));
 const battleRoyaleHandler = require(handlerPath('battleRoyaleHandler'));
 
 module.exports = async (interaction, client) => {
+    let timeoutSafety = null;
     try {
         const customId = interaction.customId || '';
         const selectedValue = interaction.isStringSelectMenu() && interaction.values ? interaction.values[0] : '';
         console.log(`[INTERACTION DEBUG] CustomId: "${customId}" | SelectedValue: "${selectedValue}"`);
 
-        // 🚨 BULLETPROOF COMPONENT INTERCEPTOR FOR DROPDOWN 2 & BUDDY GAMES 🚨
+        // 🚨 BULLETPROOF INTERACTION ACKNOWLEDGMENT 🚨
+        timeoutSafety = setTimeout(async () => {
+            if (!interaction.deferred && !interaction.replied) {
+                await interaction.reply({ content: '⚠️ Request processed or timed out silently.', flags: 64 }).catch(() => {});
+            }
+        }, 2500);
+
+        // 🚨 TOP ROUTING FOR BUDDY GAMES, GUN GAME, & BR 🚨
         if (customId === 'admin_menu_select_2') {
             if (selectedValue === 'setup_buddy_games') {
+                clearTimeout(timeoutSafety);
                 return await buddyGamesHandler(interaction, client);
             }
-            // Fix alias for other dropdown 2 items
             Object.defineProperty(interaction, 'customId', { value: 'admin_menu_select', writable: true, configurable: true });
         }
 
         if (customId === 'buddy_games_hub_select') {
+            clearTimeout(timeoutSafety);
             return await buddyGamesHandler(interaction, client);
         }
         if (customId.startsWith('gg_') || customId.startsWith('modal_gg_') || selectedValue === 'setup_gungame') {
+            clearTimeout(timeoutSafety);
             return await gunGameHandler(interaction, client);
         }
         if (customId.startsWith('br_') || customId.startsWith('modal_br_') || selectedValue === 'setup_battleroyale') {
+            clearTimeout(timeoutSafety);
             return await battleRoyaleHandler(interaction, client);
         }
 
         // --- COMMANDS ---
         if (interaction.isChatInputCommand()) {
+            clearTimeout(timeoutSafety);
             const command = client.commands.get(interaction.commandName);
             if (!command) return;
             return await command.execute(interaction);
@@ -72,6 +84,7 @@ module.exports = async (interaction, client) => {
         // 🚦 0. MODAL SUBMISSION ROUTER
         // ====================================================================
         if (interaction.isModalSubmit()) {
+            clearTimeout(timeoutSafety);
             if (customId.startsWith('modal_gg_')) return await gunGameHandler(interaction, client);
             if (customId.startsWith('modal_br_')) return await battleRoyaleHandler(interaction, client);
 
@@ -104,6 +117,7 @@ module.exports = async (interaction, client) => {
         // 🚦 1. ADMIN MENU DROPDOWN SELECT ROUTER
         // ====================================================================
         if (customId === 'admin_menu_select') {
+            clearTimeout(timeoutSafety);
             if (selectedValue === 'setup_bot_settings') {
                 return await adminHandler(interaction, client);
             }
@@ -176,6 +190,7 @@ module.exports = async (interaction, client) => {
         // 🚦 2. ROLE SELECT MENUS
         // ====================================================================
         if (interaction.isRoleSelectMenu()) {
+            clearTimeout(timeoutSafety);
             if (customId === 'hometp_select_role') {
                 return await homeTpHandler(interaction, client);
             }
@@ -195,12 +210,14 @@ module.exports = async (interaction, client) => {
         // 🚦 3. CHANNEL SELECT MENUS
         // ====================================================================
         if (interaction.isChannelSelectMenu() && customId === 'select_tk_category') {
+            clearTimeout(timeoutSafety);
             return await ticketHandler(interaction, client);
         }
 
         // ====================================================================
         // 🚦 4. BUTTONS & COMPONENT ROUTING
         // ====================================================================
+        clearTimeout(timeoutSafety);
         if (customId === 'bot_settings_toggle_select') {
             return await adminHandler(interaction, client);
         }
@@ -340,11 +357,12 @@ module.exports = async (interaction, client) => {
         return await adminHandler(interaction, client);
 
     } catch (error) {
+        if (timeoutSafety) clearTimeout(timeoutSafety);
         console.error('[INTERACTION ERROR]', error);
         if (interaction.deferred || interaction.replied) {
-            await interaction.followUp({ content: '❌ An error occurred processing this interaction.', flags: 64 }).catch(() => {});
+            await interaction.followUp({ content: `❌ Error: ${error.message}`, flags: 64 }).catch(() => {});
         } else {
-            await interaction.reply({ content: '❌ An error occurred processing this interaction.', flags: 64 }).catch(() => {});
+            await interaction.reply({ content: `❌ Error: ${error.message}`, flags: 64 }).catch(() => {});
         }
     }
 };
