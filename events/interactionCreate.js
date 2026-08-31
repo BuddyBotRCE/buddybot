@@ -76,7 +76,7 @@ module.exports = async (interaction, client) => {
 
             if (customId === 'modal_ae_settings' || customId.startsWith('modal_ae_')) return await autoEventsHandler(interaction, client);
             if (customId === 'modal_casino_config') return await casinoHandler(interaction, client);
-            if (customId.startsWith('modal_emb_') || customId === 'modal_admin_embed' || customId.startsWith('modal_rr_') || customId === 'modal_edit_embed_prompt' || customId === 'modal_attach_rr_prompt') return await postEmbedHandler(interaction, client);
+            if (customId.startsWith('modal_emb_') || customId === 'modal_admin_embed' || customId.startsWith('modal_rr_') || customId.startsWith('modal_edit_embed_prompt' ) || customId.startsWith('modal_attach_rr_prompt')) return await postEmbedHandler(interaction, client);
             if (customId.startsWith('modal_am_') || customId === 'modal_automod_config') return await autoModHandler(interaction, client);
             if (customId.startsWith('modal_cz_')) return await customZoneHandler(interaction, client);
             if (customId.startsWith('modal_clan_') || customId.startsWith('clan_modal_')) return await clanHandler(interaction, client);
@@ -90,8 +90,8 @@ module.exports = async (interaction, client) => {
         // 🚦 1. ADMIN MENU DROPDOWN SELECT ROUTER
         // ====================================================================
         if (customId === 'admin_menu_select') {
-            // 👇 NEW: ROUTE BUDDY GAMES SELECTION FROM DROPDOWN 2 👇
-            if (selectedValue === 'setup_buddy_games' || customId === 'buddy_games_hub_select') {
+            // 👇 INTERCEPT BUDDY GAMES IMMEDIATELY HERE 👇
+            if (selectedValue === 'setup_buddy_games' || selectedValue === 'hub_goto_gungame' || selectedValue === 'hub_goto_br' || customId === 'buddy_games_hub_select') {
                 return await buddyGamesHandler(interaction, client);
             }
 
@@ -189,7 +189,7 @@ module.exports = async (interaction, client) => {
         // 🚦 4. BUTTONS & COMPONENT ROUTING
         // ====================================================================
         
-        // 👇 NEW: BUDDY GAMES BUTTONS & SELECT MENUS ROUTING 👇
+        // 👇 BUDDY GAMES BUTTONS & SELECT MENUS ROUTING 👇
         if (customId === 'buddy_games_hub_select' || customId === 'setup_buddy_games') {
             return await buddyGamesHandler(interaction, client);
         }
