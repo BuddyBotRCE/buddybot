@@ -68,19 +68,19 @@ module.exports = async (interaction, client) => {
         );
 
         if (!interaction.deferred && !interaction.replied) {
-            return interaction.update({ embeds: [embed], components: [row1, row2] });
+            return interaction.update({ embeds: [embed], components: [row1, row2] }).catch(() => 
+                interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 })
+            );
         }
-            return interaction.followUp({ embeds: [embed], components: [row1, row2], flags: 64 });
-        }
+        return interaction.followUp({ embeds: [embed], components: [row1, row2], flags: 64 });
+    }
 
     if (customId === 'gungame_action_select') {
         if (selectedValue === 'gg_add_spawn') {
-            // Note: Admin coordinates will be parsed dynamically when standing in-game or via command prompt
             return interaction.reply({ content: '📍 **Arena Setup:** Stand at your desired spawn position in-game and type `/arenaspawn gungame` to register your coordinates.', flags: 64 });
         }
 
         if (selectedValue === 'gg_load_preset') {
-            // Automatically load the standard balanced 21-tier preset into the database
             await GunGameWeapon.destroy({ where: { guildId: interaction.guild.id } });
             for (const tierData of BUILT_IN_PRESETS.standard) {
                 await GunGameWeapon.create({

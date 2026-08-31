@@ -40,10 +40,12 @@ module.exports = async (interaction, client) => {
         );
 
         if (!interaction.deferred && !interaction.replied) {
-            return interaction.update({ embeds: [embed], components: [row1, row2] });
+            return interaction.update({ embeds: [embed], components: [row1, row2] }).catch(() => 
+                interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 })
+            );
         }
         return interaction.followUp({ embeds: [embed], components: [row1, row2], flags: 64 });
-        }
+    }
 
     if (customId === 'br_action_select') {
         if (selectedValue === 'br_add_crate') {

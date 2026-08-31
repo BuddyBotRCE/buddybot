@@ -110,6 +110,11 @@ module.exports = async (interaction, client) => {
         // 🚦 1. ADMIN MENU DROPDOWN SELECT ROUTER
         // ====================================================================
         if (customId === 'admin_menu_select') {
+            // 👇 CATCHING BOT SETTINGS FROM DROPDOWN 1 👇
+            if (selectedValue === 'setup_bot_settings') {
+                return await adminHandler(interaction, client);
+            }
+
             if (selectedValue === 'setup_server_roles') {
                 const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
                 const adminRoleDisplay = config?.adminRoleId ? `<@&${config.adminRoleId}>` : '`Not Set`';
@@ -203,6 +208,11 @@ module.exports = async (interaction, client) => {
         // ====================================================================
         // 🚦 4. BUTTONS & COMPONENT ROUTING
         // ====================================================================
+        // 👇 CATCHING THE SWITCHBOARD SELECT MENU INTERACTION DIRECTLY 👇
+        if (customId === 'bot_settings_toggle_select') {
+            return await adminHandler(interaction, client);
+        }
+
         if (customId === 'btn_toggle_skipnight' || customId === 'btn_set_skipnight_percentage') {
             return await skipNightHandler(interaction, client);
         }
