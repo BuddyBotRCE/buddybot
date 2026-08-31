@@ -2,6 +2,7 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelect
 const db = require('../database/db');
 const adminHandler = require('./adminHandler');
 const { RUST_CATEGORIES } = require('../utils/rustCatalog');
+const { queueAdminPos } = require('../utils/rconManager');
 
 const BUILT_IN_PRESETS = {
     standard: [
@@ -29,69 +30,74 @@ const BUILT_IN_PRESETS = {
     ]
 };
 
-module.exports = async (interaction, client) => {
-    const customId = interaction.customId || '';
-    const selectedValue = interaction.isStringSelectMenu() && interaction.values ? interaction.values[0] : '';
+const buildGGPanelPayload = async (guildId, messageOverride = '') => {
+    const ArenaSpawn = db.ArenaSpawn;
+    const GunGameWeapon = db.GunGameWeapon;
+    const ArenaPrize = db.ArenaPrize;
 
-    if (customId === 'admin_menu_back') {
-        if (adminHandler && adminHandler.renderMainPanel) {
-            return await adminHandler.renderMainPanel(interaction);
-        }
-        return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] });
-    }
+    const spawns = ArenaSpawn ? await ArenaSpawn.count({ where: { guildId } }).catch(() => 0) : 0;
+    const weapons = GunGameWeapon ? await GunGameWeapon.count({ where: { guildId } }).catch(() => 0) : 0;
+    const prizes = ArenaPrize ? await ArenaPrize.count({ where: { guildId } }).catch(() => 0) : 0;
+    const prizeShare = prizes > 0 ? (100 / prizes).toFixed(1) : 0;
 
-    if (customId === 'admin_menu_select' && selectedValue === 'setup_gungame') {
-        const ArenaSpawn = db.ArenaSpawn;
-        const GunGameWeapon = db.GunGameWeapon;
-        const ArenaPrize = db.ArenaPrize;
-
-        const spawns = ArenaSpawn ? await ArenaSpawn.count({ where: { guildId: interaction.guild.id } }).catch(() => 0) : 0;
-        const weapons = GunGameWeapon ? await GunGameWeapon.count({ where: { guildId: interaction.guild.id } }).catch(() => 0) : 0;
-        const prizes = ArenaPrize ? await ArenaPrize.count({ where: { guildId: interaction.guild.id } }).catch(() => 0) : 0;
-        const prizeShare = prizes > 0 ? (100 / prizes).toFixed(1) : 0;
-
-        const embed = new EmbedBuilder()
-            .setTitle('🎯 Gun Game Event Manager')
-            .setDescription(`Configure automated Gun Game parameters for Rust Console Edition.\n\n• **Arena Spawns Mapped:** \`${spawns}\`\n• **Active Tiers Set:** \`${weapons} / 21 Tiers\`\n• **Lucky Dip Prizes:** \`${prizes} items (${prizeShare}% each)\``)
-            .setColor('#e67e22');
-
-        const row1 = new ActionRowBuilder().addComponents(
-            new StringSelectMenuBuilder().setCustomId('gungame_action_select').setPlaceholder('Select Gun Game configuration...')
-                .addOptions([
-                    { label: '📍 Add Player Spawn Point (Button)', value: 'gg_add_spawn', description: 'Log position as a player spawn', emoji: '📍' },
-                    { label: '⚡ Load Built-in Ladder Preset', value: 'gg_load_preset', description: 'Instantly load standard balanced weapon tier list', emoji: '⚡' },
-                    { label: '🔫 Configure Single Tier Manually', value: 'gg_manual_tier', description: 'Edit specific weapon slots (1-21)', emoji: '🔫' },
-                    { label: '🎁 Manage Equal-% Lucky Dip Prizes', value: 'gg_prizes', description: 'Set winner reward commands', emoji: '🎁' },
-                    { label: '🗑️ Clear Arena Spawns', value: 'gg_clear_spawns', emoji: '🗑️' }
-                ])
+    const embed = new EmbedBuilder()
+        .setTitle('🎯 Gun Game Event Manager')
+        .setColor('#e67e22')
+        .setDescription(
+            (messageOverride ? `**${messageOverride}**\n\n` : '') +
+            `Configure automated Gun Game parameters for Rust Console Edition.\n\n` +
+            `• **Arena Spawns Mapped:** \`${spawns}\`\n` +
+            `• **Active Tiers Set:** \`${weapons} / 21 Tiers\`\n` +
+            `• **Lucky Dip Prizes:** \`${prizes} items (${prizeShare}% each)\``
         );
 
-        const row2 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
-        );
+    const row1 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('gg_btn_add_spawn').setLabel('Add Spawn').setStyle(ButtonStyle.Success).setEmoji('📍'),
+        new ButtonBuilder().setCustomId('gg_btn_preset').setLabel('Load Preset').setStyle(ButtonStyle.Primary).setEmoji('⚡'),
+        new ButtonBuilder().setCustomId('gg_btn_manual').setLabel('Manual Tier').setStyle(ButtonStyle.Primary).setEmoji('🔫'),
+        new ButtonBuilder().setCustomId('gg_btn_prizes').setLabel('Prizes').setStyle(ButtonStyle.Primary).setEmoji('🎁'),
+        new ButtonBuilder().setCustomId('gg_btn_clear').setLabel('Clear').setStyle(ButtonStyle.Danger).setEmoji('🗑️')
+    );
 
-        if (!interaction.deferred && !interaction.replied) {
-            return interaction.update({ embeds: [embed], components: [row1, row2] }).catch(() => 
-                interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 })
-            );
+    const row2 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+    );
+
+    return { embeds: [embed], components: [row1, row2], flags: 64 };
+};
+
+const gunGameHandler = async (interaction, client) => {
+    try {
+        const guildId = interaction.guild.id;
+        const customId = interaction.customId || '';
+        const selectedValue = interaction.isStringSelectMenu() && interaction.values ? interaction.values[0] : '';
+
+        if (customId === 'admin_menu_back') {
+            if (adminHandler && adminHandler.renderMainPanel) {
+                return await adminHandler.renderMainPanel(interaction);
+            }
+            return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] });
         }
-        return interaction.followUp({ embeds: [embed], components: [row1, row2], flags: 64 });
-    }
 
-    if (customId === 'gungame_action_select') {
-        if (selectedValue === 'gg_add_spawn') {
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('btn_open_gg_spawn_modal').setLabel('📍 Set Gun Game Spawn Position').setStyle(ButtonStyle.Success)
-            );
-            return interaction.reply({ content: '📍 **Gun Game Spawn Setup:** Click below to enter or log your exact in-game coordinates (`X, Y, Z`):', components: [row], flags: 64 });
+        if (customId === 'admin_menu_select' && selectedValue === 'setup_gungame') {
+            const payload = await buildGGPanelPayload(guildId);
+            return interaction.update(payload).catch(() => interaction.reply(payload));
         }
 
-        if (selectedValue === 'gg_load_preset') {
+        if (customId === 'gg_btn_add_spawn') {
+            const loadingPayload = await buildGGPanelPayload(guildId, '⏳ **Extracting your position from the server for Gun Game Spawn...**');
+            await interaction.update(loadingPayload);
+            // Updated to 'custom_zone' type so rconManager handles and returns coordinates successfully
+            await queueAdminPos(interaction, 'custom_zone', 'gg_spawn');
+            return;
+        }
+
+        if (customId === 'gg_btn_preset') {
             if (db.GunGameWeapon) {
-                await db.GunGameWeapon.destroy({ where: { guildId: interaction.guild.id } });
+                await db.GunGameWeapon.destroy({ where: { guildId } });
                 for (const tierData of BUILT_IN_PRESETS.standard) {
                     await db.GunGameWeapon.create({
-                        guildId: interaction.guild.id,
+                        guildId,
                         tier: tierData.tier,
                         weaponName: tierData.weapon,
                         ammoName: tierData.ammo,
@@ -99,10 +105,11 @@ module.exports = async (interaction, client) => {
                     });
                 }
             }
-            return interaction.reply({ content: '⚡ Successfully loaded the Standard 21-Tier Gun Game ladder preset!', flags: 64 });
+            const payload = await buildGGPanelPayload(guildId, '⚡ Successfully loaded the Standard 21-Tier Gun Game ladder preset!');
+            return interaction.update(payload);
         }
 
-        if (selectedValue === 'gg_manual_tier') {
+        if (customId === 'gg_btn_manual') {
             const modal = new ModalBuilder().setCustomId('modal_gg_add_weapon').setTitle('Configure Gun Game Tier');
             modal.addComponents(
                 new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('tier').setLabel("Tier Number (1 to 21)").setStyle(TextInputStyle.Short).setRequired(true)),
@@ -112,7 +119,7 @@ module.exports = async (interaction, client) => {
             return interaction.showModal(modal);
         }
 
-        if (selectedValue === 'gg_prizes') {
+        if (customId === 'gg_btn_prizes') {
             const catOptions = Object.keys(RUST_CATEGORIES).map(catKey => ({
                 label: RUST_CATEGORIES[catKey].label,
                 value: `gg_prize_cat_${catKey}`,
@@ -124,100 +131,95 @@ module.exports = async (interaction, client) => {
                     .setPlaceholder('Step 1: Select prize category...')
                     .addOptions(catOptions)
             );
-            return interaction.reply({ content: '🎁 **Gun Game Prize Wizard:** Select an item category for the prize pool:', components: [row], flags: 64 });
-        }
-
-        if (selectedValue === 'gg_clear_spawns') {
-            if (db.ArenaSpawn) await db.ArenaSpawn.destroy({ where: { guildId: interaction.guild.id } });
-            return interaction.reply({ content: '✅ All Gun Game arena spawn points cleared.', flags: 64 });
-        }
-    }
-
-    // Button Click Handler for Opening Position Modal
-    if (interaction.isButton()) {
-        if (customId === 'btn_open_gg_spawn_modal') {
-            const modal = new ModalBuilder().setCustomId('modal_gg_save_spawn').setTitle('Log Gun Game Spawn Coordinates');
-            modal.addComponents(
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('coords').setLabel("Coordinates (X, Y, Z or x y z)").setStyle(TextInputStyle.Short).setPlaceholder("e.g. 150.5, 25.0, -320.1").setRequired(true))
+            const backRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('admin_menu_select_gg_back').setLabel('Back').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
             );
-            return interaction.showModal(modal);
-        }
-    }
-
-    // Catalog Select Menus for Prizes
-    if (interaction.isStringSelectMenu()) {
-        if (customId === 'gg_prize_category_select') {
-            const catKey = selectedValue.replace('gg_prize_cat_', '');
-            const categoryData = RUST_CATEGORIES[catKey];
-            if (!categoryData || !categoryData.items) return interaction.reply({ content: '❌ Invalid category.', flags: 64 });
-
-            const itemOptions = categoryData.items.slice(0, 25).map(item => ({
-                label: item.name,
-                description: `Shortname: ${item.shortname}`,
-                value: `gg_prize_item_${item.shortname}`
-            }));
-
-            const row = new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder()
-                    .setCustomId('gg_prize_item_select')
-                    .setPlaceholder(`Step 2: Choose item from ${categoryData.label}...`)
-                    .addOptions(itemOptions)
-            );
-            return interaction.update({ content: `🎁 **Gun Game Prize Wizard:** Choose the exact item from **${categoryData.label}**:`, components: [row] });
+            return interaction.update({ content: '🎁 **Gun Game Prize Wizard:** Select an item category for the prize pool:', embeds: [], components: [row, backRow], flags: 64 });
         }
 
-        if (customId === 'gg_prize_item_select') {
-            const shortname = selectedValue.replace('gg_prize_item_', '');
-            const modal = new ModalBuilder().setCustomId(`modal_gg_prize_exec_${shortname}`).setTitle(`Configure Prize (${shortname})`);
-            modal.addComponents(
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel("Quantity (e.g. 1)").setStyle(TextInputStyle.Short).setValue('1').setRequired(true))
-            );
-            return interaction.showModal(modal);
+        if (customId === 'gg_btn_clear') {
+            if (db.ArenaSpawn) await db.ArenaSpawn.destroy({ where: { guildId } });
+            const payload = await buildGGPanelPayload(guildId, '✅ All Gun Game arena spawn points cleared.');
+            return interaction.update(payload);
         }
-    }
 
-    if (interaction.isModalSubmit()) {
-        const parseCoords = (input) => {
-            const parts = input.replace(/[()]/g, '').split(/[\s,]+/);
-            if (parts.length >= 3) {
-                const x = parseFloat(parts[0]);
-                const y = parseFloat(parts[1]);
-                const z = parseFloat(parts[2]);
-                if (!isNaN(x) && !isNaN(y) && !isNaN(z)) return { x, y, z };
+        if (customId === 'admin_menu_select_gg_back') {
+            const payload = await buildGGPanelPayload(guildId);
+            return interaction.update(payload);
+        }
+
+        if (interaction.isStringSelectMenu()) {
+            if (customId === 'gg_prize_category_select') {
+                const catKey = selectedValue.replace('gg_prize_cat_', '');
+                const categoryData = RUST_CATEGORIES[catKey];
+                if (!categoryData || !categoryData.items) return interaction.reply({ content: '❌ Invalid category.', flags: 64 });
+
+                const itemOptions = categoryData.items.slice(0, 25).map(item => ({
+                    label: item.name,
+                    description: `Shortname: ${item.shortname}`,
+                    value: `gg_prize_item_${item.shortname}`
+                }));
+
+                const row = new ActionRowBuilder().addComponents(
+                    new StringSelectMenuBuilder()
+                        .setCustomId('gg_prize_item_select')
+                        .setPlaceholder(`Step 2: Choose item from ${categoryData.label}...`)
+                        .addOptions(itemOptions)
+                );
+                return interaction.update({ content: `🎁 **Gun Game Prize Wizard:** Choose the exact item from **${categoryData.label}**:`, components: [row] });
             }
-            return null;
-        };
 
-        if (customId === 'modal_gg_save_spawn' && db.ArenaSpawn) {
-            const raw = interaction.fields.getTextInputValue('coords');
-            const pos = parseCoords(raw);
-            if (!pos) return interaction.reply({ content: '❌ Invalid coordinate format. Please use format like `150.5, 25.0, -320.1`.', flags: 64 });
-
-            await db.ArenaSpawn.create({ guildId: interaction.guild.id, x: pos.x, y: pos.y, z: pos.z });
-            const total = await db.ArenaSpawn.count({ where: { guildId: interaction.guild.id } });
-            return interaction.reply({ content: `✅ **Gun Game Spawn Mapped!**\n• Coords: \`X: ${pos.x}, Y: ${pos.y}, Z: ${pos.z}\`\n• Total Spawns: \`${total}\``, flags: 64 });
+            if (customId === 'gg_prize_item_select') {
+                const shortname = selectedValue.replace('gg_prize_item_', '');
+                const modal = new ModalBuilder().setCustomId(`modal_gg_prize_exec_${shortname}`).setTitle(`Configure Prize (${shortname})`);
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel("Quantity (e.g. 1)").setStyle(TextInputStyle.Short).setValue('1').setRequired(true))
+                );
+                return interaction.showModal(modal);
+            }
         }
 
-        if (customId === 'modal_gg_add_weapon' && db.GunGameWeapon) {
-            const tier = parseInt(interaction.fields.getTextInputValue('tier'));
-            const weaponName = interaction.fields.getTextInputValue('weapon').trim();
-            const ammoName = interaction.fields.getTextInputValue('ammo')?.trim() || null;
+        if (interaction.isModalSubmit()) {
+            if (customId === 'modal_gg_add_weapon' && db.GunGameWeapon) {
+                const tier = parseInt(interaction.fields.getTextInputValue('tier'));
+                const weaponName = interaction.fields.getTextInputValue('weapon').trim();
+                const ammoName = interaction.fields.getTextInputValue('ammo')?.trim() || null;
 
-            await db.GunGameWeapon.upsert({ guildId: interaction.guild.id, tier, weaponName, ammoName });
-            return interaction.reply({ content: `✅ Successfully saved **Tier ${tier}**: \`${weaponName}\`!`, flags: 64 });
+                await db.GunGameWeapon.upsert({ guildId, tier, weaponName, ammoName });
+                const payload = await buildGGPanelPayload(guildId, `✅ Successfully saved **Tier ${tier}**: \`${weaponName}\`!`);
+                return interaction.update(payload);
+            }
+
+            if (customId.startsWith('modal_gg_prize_exec_') && db.ArenaPrize) {
+                const shortname = customId.replace('modal_gg_prize_exec_', '');
+                const amount = interaction.fields.getTextInputValue('amount') || '1';
+                const prizeName = `${amount}x ${shortname}`;
+                const command = `inventory.giveto "{player}" ${shortname} ${amount}`;
+
+                await db.ArenaPrize.create({ guildId, prizeName, command });
+                const payload = await buildGGPanelPayload(guildId, `✅ Added **${prizeName}** to the Gun Game prize pool!`);
+                return interaction.update(payload);
+            }
         }
-
-        if (customId.startsWith('modal_gg_prize_exec_') && db.ArenaPrize) {
-            const shortname = customId.replace('modal_gg_prize_exec_', '');
-            const amount = interaction.fields.getTextInputValue('amount') || '1';
-            const prizeName = `${amount}x ${shortname}`;
-            const command = `inventory.giveto "{player}" ${shortname} ${amount}`;
-
-            await db.ArenaPrize.create({ guildId: interaction.guild.id, prizeName, command });
-            const totalPrizes = await db.ArenaPrize.count({ where: { guildId: interaction.guild.id } });
-            const share = (100 / totalPrizes).toFixed(1);
-
-            return interaction.reply({ content: `✅ Added **${prizeName}** to the Gun Game prize pool! Pool now has ${totalPrizes} items (**${share}%** chance each).`, flags: 64 });
-        }
+    } catch (error) {
+        console.error('[GUN GAME ERROR]', error);
     }
 };
+
+gunGameHandler.autoSaveLocation = async (guildId, x, y, z, targetType) => {
+    if (targetType === 'gg_spawn' && db.ArenaSpawn) {
+        await db.ArenaSpawn.create({ guildId, x: x.toString(), y: y.toString(), z: z.toString() });
+    }
+};
+
+gunGameHandler.refreshPanelViaInteraction = async (interaction, messageOverride, targetType) => {
+    try {
+        const guildId = interaction.guild.id;
+        const payload = await buildGGPanelPayload(guildId, messageOverride);
+        await interaction.editReply(payload);
+    } catch (e) {}
+};
+
+module.exports = gunGameHandler;
+module.exports.autoSaveLocation = gunGameHandler.autoSaveLocation;
+module.exports.refreshPanelViaInteraction = gunGameHandler.refreshPanelViaInteraction;
