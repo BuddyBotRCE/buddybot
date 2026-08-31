@@ -10,20 +10,22 @@ async function renderAdminMenu(interaction, guildId, action = 'reply') {
     const catDisplay = cfg.ticketCategoryId ? `<#${cfg.ticketCategoryId}>` : '`Not Set`';
     const logDisplay = cfg.ticketTranscriptChannelId ? `<#${cfg.ticketTranscriptChannelId}>` : '`Not Set`';
     const roleDisplay = cfg.ticketAdminRoleId ? `<@&${cfg.ticketAdminRoleId}>` : '`Not Set`';
+    const vipRoleDisplay = cfg.ticketVipRoleId ? `<@&${cfg.ticketVipRoleId}>` : '`Not Set`';
 
     const embed = new EmbedBuilder()
         .setTitle('🎫 Ticket System Manager')
-        .setDescription(`Configure support tickets for your players.\n\n**Current Setup:**\n📂 **Category:** ${catDisplay}\n📄 **Transcripts:** ${logDisplay}\n👮 **Support Role:** ${roleDisplay}`)
+        .setDescription(`Configure support tickets for your players.\n\n**Current Setup:**\n📂 **Category:** ${catDisplay}\n📄 **Transcripts:** ${logDisplay}\n👮 **Support Role:** ${roleDisplay}\n⭐ **VIP Priority Role:** ${vipRoleDisplay}`)
         .setColor('#3498db');
 
     const row1 = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('btn_tk_setcat').setLabel('Set Category').setStyle(ButtonStyle.Primary).setEmoji('📂'),
         new ButtonBuilder().setCustomId('btn_tk_setlog').setLabel('Set Transcript Log').setStyle(ButtonStyle.Primary).setEmoji('📄'),
-        new ButtonBuilder().setCustomId('btn_tk_setrole').setLabel('Set Support Role').setStyle(ButtonStyle.Primary).setEmoji('👮')
+        new ButtonBuilder().setCustomId('btn_tk_setrole').setLabel('Set Support Role').setStyle(ButtonStyle.Primary).setEmoji('👮'),
+        new ButtonBuilder().setCustomId('btn_tk_setvip').setLabel('Set Priority VIP Role').setStyle(ButtonStyle.Success).setEmoji('⭐')
     );
 
     const row2 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('tk_manage_cats').setLabel('Manage Ticket Categories & Priority').setStyle(ButtonStyle.Success).setEmoji('📑'),
+        new ButtonBuilder().setCustomId('tk_manage_cats').setLabel('Manage Ticket Categories').setStyle(ButtonStyle.Success).setEmoji('📑'),
         new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
     );
 
@@ -41,8 +43,8 @@ async function renderCategoryManager(interaction, guildId, action = 'update') {
         : '*No custom categories created yet. Players will see default options (General, Report, Priority).*';
 
     const embed = new EmbedBuilder()
-        .setTitle('📑 Ticket Categories & Priority')
-        .setDescription(`Create custom dropdown options for players when they open a ticket.\n\n💡 **Pro Tip:** *If you include the word **"Priority"** in the category name (e.g. "Priority Issue ⚡"), the bot will automatically flag it, turn the ticket Red, and name the channel \`pri-username\` to grab staff attention!*\n\n${catList}`)
+        .setTitle('📑 Ticket Categories')
+        .setDescription(`Create custom dropdown options for players when they open a ticket.\n\n${catList}`)
         .setColor('#f1c40f');
 
     const components = [];
@@ -108,6 +110,12 @@ module.exports = async (interaction, client) => {
                 return interaction.reply({ embeds: [embed], components: [new ActionRowBuilder().addComponents(menu)], flags: 64 });
             }
 
+            if (customId === 'btn_tk_setvip') {
+                const embed = new EmbedBuilder().setTitle('⭐ Select Priority VIP Role').setDescription('Players with this role will automatically have their tickets flagged as HIGH PRIORITY (Red embed & special tag).').setColor('#e74c3c');
+                const menu = new RoleSelectMenuBuilder().setCustomId('tk_sel_vip').setPlaceholder('Select Priority/VIP role...');
+                return interaction.reply({ embeds: [embed], components: [new ActionRowBuilder().addComponents(menu)], flags: 64 });
+            }
+
             if (customId === 'tk_add_cat') {
                 const modal = new ModalBuilder().setCustomId('modal_tk_addcat').setTitle('Create Ticket Category');
                 modal.addComponents(
@@ -130,9 +138,15 @@ module.exports = async (interaction, client) => {
             }
         }
 
-        if (interaction.isRoleSelectMenu() && customId === 'tk_sel_role') {
-            await GuildConfig.update({ ticketAdminRoleId: interaction.values[0] }, { where: { guildId } });
-            return interaction.update({ content: `✅ Support role set! <@&${interaction.values[0]}> will now have access to tickets.`, embeds: [], components: [] });
+        if (interaction.isRoleSelectMenu()) {
+            if (customId === 'tk_sel_role') {
+                await GuildConfig.update({ ticketAdminRoleId: interaction.values[0] }, { where: { guildId } });
+                return interaction.update({ content: `✅ Support role set! <@&${interaction.values[0]}> will now have access to tickets.`, embeds: [], components: [] });
+            }
+            if (customId === 'tk_sel_vip') {
+                await GuildConfig.update({ ticketVipRoleId: interaction.values[0] }, { where: { guildId } });
+                return interaction.update({ content: `✅ Priority VIP role set! Players with <@&${interaction.values[0]}> will open high-priority tickets.`, embeds: [], components: [] });
+            }
         }
 
         if (interaction.isStringSelectMenu() && customId === 'tk_del_cat') {
@@ -159,8 +173,7 @@ module.exports = async (interaction, client) => {
                 // Default fallback options if the admin hasn't created any custom ones yet
                 options = [
                     { label: 'General Support', description: 'Standard server inquiries and help.', value: 'General Support', emoji: '💬' },
-                    { label: 'Player Report', description: 'Report a rule breaker or cheater.', value: 'Player Report', emoji: '⚠️' },
-                    { label: 'Priority Support', description: 'Urgent issues, VIP, or Store support.', value: 'Priority Support', emoji: '⚡' }
+                    { label: 'Player Report', description: 'Report a rule breaker or cheater.', value: 'Player Report', emoji: '⚠️' }
                 ];
             } else {
                 // Map the custom categories from the database
@@ -195,11 +208,18 @@ module.exports = async (interaction, client) => {
                 return interaction.update({ content: '❌ **Ticket System Error:** The configured ticket category no longer exists.', components: [] });
             }
 
-            // --- PRIORITY CHECKER LOGIC ---
-            const isPriority = selectedCategory.toLowerCase().includes('priority');
+            // --- ROLE-BASED PRIORITY CHECKER LOGIC ---
+            const member = await interaction.guild.members.fetch(interaction.user.id);
+            const hasVipRole = config.ticketVipRoleId && member.roles.cache.has(config.ticketVipRoleId);
+            const isPriorityCat = selectedCategory.toLowerCase().includes('priority');
+            
+            // If they have the VIP role OR they selected a category literally named "priority", flag it!
+            const isPriority = hasVipRole || isPriorityCat;
+            
             const channelPrefix = isPriority ? 'pri' : 'ticket';
             const embedColor = isPriority ? '#e74c3c' : '#2ecc71';
             const icon = isPriority ? '🚨' : '🎫';
+            const priorityTag = isPriority ? '\n\n**⭐ PRIORITY STATUS ACTIVE ⭐**' : '';
 
             const existingChannel = interaction.guild.channels.cache.find(c => c.name === `${channelPrefix}-${interaction.user.username.toLowerCase()}`);
             if (existingChannel) {
@@ -226,7 +246,7 @@ module.exports = async (interaction, client) => {
 
             const ticketEmbed = new EmbedBuilder()
                 .setTitle(`${icon} ${selectedCategory} — ${interaction.user.tag}`)
-                .setDescription(`Welcome <@${interaction.user.id}>!\n\nYou have opened a **${selectedCategory}** ticket.\nPlease describe your issue or question in as much detail as possible. A staff member will be with you shortly.`)
+                .setDescription(`Welcome <@${interaction.user.id}>!${priorityTag}\n\nYou have opened a **${selectedCategory}** ticket.\nPlease describe your issue or question in as much detail as possible. A staff member will be with you shortly.`)
                 .setColor(embedColor)
                 .setTimestamp();
 
@@ -235,7 +255,10 @@ module.exports = async (interaction, client) => {
                 new ButtonBuilder().setCustomId('tk_close').setLabel('Close Ticket').setStyle(ButtonStyle.Danger).setEmoji('🔒')
             );
 
-            const pingMsg = config.ticketAdminRoleId ? `<@${interaction.user.id}> | <@&${config.ticketAdminRoleId}>` : `<@${interaction.user.id}>`;
+            // Double ping if priority!
+            const pingMsg = config.ticketAdminRoleId 
+                ? (isPriority ? `🚨 PRIORITY TICKET 🚨 <@&${config.ticketAdminRoleId}> | <@${interaction.user.id}>` : `<@${interaction.user.id}> | <@&${config.ticketAdminRoleId}>`)
+                : `<@${interaction.user.id}>`;
             
             await ticketChannel.send({ content: pingMsg, embeds: [ticketEmbed], components: [actionRow] });
             return interaction.update({ content: `✅ Your ticket has been successfully created! Head over to ${ticketChannel}.`, components: [] });

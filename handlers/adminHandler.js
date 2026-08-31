@@ -169,10 +169,6 @@ const adminHandler = async (interaction, client) => {
             return interaction.reply({ embeds: [embed], components: [row, backRow], flags: 64 });
         }
 
-        if (selectedValue === 'setup_orp') {
-            const embed = new EmbedBuilder().setTitle('🛡️ ORP Manager (Offline Raid Protection)').setDescription('ORP systems are actively being upgraded to v2.0.\n\nPlease check back in the next update to configure offline raid protection zones.').setColor('#e67e22');
-            return interaction.reply({ embeds: [embed], components: [backRow], flags: 64 });
-        }
 
         if (selectedValue === 'setup_multiserver') {
             const servers = await GameServer.findAll({ where: { guildId: interaction.guild.id } });

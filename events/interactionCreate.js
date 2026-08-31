@@ -29,6 +29,7 @@ const wipeHandler = require(handlerPath('wipeHandler'));
 const homeTpHandler = require(handlerPath('homeTpHandler'));
 const skipNightHandler = require(handlerPath('skipNightHandler'));
 const leaderboardHandler = require(handlerPath('leaderboardHandler'));
+const orpHandler = require(handlerPath('orpHandler'));
 
 module.exports = async (interaction, client) => {
     try {
@@ -59,7 +60,7 @@ module.exports = async (interaction, client) => {
             if (customId === 'modal_link_account_global' || customId.startsWith('modal_link_account_')) return await adminHandler(interaction, client);
             if (customId.startsWith('modal_sug_') || customId === 'modal_player_submit_suggestion' || customId.startsWith('modal_sug_decline_reason_')) return await suggestionHandler(interaction, client);
             if (customId === 'modal_verify_email' || customId === 'modal_transfer_license') return await premiumHandler(interaction, client);
-            
+            if (customId === 'modal_orp_config') return await orpHandler(interaction, client);
             if (customId === 'modal_setup_economy' || customId === 'modal_econ_daily' || customId === 'modal_econ_buddydays' || customId.startsWith('modal_econ_bd_') || customId === 'modal_econ_scientist_reward' || customId === 'modal_econ_player_reward' || customId === 'modal_econ_interest' || customId === 'modal_hub_deposit' || customId === 'modal_hub_withdraw' || customId.startsWith('modal_admin_give_exec_') || customId.startsWith('modal_admin_take_exec_')) {
                 return await economyHandler(interaction, client);
             }
@@ -136,11 +137,11 @@ module.exports = async (interaction, client) => {
             if (selectedValue === 'setup_kits') return await kitHandler(interaction, client);
             if (selectedValue === 'setup_logging' || selectedValue.includes('log')) return await loggingHandler(interaction, client);
             if (selectedValue === 'setup_binds') return await bindHandler(interaction, client);
-            if (selectedValue === 'setup_orp') return await adminHandler(interaction, client);
+            if (selectedValue === 'setup_orp') return await orpHandler(interaction, client);
             if (selectedValue.includes('pve') || selectedValue.includes('zone') || selectedValue === 'setup_custom_zones') return await customZoneHandler(interaction, client);
             if (selectedValue === 'setup_automod') return await autoModHandler(interaction, client);
             if (selectedValue === 'setup_hometp') return await homeTpHandler(interaction, client);
-
+            
             return await adminHandler(interaction, client);
         }
 
@@ -177,6 +178,7 @@ module.exports = async (interaction, client) => {
         if (customId === 'btn_toggle_skipnight' || customId === 'btn_set_skipnight_percentage') {
             return await skipNightHandler(interaction, client);
         }
+        if (customId.startsWith('btn_orp_')) return await orpHandler(interaction, client);
 
         if (customId === 'hometp_btn_settings' || customId === 'admin_menu_back') {
             return await homeTpHandler(interaction, client);
