@@ -1,6 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const db = require('../database/db');
 const adminHandler = require('./adminHandler');
+const { RUST_CATEGORIES } = require('../utils/rustCatalog');
 
 module.exports = async (interaction, client) => {
     const customId = interaction.customId || '';
@@ -64,17 +65,55 @@ module.exports = async (interaction, client) => {
         }
 
         if (selectedValue === 'br_prizes') {
-            const modal = new ModalBuilder().setCustomId('modal_br_add_prize').setTitle('Add Lucky Dip Prize');
-            modal.addComponents(
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel("Prize Display Name (e.g. L96 Sniper)").setStyle(TextInputStyle.Short).setRequired(true)),
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('command').setLabel("RCON Command (inventory.giveto ... )").setStyle(TextInputStyle.Short).setRequired(true))
+            const catOptions = Object.keys(RUST_CATEGORIES).map(catKey => ({
+                label: RUST_CATEGORIES[catKey].label,
+                value: `br_prize_cat_${catKey}`,
+                emoji: RUST_CATEGORIES[catKey].emoji
+            }));
+            const row = new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('br_prize_category_select')
+                    .setPlaceholder('Step 1: Select prize category...')
+                    .addOptions(catOptions)
             );
-            return interaction.showModal(modal);
+            return interaction.reply({ content: '🎁 **Battle Royale Prize Wizard:** Select an item category for the prize pool:', components: [row], flags: 64 });
         }
 
         if (selectedValue === 'br_clear_crates') {
             if (db.ArenaCratePoint) await db.ArenaCratePoint.destroy({ where: { guildId: interaction.guild.id } });
             return interaction.reply({ content: '✅ All mapped Battle Royale elite crate points have been cleared.', flags: 64 });
+        }
+    }
+
+    // Catalog Select Menus for BR Prizes
+    if (interaction.isStringSelectMenu()) {
+        if (customId === 'br_prize_category_select') {
+            const catKey = selectedValue.replace('br_prize_cat_', '');
+            const categoryData = RUST_CATEGORIES[catKey];
+            if (!categoryData || !categoryData.items) return interaction.reply({ content: '❌ Invalid category.', flags: 64 });
+
+            const itemOptions = categoryData.items.slice(0, 25).map(item => ({
+                label: item.name,
+                description: `Shortname: ${item.shortname}`,
+                value: `br_prize_item_${item.shortname}`
+            }));
+
+            const row = new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('br_prize_item_select')
+                    .setPlaceholder(`Step 2: Choose item from ${categoryData.label}...`)
+                    .addOptions(itemOptions)
+            );
+            return interaction.update({ content: `🎁 **Battle Royale Prize Wizard:** Choose the exact item from **${categoryData.label}**:`, components: [row] });
+        }
+
+        if (customId === 'br_prize_item_select') {
+            const shortname = selectedValue.replace('br_prize_item_', '');
+            const modal = new ModalBuilder().setCustomId(`modal_br_prize_exec_${shortname}`).setTitle(`Configure Prize (${shortname})`);
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel("Quantity (e.g. 1)").setStyle(TextInputStyle.Short).setValue('1').setRequired(true))
+            );
+            return interaction.showModal(modal);
         }
     }
 
@@ -85,15 +124,17 @@ module.exports = async (interaction, client) => {
             return interaction.reply({ content: `✅ Battle Royale crate spawn fill rate successfully updated to **${val}%** of mapped points per match!`, flags: 64 });
         }
 
-        if (customId === 'modal_br_add_prize' && db.ArenaPrize) {
-            const prizeName = interaction.fields.getTextInputValue('name').trim();
-            const command = interaction.fields.getTextInputValue('command').trim();
+        if (customId.startsWith('modal_br_prize_exec_') && db.ArenaPrize) {
+            const shortname = customId.replace('modal_br_prize_exec_', '');
+            const amount = interaction.fields.getTextInputValue('amount') || '1';
+            const prizeName = `${amount}x ${shortname}`;
+            const command = `inventory.giveto "{player}" ${shortname} ${amount}`;
 
             await db.ArenaPrize.create({ guildId: interaction.guild.id, prizeName, command });
             const totalPrizes = await db.ArenaPrize.count({ where: { guildId: interaction.guild.id } });
             const share = (100 / totalPrizes).toFixed(1);
 
-            return interaction.reply({ content: `✅ Added **${prizeName}** to the prize pool! Pool now has ${totalPrizes} items (**${share}%** chance each).`, flags: 64 });
+            return interaction.reply({ content: `✅ Added **${prizeName}** to the Battle Royale prize pool! Pool now has ${totalPrizes} items (**${share}%** chance each).`, flags: 64 });
         }
     }
 };

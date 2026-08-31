@@ -1,6 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const db = require('../database/db');
 const adminHandler = require('./adminHandler');
+const { RUST_CATEGORIES } = require('../utils/rustCatalog');
 
 const BUILT_IN_PRESETS = {
     standard: [
@@ -109,17 +110,55 @@ module.exports = async (interaction, client) => {
         }
 
         if (selectedValue === 'gg_prizes') {
-            const modal = new ModalBuilder().setCustomId('modal_gg_add_prize').setTitle('Add Lucky Dip Prize');
-            modal.addComponents(
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel("Prize Display Name (e.g. M249)").setStyle(TextInputStyle.Short).setRequired(true)),
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('command').setLabel("RCON Command (inventory.giveto ... )").setStyle(TextInputStyle.Short).setRequired(true))
+            const catOptions = Object.keys(RUST_CATEGORIES).map(catKey => ({
+                label: RUST_CATEGORIES[catKey].label,
+                value: `gg_prize_cat_${catKey}`,
+                emoji: RUST_CATEGORIES[catKey].emoji
+            }));
+            const row = new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('gg_prize_category_select')
+                    .setPlaceholder('Step 1: Select prize category...')
+                    .addOptions(catOptions)
             );
-            return interaction.showModal(modal);
+            return interaction.reply({ content: '🎁 **Gun Game Prize Wizard:** Select an item category for the prize pool:', components: [row], flags: 64 });
         }
 
         if (selectedValue === 'gg_clear_spawns') {
             if (db.ArenaSpawn) await db.ArenaSpawn.destroy({ where: { guildId: interaction.guild.id } });
             return interaction.reply({ content: '✅ All Gun Game arena spawn points cleared.', flags: 64 });
+        }
+    }
+
+    // Catalog Select Menus for Prizes
+    if (interaction.isStringSelectMenu()) {
+        if (customId === 'gg_prize_category_select') {
+            const catKey = selectedValue.replace('gg_prize_cat_', '');
+            const categoryData = RUST_CATEGORIES[catKey];
+            if (!categoryData || !categoryData.items) return interaction.reply({ content: '❌ Invalid category.', flags: 64 });
+
+            const itemOptions = categoryData.items.slice(0, 25).map(item => ({
+                label: item.name,
+                description: `Shortname: ${item.shortname}`,
+                value: `gg_prize_item_${item.shortname}`
+            }));
+
+            const row = new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('gg_prize_item_select')
+                    .setPlaceholder(`Step 2: Choose item from ${categoryData.label}...`)
+                    .addOptions(itemOptions)
+            );
+            return interaction.update({ content: `🎁 **Gun Game Prize Wizard:** Choose the exact item from **${categoryData.label}**:`, components: [row] });
+        }
+
+        if (customId === 'gg_prize_item_select') {
+            const shortname = selectedValue.replace('gg_prize_item_', '');
+            const modal = new ModalBuilder().setCustomId(`modal_gg_prize_exec_${shortname}`).setTitle(`Configure Prize (${shortname})`);
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel("Quantity (e.g. 1)").setStyle(TextInputStyle.Short).setValue('1').setRequired(true))
+            );
+            return interaction.showModal(modal);
         }
     }
 
@@ -133,15 +172,17 @@ module.exports = async (interaction, client) => {
             return interaction.reply({ content: `✅ Successfully saved **Tier ${tier}**: \`${weaponName}\`!`, flags: 64 });
         }
 
-        if (customId === 'modal_gg_add_prize' && db.ArenaPrize) {
-            const prizeName = interaction.fields.getTextInputValue('name').trim();
-            const command = interaction.fields.getTextInputValue('command').trim();
+        if (customId.startsWith('modal_gg_prize_exec_') && db.ArenaPrize) {
+            const shortname = customId.replace('modal_gg_prize_exec_', '');
+            const amount = interaction.fields.getTextInputValue('amount') || '1';
+            const prizeName = `${amount}x ${shortname}`;
+            const command = `inventory.giveto "{player}" ${shortname} ${amount}`;
 
             await db.ArenaPrize.create({ guildId: interaction.guild.id, prizeName, command });
             const totalPrizes = await db.ArenaPrize.count({ where: { guildId: interaction.guild.id } });
             const share = (100 / totalPrizes).toFixed(1);
 
-            return interaction.reply({ content: `✅ Added **${prizeName}** to the prize pool! Pool now has ${totalPrizes} items (**${share}%** chance each).`, flags: 64 });
+            return interaction.reply({ content: `✅ Added **${prizeName}** to the Gun Game prize pool! Pool now has ${totalPrizes} items (**${share}%** chance each).`, flags: 64 });
         }
     }
 };
