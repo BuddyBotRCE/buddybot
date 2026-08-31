@@ -43,13 +43,6 @@ module.exports = async (interaction, client) => {
         const selectedValue = interaction.isStringSelectMenu() && interaction.values ? interaction.values[0] : '';
         console.log(`[INTERACTION DEBUG] CustomId: "${customId}" | SelectedValue: "${selectedValue}"`);
 
-        // 🚨 BULLETPROOF INTERACTION ACKNOWLEDGMENT 🚨
-        timeoutSafety = setTimeout(async () => {
-            if (!interaction.deferred && !interaction.replied) {
-                await interaction.reply({ content: '⚠️ Request processed or timed out silently.', flags: 64 }).catch(() => {});
-            }
-        }, 2500);
-
         // 🚨 TOP ROUTING FOR BUDDY GAMES, GUN GAME, & BR 🚨
         if (customId === 'admin_menu_select_2') {
             if (selectedValue === 'setup_buddy_games') {
@@ -61,8 +54,21 @@ module.exports = async (interaction, client) => {
 
         if (customId === 'buddy_games_hub_select') {
             clearTimeout(timeoutSafety);
+            if (selectedValue === 'hub_goto_gungame') {
+                // Mutate properties so gunGameHandler recognizes it instantly
+                Object.defineProperty(interaction, 'customId', { value: 'admin_menu_select', writable: true, configurable: true });
+                Object.defineProperty(interaction, 'values', { value: ['setup_gungame'], writable: true, configurable: true });
+                return await gunGameHandler(interaction, client);
+            }
+            if (selectedValue === 'hub_goto_br') {
+                // Mutate properties so battleRoyaleHandler recognizes it instantly
+                Object.defineProperty(interaction, 'customId', { value: 'admin_menu_select', writable: true, configurable: true });
+                Object.defineProperty(interaction, 'values', { value: ['setup_battleroyale'], writable: true, configurable: true });
+                return await battleRoyaleHandler(interaction, client);
+            }
             return await buddyGamesHandler(interaction, client);
         }
+
         if (customId.startsWith('gg_') || customId.startsWith('modal_gg_') || selectedValue === 'setup_gungame') {
             clearTimeout(timeoutSafety);
             return await gunGameHandler(interaction, client);
