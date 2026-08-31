@@ -1,481 +1,185 @@
-const WebSocket = require('ws');
-const { GuildConfig, GameServer, UserEconomy, CustomBind, BindCooldown, ActiveBounty, BountyCooldown, HomeTeleportConfig, HomeTeleportCooldown, HomeTeleportLocation } = require('../database/db');
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const db = require('../database/db');
+const adminHandler = require('./adminHandler');
+const { RUST_CATEGORIES } = require('../utils/rustCatalog');
+const { queueAdminPos } = require('../utils/rconManager');
 
-const activeConnections = new Map();
-const adminPosQueue = new Map(); 
-const homeTpPosQueue = new Map(); // Queue for catching home coords after console kill
+module.exports = async (interaction, client) => {
+    const customId = interaction.customId || '';
+    const selectedValue = interaction.isStringSelectMenu() && interaction.values ? interaction.values[0] : '';
 
-function registerEventParser(rconMock, emit) {
-    rconMock.on('message', (msg) => {
-        if (!msg || !msg.message) return;
-        const line = msg.message.toLowerCase();
+    if (customId === 'admin_menu_back') {
+        if (adminHandler && adminHandler.renderMainPanel) {
+            return await adminHandler.renderMainPanel(interaction);
+        }
+        return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] });
+    }
 
-        if (line.includes("cargo ship") && line.includes("docked")) emit("cargoDocked", { raw: msg.message, timestamp: Date.now() });
-        if (line.includes("supply_drop") || line.includes("supply drop")) emit("supplyDrop", { raw: msg.message, timestamp: Date.now() });
-        if (line.includes("locked crate") && line.includes("hack started")) emit("lockedCrateHackStart", { raw: msg.message, timestamp: Date.now() });
-        if (line.includes("locked crate") && line.includes("hack completed")) emit("lockedCrateHackFinish", { raw: msg.message, timestamp: Date.now() });
-        if (line.includes("spawned") && line.includes("crate_elite")) emit("eliteCrate", { raw: msg.message, timestamp: Date.now() });
-    });
-}
+    if (customId === 'admin_menu_select' && selectedValue === 'setup_battleroyale') {
+        const ArenaCratePoint = db.ArenaCratePoint;
+        const ArenaSpawn = db.ArenaSpawn;
+        const ArenaConfig = db.ArenaConfig;
+        const ArenaPrize = db.ArenaPrize;
 
-async function connectRcon(guildId, client, targetServerId = null) {
-    let rconIp, rconPort, rconPassword;
+        const cratesMapped = ArenaCratePoint ? await ArenaCratePoint.count({ where: { guildId: interaction.guild.id } }).catch(() => 0) : 0;
+        const spawnsMapped = ArenaSpawn ? await ArenaSpawn.count({ where: { guildId: interaction.guild.id } }).catch(() => 0) : 0;
+        const [config] = ArenaConfig ? await ArenaConfig.findOrCreate({ where: { guildId: interaction.guild.id } }).catch(() => [{}]) : [{}];
+        const prizes = ArenaPrize ? await ArenaPrize.count({ where: { guildId: interaction.guild.id } }).catch(() => 0) : 0;
+        const prizeShare = prizes > 0 ? (100 / prizes).toFixed(1) : 0;
 
-    if (targetServerId) {
-        const specificServer = await GameServer.findByPk(targetServerId);
-        if (specificServer && specificServer.rconIp && specificServer.rconPort && specificServer.rconPassword) {
-            rconIp = specificServer.rconIp; rconPort = specificServer.rconPort; rconPassword = specificServer.rconPassword;
+        const embed = new EmbedBuilder()
+            .setTitle('🛡️ Battle Royale Event Manager')
+            .setDescription(`Manage Rust Console Edition randomized crate-spawn Battle Royale arenas.\n\n• **Player Spawn Points Mapped:** \`${spawnsMapped}\`\n• **Elite Crate Points Mapped:** \`${cratesMapped}\`\n• **Active Crate Fill Rate:** \`${config.crateSpawnPercentage || 35}% of mapped points\`\n• **Lucky Dip Prizes:** \`${prizes} items (${prizeShare}% each)\``)
+            .setColor('#3498db');
+
+        const row1 = new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder().setCustomId('br_action_select').setPlaceholder('Select Battle Royale configuration...')
+                .addOptions([
+                    { label: '📍 Add Player Spawn Point (Auto-Capture)', value: 'br_add_spawn', description: 'Capture current position via RCON', emoji: '📍' },
+                    { label: '📦 Add Elite Crate Spawn Point (Auto-Capture)', value: 'br_add_crate', description: 'Capture current position via RCON', emoji: '📦' },
+                    { label: '⚙️ Set Crate Fill Percentage', value: 'br_set_percentage', description: 'Configure what % of crates spawn per match (e.g. 35%)', emoji: '⚙️' },
+                    { label: '🎁 Manage Equal-% Lucky Dip Prizes', value: 'br_prizes', description: 'Shared prize pool with Gun Game', emoji: '🎁' },
+                    { label: '🗑️ Clear Mapped Points', value: 'br_clear_all', description: 'Clear all spawns and crates', emoji: '🗑️' }
+                ])
+        );
+
+        const row2 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+        );
+
+        if (!interaction.deferred && !interaction.replied) {
+            return interaction.update({ embeds: [embed], components: [row1, row2] }).catch(() => 
+                interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 })
+            );
+        }
+        return interaction.followUp({ embeds: [embed], components: [row1, row2], flags: 64 });
+    }
+
+    if (customId === 'br_action_select') {
+        if (selectedValue === 'br_add_spawn') {
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('btn_capture_br_spawn').setLabel('📍 Capture Player Spawn Position').setStyle(ButtonStyle.Success)
+            );
+            return interaction.reply({ content: '📍 **Battle Royale Spawn Setup:** Stand at your desired player spawn location in-game and click the button below to auto-capture your coordinates:', components: [row], flags: 64 });
+        }
+
+        if (selectedValue === 'br_add_crate') {
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('btn_capture_br_crate').setLabel('📦 Capture Elite Crate Position').setStyle(ButtonStyle.Success)
+            );
+            return interaction.reply({ content: '📦 **Battle Royale Crate Setup:** Stand at your desired elite crate location in-game and click the button below to auto-capture your coordinates:', components: [row], flags: 64 });
+        }
+
+        if (selectedValue === 'br_set_percentage') {
+            const modal = new ModalBuilder().setCustomId('modal_br_percentage').setTitle('Set Crate Spawn Fill %');
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('percentage').setLabel("Spawn Percentage (e.g. 35)").setStyle(TextInputStyle.Short).setRequired(true))
+            );
+            return interaction.showModal(modal);
+        }
+
+        if (selectedValue === 'br_prizes') {
+            const catOptions = Object.keys(RUST_CATEGORIES).map(catKey => ({
+                label: RUST_CATEGORIES[catKey].label,
+                value: `br_prize_cat_${catKey}`,
+                emoji: RUST_CATEGORIES[catKey].emoji
+            }));
+            const row = new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('br_prize_category_select')
+                    .setPlaceholder('Step 1: Select prize category...')
+                    .addOptions(catOptions)
+            );
+            return interaction.reply({ content: '🎁 **Battle Royale Prize Wizard:** Select an item category for the prize pool:', components: [row], flags: 64 });
+        }
+
+        if (selectedValue === 'br_clear_all') {
+            if (db.ArenaCratePoint) await db.ArenaCratePoint.destroy({ where: { guildId: interaction.guild.id } });
+            if (db.ArenaSpawn) await db.ArenaSpawn.destroy({ where: { guildId: interaction.guild.id } });
+            return interaction.reply({ content: '✅ All mapped Battle Royale spawn points and crate points have been cleared.', flags: 64 });
         }
     }
 
-    if (!rconIp || !rconPort || !rconPassword) {
-        const firstGameServer = await GameServer.findOne({ where: { guildId: guildId } });
-        if (firstGameServer && firstGameServer.rconIp && firstGameServer.rconPort && firstGameServer.rconPassword) {
-            rconIp = firstGameServer.rconIp; rconPort = firstGameServer.rconPort; rconPassword = firstGameServer.rconPassword;
+    // Button Click Handlers using the working RCON queue
+    if (interaction.isButton()) {
+        if (customId === 'btn_capture_br_spawn') {
+            await interaction.reply({ content: '⏳ Stand at your spawn point in-game... Scanning coordinates via RCON...', flags: 64 });
+            // We use custom_zone or a dedicated handler hook to save it
+            return await queueAdminPos(interaction, 'custom_zone', 'br_spawn');
+        }
+
+        if (customId === 'btn_capture_br_crate') {
+            await interaction.reply({ content: '⏳ Stand at your elite crate in-game... Scanning coordinates via RCON...', flags: 64 });
+            return await queueAdminPos(interaction, 'custom_zone', 'br_crate');
         }
     }
 
-    if (!rconIp || !rconPort || !rconPassword) {
-        const config = await GuildConfig.findOne({ where: { guildId: guildId } });
-        if (config && config.rconIp && config.rconPort && config.rconPassword) {
-            rconIp = config.rconIp; rconPort = config.rconPort; rconPassword = config.rconPassword;
+    // Catalog Select Menus for BR Prizes
+    if (interaction.isStringSelectMenu()) {
+        if (customId === 'br_prize_category_select') {
+            const catKey = selectedValue.replace('br_prize_cat_', '');
+            const categoryData = RUST_CATEGORIES[catKey];
+            if (!categoryData || !categoryData.items) return interaction.reply({ content: '❌ Invalid category.', flags: 64 });
+
+            const itemOptions = categoryData.items.slice(0, 25).map(item => ({
+                label: item.name,
+                description: `Shortname: ${item.shortname}`,
+                value: `br_prize_item_${item.shortname}`
+            }));
+
+            const row = new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('br_prize_item_select')
+                    .setPlaceholder(`Step 2: Choose item from ${categoryData.label}...`)
+                    .addOptions(itemOptions)
+            );
+            return interaction.update({ content: `🎁 **Battle Royale Prize Wizard:** Choose the exact item from **${categoryData.label}**:`, components: [row] });
+        }
+
+        if (customId === 'br_prize_item_select') {
+            const shortname = selectedValue.replace('br_prize_item_', '');
+            const modal = new ModalBuilder().setCustomId(`modal_br_prize_exec_${shortname}`).setTitle(`Configure Prize (${shortname})`);
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel("Quantity (e.g. 1)").setStyle(TextInputStyle.Short).setValue('1').setRequired(true))
+            );
+            return interaction.showModal(modal);
         }
     }
 
-    if (!rconIp || !rconPort || !rconPassword) {
-        throw new Error("Missing RCON credentials for this server!");
-    }
-    
-    if (activeConnections.has(guildId)) {
-        const existingWs = activeConnections.get(guildId);
-        if (existingWs.readyState === WebSocket.OPEN) return "Already connected!";
-        else activeConnections.delete(guildId);
-    }
-
-    return new Promise((resolve, reject) => {
-        const rconUrl = `ws://${rconIp}:${rconPort}/${encodeURIComponent(rconPassword)}`;
-        const ws = new WebSocket(rconUrl);
-        
-        const timeout = setTimeout(() => { 
-            try { ws.close(); } catch(e){}
-            reject(new Error(`RCON Connection timed out to ${rconIp}:${rconPort}.`)); 
-        }, 10000);
-
-        ws.on('open', () => {
-            clearTimeout(timeout);
-            activeConnections.set(guildId, ws);
-            resolve("Connection established successfully!");
-        });
-
-        ws.on('close', () => activeConnections.delete(guildId));
-
-        ws.on('error', (err) => {
-            clearTimeout(timeout);
-            activeConnections.delete(guildId);
-            reject(new Error(`RCON Socket Error: Unable to reach ${rconIp}:${rconPort}`));
-        });
-
-        const eventEmitterCallback = async (eventName, data) => {
-            try {
-                const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
-                if (!client) return;
-                const guild = client.guilds.cache.get(guildId);
-                if (!currentConfig || !currentConfig.logGameChannelId || !guild) return;
-
-                const channel = guild.channels.cache.get(currentConfig.logGameChannelId);
-                if (!channel) return;
-
-                if (eventName === "cargoDocked") await channel.send("🚢 **Cargo Ship has docked!**").catch(() => {});
-                if (eventName === "supplyDrop") await channel.send("📦 **Supply Drop detected!**").catch(() => {});
-                if (eventName === "lockedCrateHackStart") await channel.send("🔓 **Locked Crate hack has started!**").catch(() => {});
-                if (eventName === "lockedCrateHackFinish") await channel.send("✅ **Locked Crate hack completed!**").catch(() => {});
-                if (eventName === "eliteCrate") await channel.send("💎 **Elite Crate spawned!**").catch(() => {});
-            } catch (err) {}
-        };
-
-        registerEventParser({
-            on: (event, cb) => {
-                if (event === 'message') {
-                    ws.on('message', (raw) => {
-                        try {
-                            const parsed = JSON.parse(raw);
-                            if (parsed && parsed.Message) cb({ message: parsed.Message });
-                        } catch (e) {}
-                    });
-                }
-            }
-        }, eventEmitterCallback);
-
-        ws.on('message', async (data) => {
-            try {
-                const parsed = JSON.parse(data);
-                if (!parsed) return;
-                
-                const msg = parsed.Message || '';
-                const msgLower = msg.toLowerCase();
-
-                let rawUsername = '';
-                let rawContent = msg;
-
-                // Parse Rust Console Edition chat format: "[CHAT LOCAL] Username : message"
-                if (msg.includes('[chat local]')) {
-                    const parts = msg.split(':');
-                    if (parts.length >= 2) {
-                        rawUsername = parts[0].replace('[chat local]', '').trim();
-                        rawContent = parts.slice(1).join(':').trim().toLowerCase();
-                    }
-                }
-
-                const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
-                const guild = client ? client.guilds.cache.get(guildId) : null;
-
-                // ==========================================
-                // 1. POSITION INTERCEPTOR (ADMIN / SETUP TOOLS)
-                // ==========================================
-                if (adminPosQueue.size > 0) {
-                    for (const [adminId, setupData] of adminPosQueue.entries()) {
-                        let posX, posY, posZ;
-                        let foundPos = false;
-
-                        const nakedCoordMatch = msg.match(/\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)/);
-                        if (nakedCoordMatch) {
-                            posX = parseFloat(nakedCoordMatch[1]).toFixed(2);
-                            posY = parseFloat(nakedCoordMatch[2]).toFixed(2);
-                            posZ = parseFloat(nakedCoordMatch[3]).toFixed(2);
-                            foundPos = true;
-                        }
-
-                        if (!foundPos && (rawUsername.toLowerCase() === setupData.inGameName.toLowerCase() || msgLower.includes(setupData.inGameName.toLowerCase())) && msgLower.includes('teleport')) {
-                            const matches = msg.match(/-?\d+(\.\d+)?/g);
-                            if (matches && matches.length >= 3) {
-                                const len = matches.length;
-                                posX = parseFloat(matches[len-3]).toFixed(2); posY = parseFloat(matches[len-2]).toFixed(2); posZ = parseFloat(matches[len-1]).toFixed(2);
-                                foundPos = true;
-                            }
-                        }
-
-                        if (foundPos) {
-                            if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
-
-                            if (setupData.type === 'custom_bind') {
-                                try {
-                                    const bind = await CustomBind.findByPk(setupData.targetId);
-                                    if (bind) {
-                                        let command = bind.actionType === 'teleport' ? `teleportpos "${setupData.inGameName}" ${posX} ${posY} ${posZ}` : `spawn recycler_static (${posX},${posY},${posZ})`;
-                                        await bind.update({ command });
-                                    }
-                                    const bindHandler = require('../handlers/bindHandler');
-                                    if (bindHandler && bindHandler.refreshPanelViaInteraction) {
-                                        await bindHandler.refreshPanelViaInteraction(setupData.interaction, `✅ **Position Captured!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``, setupData.targetId);
-                                    }
-                                } catch (error) {}
-                            }
-                            else if (setupData.type === 'auto_event') {
-                                try {
-                                    const autoEventsHandler = require('../handlers/autoEventsHandler');
-                                    if (autoEventsHandler && autoEventsHandler.autoSaveLocation) {
-                                        await autoEventsHandler.autoSaveLocation(setupData.interaction.guild.id, posX, posY, posZ, setupData.targetId);
-                                    }
-                                    if (autoEventsHandler && autoEventsHandler.refreshPanelViaInteraction) {
-                                        await autoEventsHandler.refreshPanelViaInteraction(
-                                            setupData.interaction,
-                                            `✅ **Spawn Position Added!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``
-                                        );
-                                    }
-                                } catch (error) {}
-                            }
-                            else if (setupData.type === 'custom_zone') {
-                                try {
-                                    const customZoneHandler = require('../handlers/customZoneHandler');
-                                    if (customZoneHandler && customZoneHandler.autoSaveLocation) {
-                                        await customZoneHandler.autoSaveLocation(setupData.interaction.guild.id, posX, posY, posZ, setupData.targetId);
-                                    }
-                                    if (customZoneHandler && customZoneHandler.refreshPanelViaInteraction) {
-                                        await customZoneHandler.refreshPanelViaInteraction(
-                                            setupData.interaction,
-                                            `✅ **Zone Center Added!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``,
-                                            setupData.targetId
-                                        );
-                                    }
-                                } catch (error) {}
-                            }
-
-                            adminPosQueue.delete(adminId);
-                            break;
-                        }
-                    }
-                }
-
-                // ==========================================
-                // 1.1 HOME TELEPORT RESPAWN SCANNER INTERCEPTOR
-                // ==========================================
-                if (homeTpPosQueue.size > 0) {
-                    for (const [userId, tpData] of homeTpPosQueue.entries()) {
-                        if ((rawUsername.toLowerCase() === tpData.inGameName.toLowerCase() || msgLower.includes(tpData.inGameName.toLowerCase())) && (msgLower.includes('spawn') || msgLower.includes('teleport') || msgLower.includes('respawn') || msgLower.includes('printpos'))) {
-                            const nakedCoordMatch = msg.match(/\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)/);
-                            if (nakedCoordMatch) {
-                                const posX = parseFloat(nakedCoordMatch[1]).toFixed(2);
-                                const posY = parseFloat(nakedCoordMatch[2]).toFixed(2);
-                                const posZ = parseFloat(nakedCoordMatch[3]).toFixed(2);
-
-                                await HomeTeleportLocation.upsert({ guildId, userId, posX, posY, posZ });
-                                if (tpData.timeoutTimer) clearTimeout(tpData.timeoutTimer);
-                                homeTpPosQueue.delete(userId);
-                                await sendRconCommand(guildId, `say "${tpData.inGameName}, your Home location has been successfully anchored!"`, client);
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                // ==========================================
-                // 2. KILLFEED, BOUNTIES & KILL REWARDS (SCIENTISTS & PLAYERS)
-                // ==========================================
-                if ((msgLower.includes('killed') || msgLower.includes('murdered') || msgLower.includes('suicide') || msgLower.includes('died') || msgLower.includes('slain')) && !msg.includes('[Killfeed]')) {
-                    await sendRconCommand(guildId, `say "[Killfeed] ${msg}"`, client);
-                    
-                    let killerDb = null; 
-                    let victimDb = null;
-                    const currency = currentConfig?.economyCurrency || 'Scrap';
-                    const playersList = await UserEconomy.findAll({ where: { guildId: guildId } });
-
-                    if (msgLower.includes('scientist') && (msgLower.includes('killed') || msgLower.includes('murdered'))) {
-                        for (const p of playersList) {
-                            if (p.inGameName && msg.indexOf(p.inGameName) < msg.indexOf('killed') && msg.indexOf(p.inGameName) !== -1) {
-                                killerDb = p;
-                                break;
-                            }
-                        }
-                        if (killerDb) {
-                            const reward = currentConfig?.scientistKillReward ?? 10;
-                            await killerDb.update({ wallet: (killerDb.wallet || 0) + reward });
-                            await sendRconCommand(guildId, `say "${killerDb.inGameName} earned +${reward} ${currency} for killing a Scientist!"`, client);
-                        }
-                    } else {
-                        for (const p of playersList) {
-                            if (p.inGameName && msg.includes(p.inGameName)) {
-                                if (msgLower.includes('killed') && msg.indexOf(p.inGameName) < msg.indexOf('killed')) {
-                                    await p.update({ pvpKills: (p.pvpKills || 0) + 1 }); 
-                                    killerDb = p; 
-                                } else if (msgLower.includes('killed') || msgLower.includes('murdered')) {
-                                    await p.update({ deaths: (p.deaths || 0) + 1, currentKillstreak: 0 }); 
-                                    victimDb = p; 
-                                }
-                            }
-                        }
-
-                        if (killerDb && victimDb && killerDb.userId !== victimDb.userId) {
-                            const reward = currentConfig?.playerKillReward ?? 50;
-                            await killerDb.update({ wallet: (killerDb.wallet || 0) + reward });
-                            await sendRconCommand(guildId, `say "${killerDb.inGameName} earned +${reward} ${currency} for eliminating ${victimDb.inGameName}!"`, client);
-                            await processBountyLogic(guildId, killerDb, victimDb, client, currentConfig);
-                        }
-                    }
-                }
-
-                // ==========================================
-                // 4. RUST CONSOLE QUICK-CHAT WHEEL INTERCEPTOR
-                // ==========================================
-                if (msgLower.includes('d11_quick_chat_') || msgLower.includes('retreat')) {
-                    const registeredPlayers = await UserEconomy.findAll({ where: { guildId: guildId } });
-                    let matchedPlayer = null;
-
-                    for (const player of registeredPlayers) {
-                        if (player.inGameName && (rawUsername.toLowerCase() === player.inGameName.toLowerCase() || msgLower.includes(player.inGameName.toLowerCase()))) {
-                            matchedPlayer = player;
-                            break;
-                        }
-                    }
-
-                    if (matchedPlayer && client) {
-                        const guildObj = client.guilds.cache.get(guildId);
-                        const memberObj = await guildObj?.members.fetch(matchedPlayer.userId).catch(() => null);
-
-                        if (memberObj) {
-                            const hometpConfig = await HomeTeleportConfig.findOne({ where: { guildId } });
-                            if (hometpConfig) {
-                                // Check Role Requirement
-                                if (hometpConfig.requiredRoleId && !memberObj.roles.cache.has(hometpConfig.requiredRoleId)) {
-                                    await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, you lack the required Discord role to use Home Teleport!"`, client);
-                                    return;
-                                }
-
-                                // A. SET HOME TRIGGER
-                                if (rawContent.includes('d11_quick_chat_')) {
-                                    await sendRconCommand(guildId, `kill "${matchedPlayer.inGameName}"`, client);
-                                    await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, home set command received! Respawn at your bag to anchor coordinates."`, client);
-                                    
-                                    if (homeTpPosQueue.has(matchedPlayer.userId)) clearTimeout(homeTpPosQueue.get(matchedPlayer.userId).timeoutTimer);
-                                    const timeoutTimer = setTimeout(() => homeTpPosQueue.delete(matchedPlayer.userId), 30000);
-                                    homeTpPosQueue.set(matchedPlayer.userId, { userId: matchedPlayer.userId, inGameName: matchedPlayer.inGameName, timeoutTimer });
-                                    
-                                    await sendRconCommand(guildId, `printpos "${matchedPlayer.inGameName}"`, client);
-                                    return;
-                                }
-
-                                // B. RETREAT TELEPORT TRIGGER
-                                if (rawContent.includes('retreat') || rawContent.includes('combat_slot_1')) {
-                                    const now = new Date();
-                                    const [cd] = await HomeTeleportCooldown.findOrCreate({ where: { guildId, userId: matchedPlayer.userId }, defaults: { expiresAt: now } });
-                                    
-                                    if (new Date(cd.expiresAt) > now) {
-                                        const minsLeft = Math.ceil((new Date(cd.expiresAt) - now) / 60000);
-                                        await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, Home Teleport is on cooldown for another ${minsLeft} minutes!"`, client);
-                                        return;
-                                    }
-
-                                    const homeLoc = await HomeTeleportLocation.findOne({ where: { guildId, userId: matchedPlayer.userId } });
-                                    if (!homeLoc) {
-                                        await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, you have not set a home yet! Use the quick-chat wheel first."`, client);
-                                        return;
-                                    }
-
-                                    const expiryTime = new Date(now.getTime() + hometpConfig.cooldownMinutes * 60000);
-                                    await cd.update({ expiresAt: expiryTime });
-
-                                    await sendRconCommand(guildId, `teleportpos "${matchedPlayer.inGameName}" ${homeLoc.posX} ${homeLoc.posY} ${homeLoc.posZ}`, client);
-                                    await sendRconCommand(guildId, `say "[Teleport] ${matchedPlayer.inGameName} successfully retreated home!"`, client);
-                                    return;
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // ==========================================
-                // 5. CUSTOM BINDS CATCHER
-                // ==========================================
-                const serverBinds = await CustomBind.findAll({ where: { guildId: guildId } });
-                if (serverBinds.length === 0) return;
-                const registeredPlayers = await UserEconomy.findAll({ where: { guildId: guildId } });
-
-                for (const bind of serverBinds) {
-                    if (!bind.targetValue) continue;
-                    const phrase = bind.targetValue.toLowerCase();
-                    if (rawContent.includes(phrase) || msgLower.includes(phrase)) {
-                        let matchedPlayer = null;
-                        for (const player of registeredPlayers) {
-                            if (player.inGameName && (rawUsername.toLowerCase() === player.inGameName.toLowerCase() || msgLower.includes(player.inGameName.toLowerCase()))) { matchedPlayer = player; break; }
-                        }
-                        if (matchedPlayer) {
-                            if (bind.cost > 0 && matchedPlayer.wallet < bind.cost) {
-                                await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, you need ${bind.cost} ${currentConfig?.economyCurrency || 'Scrap'} to use this!"`, client);
-                                return;
-                            }
-                            if (bind.cost > 0) await matchedPlayer.update({ wallet: matchedPlayer.wallet - bind.cost });
-
-                            const finalCommandString = bind.command.replace(/{player}/gi, matchedPlayer.inGameName);
-                            for (const cmd of finalCommandString.split('\n')) {
-                                if (cmd.trim() !== '') await sendRconCommand(guildId, cmd.trim(), client);
-                            }
-                            break; 
-                        }
-                    }
-                }
-            } catch (e) {}
-        });
-    });
-}
-
-async function sendRconCommand(guildId, commandStr, client = null, serverId = null) {
-    let ws = activeConnections.get(guildId);
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-        try { await connectRcon(guildId, client || global.discordClient, serverId); ws = activeConnections.get(guildId); } catch (e) { throw e; }
-    }
-    if (!ws || ws.readyState !== WebSocket.OPEN) throw new Error("Not connected to RCON.");
-    ws.send(JSON.stringify({ Identifier: 1, Message: commandStr, Name: "BuddyBot" }));
-    return true;
-}
-
-async function queueAdminPos(interaction, type = 'custom_bind', targetId = null) {
-    const guildId = interaction.guild.id;
-    const adminId = interaction.user.id;
-    const client = interaction.client;
-
-    const userProfile = await UserEconomy.findOne({ where: { userId: adminId } });
-    if (!userProfile || !userProfile.inGameName) {
-        return interaction.editReply({ content: `❌ **Missing In-Game Name!** Link your gamertag via \`/playerpanel\` first!` }).catch(()=>{});
-    }
-
-    const inGameName = userProfile.inGameName;
-    if (adminPosQueue.has(adminId)) clearTimeout(adminPosQueue.get(adminId).timeoutTimer);
-
-    const timeoutTimer = setTimeout(async () => {
-        if (adminPosQueue.has(adminId)) {
-            adminPosQueue.delete(adminId);
-            await interaction.editReply({ content: `⚠️ **Auto-Scan Failed.** Make sure you are online as \`${inGameName}\` and try again.` }).catch(()=>{});
+    if (interaction.isModalSubmit()) {
+        if (customId === 'modal_br_percentage' && db.ArenaConfig) {
+            const val = parseInt(interaction.fields.getTextInputValue('percentage')) || 35;
+            await db.ArenaConfig.upsert({ guildId: interaction.guild.id, crateSpawnPercentage: val });
+            return interaction.reply({ content: `✅ Battle Royale crate spawn fill rate successfully updated to **${val}%** of mapped points per match!`, flags: 64 });
         }
-    }, 8000);
 
-    adminPosQueue.set(adminId, { guildId, adminId, type, timeoutTimer, inGameName, targetId, interaction });
-    
-    try {
-        await sendRconCommand(guildId, `printpos "${inGameName}"`, client);
-    } catch (err) {
-        adminPosQueue.delete(adminId);
-    }
-}
+        if (customId.startsWith('modal_br_prize_exec_') && db.ArenaPrize) {
+            const shortname = customId.replace('modal_br_prize_exec_', '');
+            const amount = interaction.fields.getTextInputValue('amount') || '1';
+            const prizeName = `${amount}x ${shortname}`;
+            const command = `inventory.giveto "{player}" ${shortname} ${amount}`;
 
-async function triggerCustomEvent(guildId, eventType, data = {}) {
-    if (eventType === 'supply_drop') return await sendRconCommand(guildId, 'supply.drop');
-    if (eventType === 'elite_crate') return await sendRconCommand(guildId, 'spawn codelockedhackablecrate');
-    if (eventType === 'timed_crate') return await sendRconCommand(guildId, 'spawn hackablelockedcrate');
-    return await sendRconCommand(guildId, 'cargoships.spawncargoship');
-}
+            await db.ArenaPrize.create({ guildId: interaction.guild.id, prizeName, command });
+            const totalPrizes = await db.ArenaPrize.count({ where: { guildId: interaction.guild.id } });
+            const share = (100 / totalPrizes).toFixed(1);
 
-async function processBountyLogic(guildId, killerDb, victimDb, client, config) {
-    const currency = config.economyCurrency || 'Scrap';
-    const guild = client.guilds.cache.get(guildId);
-    const gameChannel = config.logGameChannelId ? guild?.channels.cache.get(config.logGameChannelId) : null;
-
-    await killerDb.update({ currentKillstreak: (killerDb.currentKillstreak || 0) + 1 });
-    if (killerDb.currentKillstreak >= (config.bountyKillsToActivate || 5)) {
-        const cd = await BountyCooldown.findOne({ where: { guildId, userId: killerDb.userId } });
-        const now = new Date();
-        if (!cd || cd.expiresAt < now) {
-            const existingBounty = await ActiveBounty.findOne({ where: { guildId, userId: killerDb.userId } });
-            if (!existingBounty) {
-                await ActiveBounty.create({ guildId, userId: killerDb.userId, inGameName: killerDb.inGameName, reward: config.bountyRewardAmount || 500 });
-                const cdTime = new Date(now.getTime() + (config.bountyCooldownMinutes || 60) * 60000);
-                await BountyCooldown.upsert({ guildId, userId: killerDb.userId, expiresAt: cdTime });
-                if (gameChannel) gameChannel.send({ embeds: [new EmbedBuilder().setTitle('🎯 BOUNTY PLACED!').setDescription(`**${killerDb.inGameName}** has a **${killerDb.currentKillstreak} killstreak**! Bounty: **${config.bountyRewardAmount || 500} ${currency}**`).setColor('#e74c3c')] }).catch(()=>{});
-            }
+            return interaction.reply({ content: `✅ Added **${prizeName}** to the Battle Royale prize pool! Pool now has ${totalPrizes} items (**${share}%** chance each).`, flags: 64 });
         }
     }
+};
+
+// Expose autoSaveLocation so queueAdminPos can save BR coordinates directly when captured
+async function autoSaveLocation(guildId, posX, posY, posZ, targetType) {
+    if (targetType === 'br_spawn' && db.ArenaSpawn) {
+        await db.ArenaSpawn.create({ guildId, x: posX, y: posY, z: posZ });
+    } else if (targetType === 'br_crate' && db.ArenaCratePoint) {
+        await db.ArenaCratePoint.create({ guildId, x: posX, y: posY, z: posZ });
+    }
 }
 
-async function fetchServerKits(guildId) {
-    return new Promise(async (resolve, reject) => {
-        const ws = activeConnections.get(guildId);
-        if (!ws || ws.readyState !== WebSocket.OPEN) {
-            try { await connectRcon(guildId, global.discordClient); } catch (e) { return reject(new Error("Not connected to RCON.")); }
-        }
-        
-        let foundKits = [];
-        const tempListener = (data) => {
-            try {
-                const parsed = JSON.parse(data);
-                if (!parsed || !parsed.Message) return;
-                const msg = parsed.Message;
-                if (msg.includes("Kit") || msg.includes("kits") || msg.includes("[")) {
-                    for (const line of msg.split('\n')) {
-                        const clean = line.trim();
-                        if (clean && !clean.toLowerCase().includes('list')) foundKits.push(clean);
-                    }
-                }
-            } catch (e) {}
-        };
-
-        const activeWs = activeConnections.get(guildId);
-        activeWs.on('message', tempListener);
-        activeWs.send(JSON.stringify({ Identifier: 999, Message: "kit.list", Name: "BuddyBot" }));
-
-        setTimeout(() => {
-            activeWs.off('message', tempListener);
-            resolve(foundKits.length > 0 ? foundKits : ["starter", "vip", "builder"]); 
-        }, 1500);
-    });
+async function refreshPanelViaInteraction(interaction, message, targetType) {
+    return interaction.editReply({ content: message, components: [] }).catch(() => {});
 }
 
-module.exports = { connectRcon, sendRconCommand, triggerCustomEvent, activeConnections, adminPosQueue, queueAdminPos, fetchServerKits };
+module.exports.autoSaveLocation = autoSaveLocation;
+module.exports.refreshPanelViaInteraction = refreshPanelViaInteraction;
