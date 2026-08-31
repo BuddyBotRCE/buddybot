@@ -58,7 +58,7 @@ module.exports = async (interaction, client) => {
         const row1 = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder().setCustomId('gungame_action_select').setPlaceholder('Select Gun Game configuration...')
                 .addOptions([
-                    { label: '📍 Add Player Spawn Point', value: 'gg_add_spawn', description: 'Grabs your current in-game coordinates', emoji: '📍' },
+                    { label: '📍 Add Player Spawn Point (Button)', value: 'gg_add_spawn', description: 'Log position as a player spawn', emoji: '📍' },
                     { label: '⚡ Load Built-in Ladder Preset', value: 'gg_load_preset', description: 'Instantly load standard balanced weapon tier list', emoji: '⚡' },
                     { label: '🔫 Configure Single Tier Manually', value: 'gg_manual_tier', description: 'Edit specific weapon slots (1-21)', emoji: '🔫' },
                     { label: '🎁 Manage Equal-% Lucky Dip Prizes', value: 'gg_prizes', description: 'Set winner reward commands', emoji: '🎁' },
@@ -80,7 +80,10 @@ module.exports = async (interaction, client) => {
 
     if (customId === 'gungame_action_select') {
         if (selectedValue === 'gg_add_spawn') {
-            return interaction.reply({ content: '📍 **Arena Setup:** Stand at your desired spawn position in-game and type `/arenaspawn gungame` to register your coordinates.', flags: 64 });
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('btn_open_gg_spawn_modal').setLabel('📍 Set Gun Game Spawn Position').setStyle(ButtonStyle.Success)
+            );
+            return interaction.reply({ content: '📍 **Gun Game Spawn Setup:** Click below to enter or log your exact in-game coordinates (`X, Y, Z`):', components: [row], flags: 64 });
         }
 
         if (selectedValue === 'gg_load_preset') {
@@ -130,6 +133,17 @@ module.exports = async (interaction, client) => {
         }
     }
 
+    // Button Click Handler for Opening Position Modal
+    if (interaction.isButton()) {
+        if (customId === 'btn_open_gg_spawn_modal') {
+            const modal = new ModalBuilder().setCustomId('modal_gg_save_spawn').setTitle('Log Gun Game Spawn Coordinates');
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('coords').setLabel("Coordinates (X, Y, Z or x y z)").setStyle(TextInputStyle.Short).setPlaceholder("e.g. 150.5, 25.0, -320.1").setRequired(true))
+            );
+            return interaction.showModal(modal);
+        }
+    }
+
     // Catalog Select Menus for Prizes
     if (interaction.isStringSelectMenu()) {
         if (customId === 'gg_prize_category_select') {
@@ -163,6 +177,27 @@ module.exports = async (interaction, client) => {
     }
 
     if (interaction.isModalSubmit()) {
+        const parseCoords = (input) => {
+            const parts = input.replace(/[()]/g, '').split(/[\s,]+/);
+            if (parts.length >= 3) {
+                const x = parseFloat(parts[0]);
+                const y = parseFloat(parts[1]);
+                const z = parseFloat(parts[2]);
+                if (!isNaN(x) && !isNaN(y) && !isNaN(z)) return { x, y, z };
+            }
+            return null;
+        };
+
+        if (customId === 'modal_gg_save_spawn' && db.ArenaSpawn) {
+            const raw = interaction.fields.getTextInputValue('coords');
+            const pos = parseCoords(raw);
+            if (!pos) return interaction.reply({ content: '❌ Invalid coordinate format. Please use format like `150.5, 25.0, -320.1`.', flags: 64 });
+
+            await db.ArenaSpawn.create({ guildId: interaction.guild.id, x: pos.x, y: pos.y, z: pos.z });
+            const total = await db.ArenaSpawn.count({ where: { guildId: interaction.guild.id } });
+            return interaction.reply({ content: `✅ **Gun Game Spawn Mapped!**\n• Coords: \`X: ${pos.x}, Y: ${pos.y}, Z: ${pos.z}\`\n• Total Spawns: \`${total}\``, flags: 64 });
+        }
+
         if (customId === 'modal_gg_add_weapon' && db.GunGameWeapon) {
             const tier = parseInt(interaction.fields.getTextInputValue('tier'));
             const weaponName = interaction.fields.getTextInputValue('weapon').trim();

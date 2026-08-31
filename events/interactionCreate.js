@@ -81,6 +81,7 @@ module.exports = async (interaction, client) => {
             customId === 'gungame_action_select' || 
             customId === 'gg_prize_category_select' || 
             customId === 'gg_prize_item_select' ||
+            customId === 'btn_open_gg_spawn_modal' ||
             selectedValue === 'setup_gungame'
         ) {
             clearTimeout(timeoutSafety);
