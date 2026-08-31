@@ -16,26 +16,29 @@ module.exports = async (interaction, client) => {
 
     if (customId === 'admin_menu_select' && selectedValue === 'setup_battleroyale') {
         const ArenaCratePoint = db.ArenaCratePoint;
+        const ArenaSpawn = db.ArenaSpawn; // Using dedicated or general arena spawns
         const ArenaConfig = db.ArenaConfig;
         const ArenaPrize = db.ArenaPrize;
 
         const cratesMapped = ArenaCratePoint ? await ArenaCratePoint.count({ where: { guildId: interaction.guild.id } }).catch(() => 0) : 0;
+        const spawnsMapped = ArenaSpawn ? await ArenaSpawn.count({ where: { guildId: interaction.guild.id } }).catch(() => 0) : 0;
         const [config] = ArenaConfig ? await ArenaConfig.findOrCreate({ where: { guildId: interaction.guild.id } }).catch(() => [{}]) : [{}];
         const prizes = ArenaPrize ? await ArenaPrize.count({ where: { guildId: interaction.guild.id } }).catch(() => 0) : 0;
         const prizeShare = prizes > 0 ? (100 / prizes).toFixed(1) : 0;
 
         const embed = new EmbedBuilder()
             .setTitle('🛡️ Battle Royale Event Manager')
-            .setDescription(`Manage Rust Console Edition randomized crate-spawn Battle Royale arenas.\n\n• **Elite Crate Points Mapped:** \`${cratesMapped}\`\n• **Active Crate Fill Rate:** \`${config.crateSpawnPercentage || 35}% of mapped points\`\n• **Lucky Dip Prizes:** \`${prizes} items (${prizeShare}% each)\``)
+            .setDescription(`Manage Rust Console Edition randomized crate-spawn Battle Royale arenas.\n\n• **Player Spawn Points Mapped:** \`${spawnsMapped}\`\n• **Elite Crate Points Mapped:** \`${cratesMapped}\`\n• **Active Crate Fill Rate:** \`${config.crateSpawnPercentage || 35}% of mapped points\`\n• **Lucky Dip Prizes:** \`${prizes} items (${prizeShare}% each)\``)
             .setColor('#3498db');
 
         const row1 = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder().setCustomId('br_action_select').setPlaceholder('Select Battle Royale configuration...')
                 .addOptions([
+                    { label: '📍 Add Player Spawn Point', value: 'br_add_spawn', description: 'Logs your current position as a match start spawn', emoji: '📍' },
                     { label: '📦 Add Elite Crate Spawn Point', value: 'br_add_crate', description: 'Logs your current position as a potential crate drop site', emoji: '📦' },
                     { label: '⚙️ Set Crate Fill Percentage', value: 'br_set_percentage', description: 'Configure what % of crates spawn per match (e.g. 35%)', emoji: '⚙️' },
                     { label: '🎁 Manage Equal-% Lucky Dip Prizes', value: 'br_prizes', description: 'Shared prize pool with Gun Game', emoji: '🎁' },
-                    { label: '🗑️ Clear Mapped Crate Points', value: 'br_clear_crates', emoji: '🗑️' }
+                    { label: '🗑️ Clear Mapped Points', value: 'br_clear_all', description: 'Clear all spawns and crates', emoji: '🗑️' }
                 ])
         );
 
@@ -52,6 +55,10 @@ module.exports = async (interaction, client) => {
     }
 
     if (customId === 'br_action_select') {
+        if (selectedValue === 'br_add_spawn') {
+            return interaction.reply({ content: '📍 **BR Setup:** Stand at your desired player spawn location in-game and type `/arenaspawn brspawn` to log your coordinates.', flags: 64 });
+        }
+
         if (selectedValue === 'br_add_crate') {
             return interaction.reply({ content: '📦 **BR Setup:** Stand at your desired elite crate location in-game and type `/arenaspawn brcrate` to log the coordinates.', flags: 64 });
         }
@@ -79,9 +86,10 @@ module.exports = async (interaction, client) => {
             return interaction.reply({ content: '🎁 **Battle Royale Prize Wizard:** Select an item category for the prize pool:', components: [row], flags: 64 });
         }
 
-        if (selectedValue === 'br_clear_crates') {
+        if (selectedValue === 'br_clear_all') {
             if (db.ArenaCratePoint) await db.ArenaCratePoint.destroy({ where: { guildId: interaction.guild.id } });
-            return interaction.reply({ content: '✅ All mapped Battle Royale elite crate points have been cleared.', flags: 64 });
+            if (db.ArenaSpawn) await db.ArenaSpawn.destroy({ where: { guildId: interaction.guild.id } });
+            return interaction.reply({ content: '✅ All mapped Battle Royale spawn points and crate points have been cleared.', flags: 64 });
         }
     }
 

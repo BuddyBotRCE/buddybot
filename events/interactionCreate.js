@@ -113,7 +113,7 @@ module.exports = async (interaction, client) => {
         if (interaction.isModalSubmit()) {
             clearTimeout(timeoutSafety);
             if (customId.startsWith('modal_gg_')) return await gunGameHandler(interaction, client);
-            if (customId.startsWith('modal_br_')) return await battleRoyaleHandler(interaction, client);
+            if (customId.startsWith('modal_br_') || customId.startsWith('modal_br_prize_exec_')) return await battleRoyaleHandler(interaction, client);
 
             if (customId === 'modal_hometp_settings') return await homeTpHandler(interaction, client);
             if (customId === 'modal_skipnight_percentage') return await skipNightHandler(interaction, client); 
