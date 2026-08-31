@@ -9,6 +9,68 @@ const { activeConnections } = require('../utils/rconManager');
 const giveKitSessions = new Map();
 const adminActionSessions = new Map(); 
 
+// --- ⚙️ MASTER SWITCHBOARD DEFINITION ⚙️ ---
+const MODULES_LIST = [
+    { id: 'economyEnabled', name: 'Economy System', emoji: '💰' },
+    { id: 'shopEnabled', name: 'Shop & Store', emoji: '🛒' },
+    { id: 'ticketsEnabled', name: 'Ticket System', emoji: '🎫' },
+    { id: 'giveawaysEnabled', name: 'Giveaways', emoji: '🎉' },
+    { id: 'suggestionsEnabled', name: 'Suggestions', emoji: '💡' },
+    { id: 'casinoEnabled', name: 'Minigames Casino', emoji: '🎰' },
+    { id: 'buddypassEnabled', name: 'BuddyPass', emoji: '⭐' },
+    { id: 'clansEnabled', name: 'Clan System', emoji: '🛡️' },
+    { id: 'bountiesEnabled', name: 'Bounties', emoji: '🎯' },
+    { id: 'customZonesEnabled', name: 'Custom Zones', emoji: '🗺️' },
+    { id: 'autoEventsEnabled', name: 'Auto-Events', emoji: '🚁' },
+    { id: 'autoModEnabled', name: 'Auto-Mod', emoji: '🛡️' },
+    { id: 'orpEnabled', name: 'ORP Manager', emoji: '🛡️' },
+    { id: 'aiEnabled', name: 'AI Assistant', emoji: '🤖' },
+    { id: 'homeTpEnabled', name: 'Home Teleport', emoji: '🏠' },
+    { id: 'skipNightEnabled', name: 'Skip Night', emoji: '🌙' }
+];
+
+async function renderBotSettings(interaction, guildId, action = 'reply') {
+    const [config] = await GuildConfig.findOrCreate({ where: { guildId } });
+
+    let description = '**Current Module Status:**\n*Use the dropdown below to select which modules you want active. Any module left unselected will be disabled!*\n\n';
+    
+    MODULES_LIST.forEach(m => {
+        const isEnabled = config[m.id] !== false; // Defaults to true if null/undefined
+        description += `${m.emoji} **${m.name}:** ${isEnabled ? '🟢 ON' : '🔴 OFF'}\n`;
+    });
+
+    const embed = new EmbedBuilder()
+        .setTitle('⚙️ Global Bot Settings & Toggles')
+        .setDescription(description)
+        .setColor('#2ecc71');
+
+    const selectMenu = new StringSelectMenuBuilder()
+        .setCustomId('bot_settings_toggle_select')
+        .setPlaceholder('Check the boxes to ENABLE modules...')
+        .setMinValues(0)
+        .setMaxValues(MODULES_LIST.length)
+        .addOptions(MODULES_LIST.map(m => ({
+            label: m.name,
+            value: m.id,
+            emoji: m.emoji,
+            default: config[m.id] !== false // Visually checks the box if enabled
+        })));
+
+    const row1 = new ActionRowBuilder().addComponents(selectMenu);
+    const row2 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+    );
+
+    const payload = { content: null, embeds: [embed], components: [row1, row2], flags: 64 };
+    
+    if (action === 'reply') {
+        if (interaction.deferred || interaction.replied) await interaction.followUp(payload);
+        else await interaction.reply(payload);
+    } else {
+        await interaction.update(payload).catch(() => interaction.editReply(payload));
+    }
+}
+
 async function renderMainPanel(interaction) {
     const embed = new EmbedBuilder()
         .setTitle('🛠️ Admin Panel & Dashboard')
@@ -19,6 +81,7 @@ async function renderMainPanel(interaction) {
         new StringSelectMenuBuilder().setCustomId('admin_menu_select').setPlaceholder('⚙️ Basic Systems & Upgrades...')
             .addOptions([
                 { label: '⭐ Buy / Upgrade to Premium', value: 'setup_tier', description: 'Unlock all advanced modules and features', emoji: '⭐' },
+                { label: 'Bot Settings (Toggles)', value: 'setup_bot_settings', description: 'Enable or disable bot features', emoji: '⚙️' },
                 { label: 'RCON & Servers', value: 'setup_multiserver', emoji: '🌐' },
                 { label: 'Live Admin Tools', value: 'admin_tools', emoji: '🧰' },
                 { label: 'Shop & Store Manager', value: 'setup_shop', emoji: '🛒' },
@@ -42,7 +105,6 @@ async function renderMainPanel(interaction) {
                 { label: 'Clan System Manager', value: 'setup_clans', emoji: '🛡️' },
                 { label: 'Bounties System', value: 'setup_bounties', emoji: '🎯' },
                 { label: 'Custom Binds', value: 'setup_binds', emoji: '🗣️' },
-                { label: 'ORP Manager', value: 'setup_orp', emoji: '🛡️' },
                 { label: 'AI Integration Setup', value: 'setup_ai', emoji: '🤖' },
                 { label: 'Premium Status & License', value: 'setup_tier', emoji: '⭐' },
                 { label: 'Embeds & Reaction Roles', value: 'setup_embeds_roles', description: 'Announcements, Verifications, & Roles', emoji: '🎨' },
@@ -131,7 +193,7 @@ async function renderGiveKitPanel(interaction, session, messageOverride = '') {
 
 const adminHandler = async (interaction, client) => {
     const customId = interaction.customId || '';
-    const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
+    const selectedValue = interaction.isStringSelectMenu() && interaction.values ? interaction.values[0] : '';
     const userId = interaction.user.id;
 
     if (customId === 'admin_menu_back') {
@@ -162,6 +224,11 @@ const adminHandler = async (interaction, client) => {
         const backRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
         );
+
+        // 👇 CATCHING THE NEW BOT SETTINGS OPTION 👇
+        if (selectedValue === 'setup_bot_settings') {
+            return await renderBotSettings(interaction, interaction.guild.id, 'reply');
+        }
 
         if (selectedValue === 'setup_logging') {
             const embed = new EmbedBuilder().setTitle('📊 Server Logging Manager').setDescription('Route different types of logs to specific channels.').setColor('#3498db');
@@ -222,6 +289,23 @@ const adminHandler = async (interaction, client) => {
     }
 
     if (interaction.isStringSelectMenu()) {
+        // 👇 NEW: CATCHING THE SWITCHBOARD DROPDOWN SAVES 👇
+        if (customId === 'bot_settings_toggle_select') {
+            const selectedModules = interaction.values || []; // Which ones are checked
+            const updateData = {};
+            
+            // Loop through all possible modules, set true if selected, false if omitted
+            MODULES_LIST.forEach(m => {
+                updateData[m.id] = selectedModules.includes(m.id);
+            });
+
+            // Update the database in one quick save
+            await GuildConfig.upsert({ guildId: interaction.guild.id, ...updateData });
+            
+            // Re-render the panel to visually confirm changes
+            return await renderBotSettings(interaction, interaction.guild.id, 'update');
+        }
+
         if (customId === 'admin_global_server_select') {
             const sId = selectedValue.replace('admin_server_target_', '');
             if (sId === 'default') { adminActionSessions.delete(userId); return interaction.update({ content: '🌐 Target server reset to **Default / Main Server**.', components: interaction.message.components }); } 
