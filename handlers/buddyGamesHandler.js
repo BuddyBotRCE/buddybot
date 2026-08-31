@@ -11,10 +11,10 @@ module.exports = async (interaction, client) => {
         if (adminHandler && adminHandler.renderMainPanel) {
             return await adminHandler.renderMainPanel(interaction);
         }
-        return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] });
+        return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] }).catch(() => {});
     }
 
-    // Triggered from Dropdown 2: Shows the main Buddy Games menu
+    // 1. Triggered from Dropdown 2: Shows the main Buddy Games menu
     if (customId === 'admin_menu_select_2' && selectedValue === 'setup_buddy_games') {
         const embed = new EmbedBuilder()
             .setTitle('🎮 Buddy Games: Arena Event Suite')
@@ -33,10 +33,13 @@ module.exports = async (interaction, client) => {
             new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
         );
 
-        return interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
+        if (interaction.deferred || interaction.replied) {
+            return await interaction.editReply({ embeds: [embed], components: [row1, row2] });
+        }
+        return await interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
     }
 
-    // Handles selection from the Buddy Games hub dropdown
+    // 2. Handles selection from the Buddy Games hub dropdown
     if (customId === 'buddy_games_hub_select') {
         if (selectedValue === 'hub_goto_gungame') {
             interaction.values = ['setup_gungame'];
