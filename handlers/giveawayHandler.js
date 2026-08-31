@@ -4,7 +4,7 @@ const adminHandler = require('./adminHandler');
 
 module.exports = async (interaction, client) => {
     const customId = interaction.customId || '';
-    const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
+    const selectedValue = interaction.isStringSelectMenu() && interaction.values ? interaction.values[0] : '';
 
     if (customId === 'admin_menu_back') {
         if (adminHandler && adminHandler.renderMainPanel) {
@@ -41,21 +41,30 @@ module.exports = async (interaction, client) => {
     }
 
     if (customId.startsWith('select_ga_reroll_')) {
-        const ga = await Giveaway.findByPk(customId.replace('select_ga_reroll_', ''));
+        const gaId = customId.replace('select_ga_reroll_', '');
+        const ga = await Giveaway.findByPk(gaId);
         if (!ga) return interaction.reply({ content: '❌ Giveaway not found.', flags: 64 });
-        let entries = JSON.parse(ga.entries).filter(id => id !== interaction.values[0]);
+        
+        let entries = JSON.parse(ga.entries || '[]').filter(id => id !== interaction.values[0]);
         await ga.update({ entries: JSON.stringify(entries) });
-        if (entries.length === 0) return interaction.reply({ content: '❌ No valid entries left.', flags: 64 });
+        
+        if (entries.length === 0) return interaction.reply({ content: '❌ No valid entries left to reroll.', flags: 64 });
+        
         const newWinner = entries[Math.floor(Math.random() * entries.length)];
         const channel = client.channels.cache.get(ga.channelId);
-        if (channel) channel.send(`🎲 Giveaway Rerolled! <@${interaction.values[0]}> was replaced by our new winner: <@${newWinner}>!`);
+        if (channel) channel.send(`🎲 **Giveaway Rerolled!** (ID: #${ga.id})\n<@${interaction.values[0]}> was replaced by our new winner: <@${newWinner}>! 🎉`);
+        
         return interaction.update({ content: `✅ Rerolled successfully!`, components: [] });
     }
 
     if (customId === 'giveaway_action_select') {
         if (selectedValue === 'ga_start') {
-            const modal = new ModalBuilder().setCustomId('modal_giveaway_start').setTitle('Start Giveaway');
-            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('prize').setLabel("Prize").setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('minutes').setLabel("Duration in Minutes").setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('winners').setLabel("Number of Winners").setStyle(TextInputStyle.Short).setValue('1').setRequired(true)));
+            const modal = new ModalBuilder().setCustomId('modal_ga_start').setTitle('Start Giveaway');
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('prize').setLabel("Prize").setStyle(TextInputStyle.Short).setRequired(true)), 
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('minutes').setLabel("Duration in Minutes").setStyle(TextInputStyle.Short).setRequired(true)), 
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('winners').setLabel("Number of Winners").setStyle(TextInputStyle.Short).setValue('1').setRequired(true))
+            );
             return interaction.showModal(modal);
         }
         if (selectedValue === 'ga_channel') return interaction.reply({ content: '📺 Select default giveaway channel:', components: [new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_giveaway_channel').setPlaceholder('Select Channel...'))], flags: 64 });
@@ -64,61 +73,127 @@ module.exports = async (interaction, client) => {
             modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('banner_url').setLabel("Image URL").setStyle(TextInputStyle.Short).setRequired(true)));
             return interaction.showModal(modal);
         }
+        
+        // 👇 CHANGED: Input fields now ask for the short Giveaway ID 👇
         if (selectedValue === 'ga_reroll') {
             const modal = new ModalBuilder().setCustomId('modal_ga_reroll').setTitle('Reroll Giveaway');
-            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('msg_id').setLabel("Message ID").setStyle(TextInputStyle.Short).setRequired(true)));
+            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ga_id').setLabel("Giveaway ID (e.g. 1, 2, 3)").setStyle(TextInputStyle.Short).setRequired(true)));
             return interaction.showModal(modal);
         }
         if (selectedValue === 'ga_cancel') {
             const modal = new ModalBuilder().setCustomId('modal_ga_cancel').setTitle('Cancel Giveaway');
-            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('msg_id').setLabel("Message ID").setStyle(TextInputStyle.Short).setRequired(true)));
+            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ga_id').setLabel("Giveaway ID (e.g. 1, 2, 3)").setStyle(TextInputStyle.Short).setRequired(true)));
             return interaction.showModal(modal);
         }
         if (selectedValue === 'ga_players') {
             const modal = new ModalBuilder().setCustomId('modal_ga_players').setTitle('View Participants');
-            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('msg_id').setLabel("Message ID").setStyle(TextInputStyle.Short).setRequired(true)));
+            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ga_id').setLabel("Giveaway ID (e.g. 1, 2, 3)").setStyle(TextInputStyle.Short).setRequired(true)));
             return interaction.showModal(modal);
         }
     }
 
     if (customId === 'enter_giveaway') {
-        const giveaway = await Giveaway.findByPk(interaction.message.id);
-        if (!giveaway || !giveaway.isActive) return interaction.reply({ content: '❌ Ended!', flags: 64 });
-        let entries = JSON.parse(giveaway.entries);
-        if (!entries.includes(interaction.user.id)) { entries.push(interaction.user.id); await giveaway.update({ entries: JSON.stringify(entries) }); }
-        return interaction.reply({ content: '🎉 Entered!', flags: 64 });
+        const giveaway = await Giveaway.findOne({ where: { messageId: interaction.message.id } });
+        if (!giveaway || !giveaway.isActive) return interaction.reply({ content: '❌ This giveaway has ended or does not exist!', flags: 64 });
+        
+        let entries = JSON.parse(giveaway.entries || '[]');
+        if (!entries.includes(interaction.user.id)) { 
+            entries.push(interaction.user.id); 
+            await giveaway.update({ entries: JSON.stringify(entries) }); 
+            return interaction.reply({ content: `🎉 You have successfully entered the giveaway for **${giveaway.prize}**! Good luck!`, flags: 64 });
+        } else {
+            return interaction.reply({ content: '❌ You are already entered into this giveaway!', flags: 64 });
+        }
     }
 
     if (interaction.isModalSubmit()) {
-        if (customId === 'modal_giveaway_start') {
+        if (customId === 'modal_ga_start') {
             const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-            const targetChannel = client.channels.cache.get(config?.giveawayChannelId || interaction.channel.id);
-            const endTime = new Date(Date.now() + parseInt(interaction.fields.getTextInputValue('minutes')) * 60000);
-            const embed = new EmbedBuilder().setTitle('🎉 GIVEAWAY 🎉').setDescription(`**Prize:** ${interaction.fields.getTextInputValue('prize')}\n**Ends:** <t:${Math.floor(endTime.getTime()/1000)}:R>`).setColor('#9b59b6');
+            const targetChannelId = config?.giveawayChannelId || interaction.channel.id;
+            const targetChannel = client.channels.cache.get(targetChannelId) || await client.channels.fetch(targetChannelId).catch(() => null);
+            
+            if (!targetChannel) return interaction.reply({ content: '❌ Error: Could not find the default giveaway channel. Please set it again in the Giveaway Manager.', flags: 64 });
+
+            const minutes = parseInt(interaction.fields.getTextInputValue('minutes')) || 60;
+            const winners = parseInt(interaction.fields.getTextInputValue('winners')) || 1;
+            const prize = interaction.fields.getTextInputValue('prize');
+            const endTime = new Date(Date.now() + minutes * 60000);
+
+            // 1. Send the message first with a pending footer
+            const embed = new EmbedBuilder()
+                .setTitle('🎉 GIVEAWAY TIME 🎉')
+                .setDescription(`**Prize:** ${prize}\n**Winners:** ${winners}\n**Ends:** <t:${Math.floor(endTime.getTime()/1000)}:R>`)
+                .setColor('#9b59b6')
+                .setFooter({ text: 'Giveaway ID: Pending... | Click below to enter!' });
+
             if (config?.giveawayBannerUrl) embed.setImage(config.giveawayBannerUrl);
-            const msg = await targetChannel.send({ embeds: [embed], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('enter_giveaway').setLabel('Enter Giveaway').setStyle(ButtonStyle.Success))] });
-            await Giveaway.create({ messageId: msg.id, guildId: interaction.guild.id, channelId: targetChannel.id, prize: interaction.fields.getTextInputValue('prize'), endTime: endTime, winnersCount: parseInt(interaction.fields.getTextInputValue('winners')) });
-            return interaction.reply({ content: `✅ Started!`, flags: 64 });
+            
+            const msg = await targetChannel.send({ 
+                content: '🎊 **New Giveaway Started!**',
+                embeds: [embed], 
+                components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('enter_giveaway').setLabel('Enter Giveaway').setStyle(ButtonStyle.Success).setEmoji('🎁'))] 
+            });
+            
+            // 2. Create the Database Entry to generate the sequential ID
+            const ga = await Giveaway.create({ 
+                messageId: msg.id, 
+                guildId: interaction.guild.id, 
+                channelId: targetChannel.id, 
+                prize: prize, 
+                endTime: endTime, 
+                winnersCount: winners,
+                entries: '[]',
+                isActive: true
+            });
+            
+            // 3. Edit the embed to show the newly generated ID
+            embed.setFooter({ text: `Giveaway ID: #${ga.id} | Click the button below to enter!` });
+            await msg.edit({ embeds: [embed] });
+
+            return interaction.reply({ content: `✅ Giveaway successfully started in <#${targetChannel.id}>!\n**Giveaway ID:** \`#${ga.id}\``, flags: 64 });
         }
+
         if (customId === 'modal_ga_banner') {
             await GuildConfig.upsert({ guildId: interaction.guild.id, giveawayBannerUrl: interaction.fields.getTextInputValue('banner_url') });
-            return interaction.reply({ content: `✅ Banner updated!`, flags: 64 });
+            return interaction.reply({ content: `✅ Giveaway banner URL successfully updated!`, flags: 64 });
         }
+
+        // Helper function to find a giveaway safely by either the short ID or the long Message ID
+        const fetchGiveawaySafely = async (input) => {
+            let ga = null;
+            if (!isNaN(input)) { ga = await Giveaway.findOne({ where: { id: parseInt(input), guildId: interaction.guild.id } }).catch(() => null); }
+            if (!ga) { ga = await Giveaway.findOne({ where: { messageId: input, guildId: interaction.guild.id } }).catch(() => null); }
+            return ga;
+        };
+
         if (customId === 'modal_ga_reroll') {
-            const ga = await Giveaway.findByPk(interaction.fields.getTextInputValue('msg_id'));
-            if (!ga) return interaction.reply({ content: '❌ Not found.', flags: 64 });
-            return interaction.reply({ content: `🎲 Select winner to replace:`, components: [new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId(`select_ga_reroll_${ga.messageId}`).setPlaceholder('Select winner to replace...'))], flags: 64 });
+            const inputId = interaction.fields.getTextInputValue('ga_id').trim();
+            const ga = await fetchGiveawaySafely(inputId);
+            
+            if (!ga) return interaction.reply({ content: '❌ Giveaway not found. Make sure you entered a valid Giveaway ID (e.g. 1).', flags: 64 });
+            return interaction.reply({ content: `🎲 Select the winner you want to replace for **Giveaway #${ga.id}**:`, components: [new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId(`select_ga_reroll_${ga.id}`).setPlaceholder('Select winner to replace...'))], flags: 64 });
         }
+
         if (customId === 'modal_ga_cancel') {
-            const ga = await Giveaway.findByPk(interaction.fields.getTextInputValue('msg_id'));
-            if (!ga) return interaction.reply({ content: '❌ Not found.', flags: 64 });
+            const inputId = interaction.fields.getTextInputValue('ga_id').trim();
+            const ga = await fetchGiveawaySafely(inputId);
+            
+            if (!ga) return interaction.reply({ content: '❌ Giveaway not found. Make sure you entered a valid Giveaway ID (e.g. 1).', flags: 64 });
+            
             await ga.update({ isActive: false });
-            return interaction.reply({ content: `✅ Cancelled.`, flags: 64 });
+            return interaction.reply({ content: `✅ Giveaway **#${ga.id}** (${ga.prize}) has been successfully cancelled.`, flags: 64 });
         }
+
         if (customId === 'modal_ga_players') {
-            const ga = await Giveaway.findByPk(interaction.fields.getTextInputValue('msg_id'));
-            if (!ga) return interaction.reply({ content: '❌ Not found.', flags: 64 });
-            return interaction.reply({ content: `👥 **Participants (${JSON.parse(ga.entries).length}):**\n${JSON.parse(ga.entries).map(id => `<@${id}>`).join(', ')}`, flags: 64 });
+            const inputId = interaction.fields.getTextInputValue('ga_id').trim();
+            const ga = await fetchGiveawaySafely(inputId);
+            
+            if (!ga) return interaction.reply({ content: '❌ Giveaway not found. Make sure you entered a valid Giveaway ID (e.g. 1).', flags: 64 });
+            
+            const entries = JSON.parse(ga.entries || '[]');
+            if (entries.length === 0) return interaction.reply({ content: `👥 **Participants for Giveaway #${ga.id}:** None yet!`, flags: 64 });
+            
+            return interaction.reply({ content: `👥 **Participants for #${ga.id} (${entries.length}):**\n${entries.map(id => `<@${id}>`).join(', ')}`, flags: 64 });
         }
     }
 };
