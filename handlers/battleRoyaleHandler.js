@@ -39,8 +39,11 @@ module.exports = async (interaction, client) => {
             new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
         );
 
-        return interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
-    }
+        if (!interaction.deferred && !interaction.replied) {
+            return interaction.update({ embeds: [embed], components: [row1, row2] });
+        }
+        return interaction.followUp({ embeds: [embed], components: [row1, row2], flags: 64 });
+        }
 
     if (customId === 'br_action_select') {
         if (selectedValue === 'br_add_crate') {

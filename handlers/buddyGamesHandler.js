@@ -37,14 +37,8 @@ module.exports = async (interaction, client) => {
                 new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
             );
 
-            // Safe update check for Discord components
-            if (interaction.isStringSelectMenu() || interaction.isButton()) {
-                if (!interaction.deferred && !interaction.replied) {
-                    return await interaction.update({ embeds: [embed], components: [row1, row2] }).catch(async () => {
-                        // Fallback if update fails
-                        await interaction.followUp({ embeds: [embed], components: [row1, row2], flags: 64 }).catch(() => {});
-                    });
-                }
+            if (!interaction.deferred && !interaction.replied) {
+                return await interaction.update({ embeds: [embed], components: [row1, row2] }).catch(() => {});
             }
         }
 
