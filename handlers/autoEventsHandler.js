@@ -1,5 +1,5 @@
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } = require('discord.js');
-const { AutoEvent, AutoEventLocation } = require('../database/db');
+const { AutoEvent, AutoEventLocation, GameServer } = require('../database/db');
 const { sendRconCommand, queueAdminPos } = require('../utils/rconManager'); 
 
 const aeSessions = new Map();
@@ -13,13 +13,20 @@ const TYPE_INFO = {
 };
 
 const buildPanelPayload = async (guildId, messageOverride = '') => {
-    if (!aeSessions.has(guildId)) aeSessions.set(guildId, { selectedEventId: null, view: 'main' });
+    if (!aeSessions.has(guildId)) aeSessions.set(guildId, { selectedEventId: null, view: 'main', serverId: null });
     const session = aeSessions.get(guildId);
     const allEvents = await AutoEvent.findAll({ where: { guildId } });
+    const servers = await GameServer.findAll({ where: { guildId } });
     let components = [];
     
     const embed = new EmbedBuilder().setColor('#3498db').setTitle('⚙️ Auto Events Manager');
     if (messageOverride) embed.setDescription(`**${messageOverride}**\n\n`);
+
+    let serverDisplay = '`Default / Main Server`';
+    if (session.serverId) {
+        const targetServer = servers.find(s => s.id == session.serverId);
+        if (targetServer) serverDisplay = `**${targetServer.serverName}**`;
+    }
 
     if (session.view === 'main') {
         let activeList = '';
@@ -38,7 +45,17 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
             if (inactiveList) embed.addFields({ name: '🔴 Inactive / Disabled Events', value: inactiveList, inline: false });
         }
 
-        embed.addFields({ name: '🛠️ Controls', value: '👇 **Select an event to configure, or create a new one.**' });
+        embed.addFields(
+            { name: '🖥️ Target Server', value: serverDisplay, inline: false },
+            { name: '🛠️ Controls', value: '👇 **Select an event to configure, or create a new one.**', inline: false }
+        );
+
+        if (servers.length > 0) {
+            const serverOptions = [{ label: 'Default / Main Server', value: 'ae_server_default', emoji: '🌐' }, ...servers.map(s => ({ label: s.serverName, value: `ae_server_${s.id}`, emoji: '🖥️' }))];
+            components.push(new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder().setCustomId('ae_menu_server_select').setPlaceholder('🖥️ Select target server...').addOptions(serverOptions)
+            ));
+        }
 
         const selectOptions = allEvents.length > 0 
             ? allEvents.slice(0, 25).map(ev => ({ label: ev.name.substring(0, 100), description: `Type: ${TYPE_INFO[ev.eventType]?.name || ev.eventType} | Every ${ev.interval}m`, value: `ae_select_${ev.id}`, emoji: TYPE_INFO[ev.eventType]?.emoji || '⚙️' }))
@@ -91,6 +108,7 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
             : '*No positions saved. Click "Add Player Pos" below.*';
 
         embed.addFields(
+            { name: `🖥️ Target Server`, value: serverDisplay, inline: false },
             { name: `📊 Event Details`, value: `**Type:** ${typeData.name}\n**Quantity per Trigger:** Spawns ${activeEvent.amount}\n**Timer Interval:** Every **${activeEvent.interval || 60} minutes**\n**Status:** ${activeEvent.isEnabled ? '🟢 ENABLED' : '🔴 DISABLED'}` },
             { name: `📍 Saved Spawn Locations`, value: locList }
         );
@@ -143,7 +161,7 @@ const autoEventsHandler = async (interaction, client) => {
         const customId = interaction.customId || '';
         const guildId = interaction.guild.id;
 
-        if (!aeSessions.has(guildId)) aeSessions.set(guildId, { selectedEventId: null, view: 'main' });
+        if (!aeSessions.has(guildId)) aeSessions.set(guildId, { selectedEventId: null, view: 'main', serverId: null });
         const session = aeSessions.get(guildId);
 
         const renderAEPanel = async (inter, messageOverride = '') => {
@@ -171,6 +189,11 @@ const autoEventsHandler = async (interaction, client) => {
 
         if (interaction.isStringSelectMenu()) {
             const value = interaction.values[0];
+
+            if (customId === 'ae_menu_server_select') {
+                session.serverId = value === 'ae_server_default' ? null : value.replace('ae_server_', '');
+                return await renderAEPanel(interaction, `🖥️ Target server updated!`);
+            }
 
             if (customId === 'ae_menu_manage_select') {
                 session.selectedEventId = value.replace('ae_select_', '');
@@ -241,7 +264,6 @@ const autoEventsHandler = async (interaction, client) => {
                 return await interaction.showModal(modal);
             }
 
-            // === POSITION LOGIC KEPT EXACTLY THE SAME - JUST USING ev.id ===
             if (customId === 'ae_btn_undopos') {
                 const ev = await AutoEvent.findByPk(session.selectedEventId);
                 if (ev) {
@@ -255,7 +277,7 @@ const autoEventsHandler = async (interaction, client) => {
                 const ev = await AutoEvent.findByPk(session.selectedEventId);
                 const loadingPayload = await buildPanelPayload(guildId, '⏳ **Extracting your position from the server...**');
                 await interaction.update(loadingPayload);
-                await queueAdminPos(interaction, 'auto_event', ev.id);
+                await queueAdminPos(interaction, 'auto_event', ev.id, session.serverId);
                 return;
             }
 
@@ -268,7 +290,7 @@ const autoEventsHandler = async (interaction, client) => {
                 for (let i = 0; i < (ev.amount || 1); i++) {
                     for (const loc of locs) {
                         try {
-                            await sendRconCommand(guildId, `spawn ${prefab} "${loc.posX},${loc.posY},${loc.posZ}"`);
+                            await sendRconCommand(guildId, `spawn ${prefab} "${loc.posX},${loc.posY},${loc.posZ}"`, client, session.serverId);
                             fired++;
                         } catch (e) {}
                     }
@@ -285,7 +307,6 @@ const autoEventsHandler = async (interaction, client) => {
     }
 };
 
-// === LOCATION SAVER KEPT EXACTLY THE SAME ===
 autoEventsHandler.autoSaveLocation = async (guildId, x, y, z, eventId) => {
     if (!eventId) return;
 
@@ -312,3 +333,5 @@ autoEventsHandler.refreshPanelViaInteraction = async (interaction, messageOverri
 };
 
 module.exports = autoEventsHandler;
+module.exports.autoSaveLocation = autoEventsHandler.autoSaveLocation;
+module.exports.refreshPanelViaInteraction = autoEventsHandler.refreshPanelViaInteraction;

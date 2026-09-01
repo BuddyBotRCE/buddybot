@@ -1,10 +1,11 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { GuildConfig, UserEconomy, PveZone, CustomBind, ShopCooldown, BindCooldown, BountyCooldown, HomeTeleportCooldown, HomeTeleportLocation } = require('../database/db');
+const { GuildConfig, UserEconomy, PveZone, CustomBind, ShopCooldown, BindCooldown, BountyCooldown, HomeTeleportCooldown, HomeTeleportLocation, GameServer } = require('../database/db');
 const { sendRconCommand } = require('../utils/rconManager');
 const adminHandler = require('./adminHandler');
 
 module.exports = async (interaction, client) => {
     const customId = interaction.customId || '';
+    const guildId = interaction.guild.id;
 
     try {
         if (customId === 'admin_menu_back') {
@@ -71,10 +72,10 @@ module.exports = async (interaction, client) => {
         if (interaction.isModalSubmit()) {
             if (customId === 'modal_wipe_cooldowns') {
                 if (interaction.fields.getTextInputValue('confirm_text') !== 'COOLDOWNS') return interaction.reply({ content: '❌ Action Cancelled. You must type `COOLDOWNS`.', flags: 64 });
-                await ShopCooldown.destroy({ where: { guildId: interaction.guild.id } });
-                await BindCooldown.destroy({ where: { guildId: interaction.guild.id } });
-                await BountyCooldown.destroy({ where: { guildId: interaction.guild.id } });
-                await HomeTeleportCooldown.destroy({ where: { guildId: interaction.guild.id } });
+                await ShopCooldown.destroy({ where: { guildId } });
+                await BindCooldown.destroy({ where: { guildId } });
+                await BountyCooldown.destroy({ where: { guildId } });
+                await HomeTeleportCooldown.destroy({ where: { guildId } });
                 return interaction.reply({ content: `⏳ **All Cooldowns Cleared!** Shop, bind, bounty, and home teleport cooldown timers have been completely wiped.`, flags: 64 });
             }
 
@@ -84,15 +85,15 @@ module.exports = async (interaction, client) => {
                 let updateData = {}; 
                 
                 if (customId === 'modal_wipe_full') {
-                    const allZones = await PveZone.findAll({ where: { guildId: interaction.guild.id } });
-                    for (const z of allZones) { try { await sendRconCommand(interaction.guild.id, `zones.deletecustomzone "${z.zoneName}"`); } catch (e) {} }
-                    await PveZone.destroy({ where: { guildId: interaction.guild.id } });
-                    await CustomBind.destroy({ where: { guildId: interaction.guild.id } });
-                    await ShopCooldown.destroy({ where: { guildId: interaction.guild.id } });
-                    await BindCooldown.destroy({ where: { guildId: interaction.guild.id } });
-                    await BountyCooldown.destroy({ where: { guildId: interaction.guild.id } });
-                    await HomeTeleportCooldown.destroy({ where: { guildId: interaction.guild.id } });
-                    await HomeTeleportLocation.destroy({ where: { guildId: interaction.guild.id } });
+                    const allZones = await PveZone.findAll({ where: { guildId } });
+                    for (const z of allZones) { try { await sendRconCommand(guildId, `zones.deletecustomzone "${z.zoneName}"`); } catch (e) {} }
+                    await PveZone.destroy({ where: { guildId } });
+                    await CustomBind.destroy({ where: { guildId } });
+                    await ShopCooldown.destroy({ where: { guildId } });
+                    await BindCooldown.destroy({ where: { guildId } });
+                    await BountyCooldown.destroy({ where: { guildId } });
+                    await HomeTeleportCooldown.destroy({ where: { guildId } });
+                    await HomeTeleportLocation.destroy({ where: { guildId } });
 
                     updateData = { wallet: 0, xp: 0, level: 1, homeX: null, homeY: null, homeZ: null, autoSupplyEnabled: false, autoEliteEnabled: false, autoTimedEnabled: false, supplySpawnCount: 1, eliteSpawnCount: 1, timedSpawnCount: 1 };
                     for (let i = 1; i <= 10; i++) {
@@ -106,19 +107,19 @@ module.exports = async (interaction, client) => {
                     if (sel.includes('wipe_bp')) { updateData.xp = 0; updateData.level = 1; }
                     if (sel.includes('wipe_tp')) { 
                         updateData.homeX = null; updateData.homeY = null; updateData.homeZ = null; 
-                        await HomeTeleportLocation.destroy({ where: { guildId: interaction.guild.id } });
-                        await HomeTeleportCooldown.destroy({ where: { guildId: interaction.guild.id } });
+                        await HomeTeleportLocation.destroy({ where: { guildId } });
+                        await HomeTeleportCooldown.destroy({ where: { guildId } });
                     }
                     if (sel.includes('wipe_zones')) {
-                        const selZones = await PveZone.findAll({ where: { guildId: interaction.guild.id } });
-                        for (const z of selZones) { try { await sendRconCommand(interaction.guild.id, `zones.deletecustomzone "${z.zoneName}"`); } catch (e) {} }
-                        await PveZone.destroy({ where: { guildId: interaction.guild.id } });
+                        const selZones = await PveZone.findAll({ where: { guildId } });
+                        for (const z of selZones) { try { await sendRconCommand(guildId, `zones.deletecustomzone "${z.zoneName}"`); } catch (e) {} }
+                        await PveZone.destroy({ where: { guildId } });
                     }
-                    if (sel.includes('wipe_binds')) await CustomBind.destroy({ where: { guildId: interaction.guild.id } });
+                    if (sel.includes('wipe_binds')) await CustomBind.destroy({ where: { guildId } });
                 }
                 
-                await GuildConfig.update(updateData, { where: { guildId: interaction.guild.id } });
-                await UserEconomy.update(updateData, { where: { guildId: interaction.guild.id } });
+                await GuildConfig.update(updateData, { where: { guildId } });
+                await UserEconomy.update(updateData, { where: { guildId } });
                 
                 return interaction.reply({ content: `☢️ **Server WIPED successfully!** Requested databases and cooldowns have been cleared.`, flags: 64 });
             }

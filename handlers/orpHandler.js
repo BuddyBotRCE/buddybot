@@ -1,14 +1,14 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { OrpConfig, PlayerOrpBase } = require('../database/db');
+const { OrpConfig, PlayerOrpBase, GameServer } = require('../database/db');
 
 module.exports = async (interaction, client) => {
     const customId = interaction.customId || '';
     const selectedValue = interaction.isStringSelectMenu() && interaction.values ? interaction.values[0] : '';
+    const guildId = interaction.guild.id;
 
     try {
-        // --- 1. ADMIN MENU ENTRY POINT ---
         if (selectedValue === 'setup_orp') {
-            const [orpConf] = await OrpConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
+            const [orpConf] = await OrpConfig.findOrCreate({ where: { guildId } });
 
             const embed = new EmbedBuilder()
                 .setTitle('🛡️ ORP Manager (Offline Raid Protection)')
@@ -27,10 +27,9 @@ module.exports = async (interaction, client) => {
             return interaction.reply({ embeds: [embed], components: [row1, backRow], flags: 64 });
         }
 
-        // --- 2. BUTTON CLICKS ---
         if (interaction.isButton()) {
             if (customId === 'btn_orp_config') {
-                const [orpConf] = await OrpConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
+                const [orpConf] = await OrpConfig.findOrCreate({ where: { guildId } });
                 const modal = new ModalBuilder().setCustomId('modal_orp_config').setTitle('Configure ORP Parameters');
                 modal.addComponents(
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('radius').setLabel("Zone Radius (meters)").setStyle(TextInputStyle.Short).setValue(`${orpConf.zoneSize}`).setRequired(true)),
@@ -42,12 +41,11 @@ module.exports = async (interaction, client) => {
             }
 
             if (customId === 'btn_orp_clear') {
-                await PlayerOrpBase.destroy({ where: { guildId: interaction.guild.id } });
+                await PlayerOrpBase.destroy({ where: { guildId } });
                 return interaction.reply({ content: '✅ Cleared all registered ORP bases for this server.', flags: 64 });
             }
         }
 
-        // --- 3. MODAL SUBMISSIONS ---
         if (interaction.isModalSubmit()) {
             if (customId === 'modal_orp_config') {
                 const radius = parseInt(interaction.fields.getTextInputValue('radius')) || 25;
@@ -56,7 +54,7 @@ module.exports = async (interaction, client) => {
                 const offlineCol = interaction.fields.getTextInputValue('offline_color');
 
                 await OrpConfig.upsert({
-                    guildId: interaction.guild.id,
+                    guildId,
                     zoneSize: radius,
                     activeDurationHours: duration,
                     onlineColor: onlineCol,

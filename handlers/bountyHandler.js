@@ -1,10 +1,11 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { GuildConfig, ActiveBounty } = require('../database/db');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder } = require('discord.js');
+const { GuildConfig, ActiveBounty, GameServer } = require('../database/db');
 const adminHandler = require('./adminHandler');
 
 module.exports = async (interaction, client) => {
     const customId = interaction.customId || '';
     const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
+    const guildId = interaction.guild.id;
 
     if (customId === 'admin_menu_back') {
         if (adminHandler && adminHandler.renderMainPanel) {
@@ -14,8 +15,8 @@ module.exports = async (interaction, client) => {
     }
 
     if (customId === 'admin_menu_select' && selectedValue === 'setup_bounties') {
-        const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-        const activeBounties = await ActiveBounty.count({ where: { guildId: interaction.guild.id } });
+        const config = await GuildConfig.findOne({ where: { guildId } });
+        const activeBounties = await ActiveBounty.count({ where: { guildId } });
         
         const embed = new EmbedBuilder()
             .setTitle('🎯 Bounties System Manager')
@@ -35,8 +36,8 @@ module.exports = async (interaction, client) => {
     }
 
     if (customId === 'hub_bounties') {
-        const bounties = await ActiveBounty.findAll({ where: { guildId: interaction.guild.id } });
-        const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+        const bounties = await ActiveBounty.findAll({ where: { guildId } });
+        const config = await GuildConfig.findOne({ where: { guildId } });
         const currency = config?.economyCurrency || 'Scrap';
 
         if (bounties.length === 0) return interaction.reply({ content: '🎯 There are currently no active bounties on the server. Nobody has reached the killstreak threshold yet!', flags: 64 });
@@ -57,7 +58,7 @@ module.exports = async (interaction, client) => {
     }
 
     if (customId === 'btn_bounty_clear') {
-        await ActiveBounty.destroy({ where: { guildId: interaction.guild.id } });
+        await ActiveBounty.destroy({ where: { guildId } });
         return interaction.reply({ content: '🗑️ All active bounties have been cleared from the database.', flags: 64 });
     }
 
@@ -65,7 +66,7 @@ module.exports = async (interaction, client) => {
         const kills = parseInt(interaction.fields.getTextInputValue('kills')) || 5;
         const reward = parseInt(interaction.fields.getTextInputValue('reward')) || 500;
         const cooldown = parseInt(interaction.fields.getTextInputValue('cooldown')) || 60;
-        await GuildConfig.upsert({ guildId: interaction.guild.id, bountyKillsToActivate: kills, bountyRewardAmount: reward, bountyCooldownMinutes: cooldown });
+        await GuildConfig.upsert({ guildId, bountyKillsToActivate: kills, bountyRewardAmount: reward, bountyCooldownMinutes: cooldown });
         return interaction.reply({ content: `✅ Bounty system configured!\n• Activates at: **${kills} Kills**\n• Reward: **${reward} Scrap**\n• Cooldown: **${cooldown} mins**`, flags: 64 });
     }
 };

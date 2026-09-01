@@ -1,5 +1,5 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder } = require('discord.js');
-const { GuildConfig } = require('../database/db');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, StringSelectMenuBuilder } = require('discord.js');
+const { GuildConfig, GameServer } = require('../database/db');
 const adminHandler = require('./adminHandler');
 
 const loggingHandler = async (interaction, client) => {
@@ -15,7 +15,6 @@ const loggingHandler = async (interaction, client) => {
             return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] });
         }
 
-        // --- 1. ADMIN CONFIGURATION VIEW ---
         if (customId === 'admin_menu_select' && (selectedValue === 'setup_logging' || selectedValue.includes('log'))) {
             const config = await GuildConfig.findOne({ where: { guildId } }) || {};
 
@@ -58,7 +57,6 @@ const loggingHandler = async (interaction, client) => {
             return await interaction.update(payload).catch(() => interaction.followUp(payload));
         }
 
-        // --- BUTTON TRIGGERS FOR CHANNEL SELECTION ---
         if (interaction.isButton()) {
             let logType = '';
             if (customId === 'btn_log_set_admin') logType = 'admin';
@@ -74,7 +72,7 @@ const loggingHandler = async (interaction, client) => {
                     new ChannelSelectMenuBuilder()
                         .setCustomId(`select_log_chan_${logType}`)
                         .setPlaceholder(`Select channel for ${logType} logs...`)
-                        .setChannelTypes([0]) // Text channels
+                        .setChannelTypes([0]) 
                 );
                 await interaction.reply({
                     content: '📺 Select the Discord channel for **' + logType.toUpperCase() + '** logs:',
@@ -85,7 +83,6 @@ const loggingHandler = async (interaction, client) => {
             }
         }
 
-        // --- CHANNEL SELECT MENU SUBMISSIONS ---
         if (interaction.isChannelSelectMenu() && customId.startsWith('select_log_chan_')) {
             const logType = customId.replace('select_log_chan_', '');
             const channelId = interaction.values[0];

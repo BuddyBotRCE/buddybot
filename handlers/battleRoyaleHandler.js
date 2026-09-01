@@ -7,18 +7,29 @@ const { queueAdminPos } = require('../utils/rconManager');
 const brSessions = new Map();
 
 const buildBRPanelPayload = async (guildId, messageOverride = '') => {
-    if (!brSessions.has(guildId)) brSessions.set(guildId, { view: 'main' });
+    if (!brSessions.has(guildId)) brSessions.set(guildId, { view: 'main', serverId: null });
+    const session = brSessions.get(guildId);
     
     const ArenaCratePoint = db.ArenaCratePoint;
     const ArenaSpawn = db.ArenaSpawn;
     const ArenaConfig = db.ArenaConfig;
     const ArenaPrize = db.ArenaPrize;
+    const GameServer = db.GameServer;
 
     const cratesMapped = ArenaCratePoint ? await ArenaCratePoint.count({ where: { guildId } }).catch(() => 0) : 0;
     const spawnsMapped = ArenaSpawn ? await ArenaSpawn.count({ where: { guildId } }).catch(() => 0) : 0;
     const [config] = ArenaConfig ? await ArenaConfig.findOrCreate({ where: { guildId } }).catch(() => [{}]) : [{}];
     const prizes = ArenaPrize ? await ArenaPrize.count({ where: { guildId } }).catch(() => 0) : 0;
     const prizeShare = prizes > 0 ? (100 / prizes).toFixed(1) : 0;
+    const servers = GameServer ? await GameServer.findAll({ where: { guildId } }).catch(() => []) : [];
+
+    let serverDisplay = '`Default / Main Server`';
+    if (session.serverId) {
+        const targetServer = servers.find(s => s.id == session.serverId);
+        if (targetServer) serverDisplay = `**${targetServer.serverName}**`;
+    }
+
+    let components = [];
 
     const embed = new EmbedBuilder()
         .setTitle('🛡️ Battle Royale Event Manager')
@@ -26,11 +37,19 @@ const buildBRPanelPayload = async (guildId, messageOverride = '') => {
         .setDescription(
             (messageOverride ? `**${messageOverride}**\n\n` : '') +
             `Manage Rust Console Edition randomized crate-spawn Battle Royale arenas.\n\n` +
+            `• **Target Server:** ${serverDisplay}\n` +
             `• **Player Spawn Points Mapped:** \`${spawnsMapped}\`\n` +
             `• **Elite Crate Points Mapped:** \`${cratesMapped}\`\n` +
             `• **Active Crate Fill Rate:** \`${config.crateSpawnPercentage || 35}% of mapped points\`\n` +
             `• **Lucky Dip Prizes:** \`${prizes} items (${prizeShare}% each)\``
         );
+
+    if (servers.length > 0) {
+        const serverOptions = [{ label: 'Default / Main Server', value: 'br_server_default', emoji: '🌐' }, ...servers.map(s => ({ label: s.serverName, value: `br_server_${s.id}`, emoji: '🖥️' }))];
+        components.push(new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder().setCustomId('br_menu_server_select').setPlaceholder('🖥️ Select target server...').addOptions(serverOptions)
+        ));
+    }
 
     const row1 = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('br_btn_add_spawn').setLabel('Add Player Spawn').setStyle(ButtonStyle.Success).setEmoji('📍'),
@@ -44,7 +63,9 @@ const buildBRPanelPayload = async (guildId, messageOverride = '') => {
         new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
     );
 
-    return { embeds: [embed], components: [row1, row2], flags: 64 };
+    components.push(row1, row2);
+
+    return { embeds: [embed], components, flags: 64 };
 };
 
 const battleRoyaleHandler = async (interaction, client) => {
@@ -52,6 +73,9 @@ const battleRoyaleHandler = async (interaction, client) => {
         const guildId = interaction.guild.id;
         const customId = interaction.customId || '';
         const selectedValue = interaction.isStringSelectMenu() && interaction.values ? interaction.values[0] : '';
+
+        if (!brSessions.has(guildId)) brSessions.set(guildId, { view: 'main', serverId: null });
+        const session = brSessions.get(guildId);
 
         if (customId === 'admin_menu_back') {
             if (adminHandler && adminHandler.renderMainPanel) {
@@ -68,14 +92,14 @@ const battleRoyaleHandler = async (interaction, client) => {
         if (customId === 'br_btn_add_spawn') {
             const loadingPayload = await buildBRPanelPayload(guildId, '⏳ **Extracting your position from the server for Player Spawn...**');
             await interaction.update(loadingPayload);
-            await queueAdminPos(interaction, 'custom_zone', 'br_spawn');
+            await queueAdminPos(interaction, 'custom_zone', 'br_spawn', session.serverId);
             return;
         }
 
         if (customId === 'br_btn_add_crate') {
             const loadingPayload = await buildBRPanelPayload(guildId, '⏳ **Extracting your position from the server for Elite Crate...**');
             await interaction.update(loadingPayload);
-            await queueAdminPos(interaction, 'custom_zone', 'br_crate');
+            await queueAdminPos(interaction, 'custom_zone', 'br_crate', session.serverId);
             return;
         }
 
@@ -118,6 +142,12 @@ const battleRoyaleHandler = async (interaction, client) => {
         }
 
         if (interaction.isStringSelectMenu()) {
+            if (customId === 'br_menu_server_select') {
+                session.serverId = selectedValue === 'br_server_default' ? null : selectedValue.replace('br_server_', '');
+                const payload = await buildBRPanelPayload(guildId, '🖥️ Target server updated!');
+                return interaction.update(payload);
+            }
+
             if (customId === 'br_prize_category_select') {
                 const catKey = selectedValue.replace('br_prize_cat_', '');
                 const categoryData = RUST_CATEGORIES[catKey];

@@ -6,6 +6,7 @@ const adminHandler = require('./adminHandler');
 module.exports = async (interaction, client) => {
     const customId = interaction.customId || '';
     const value = interaction.isStringSelectMenu() ? interaction.values[0] : null;
+    const guildId = interaction.guild.id;
 
     if (customId === 'admin_menu_back') {
         if (adminHandler && adminHandler.renderMainPanel) {
@@ -14,11 +15,8 @@ module.exports = async (interaction, client) => {
         return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] });
     }
 
-    // ==========================================
-    // 1. ADMIN ECONOMY SETUP PANEL
-    // ==========================================
     if (customId === 'admin_menu_select' && value === 'setup_economy') {
-        const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+        const config = await GuildConfig.findOne({ where: { guildId } });
         const currencyName = config?.economyCurrency || 'Scrap';
         
         const dailyMin = config?.dailyMin ?? 50;
@@ -59,19 +57,16 @@ module.exports = async (interaction, client) => {
         return interaction.reply({ embeds: [embed], components: [row1, row2, row3], flags: 64 });
     }
 
-    // ==========================================
-    // 2. BUTTON HANDLERS
-    // ==========================================
     if (interaction.isButton()) {
         if (customId === 'btn_econ_name') {
-            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+            const config = await GuildConfig.findOne({ where: { guildId } });
             const modal = new ModalBuilder().setCustomId('modal_setup_economy').setTitle('Configure Currency');
             modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('currency_name').setLabel("Currency Name (e.g. Scrap)").setStyle(TextInputStyle.Short).setValue(config?.economyCurrency || 'Scrap').setRequired(true)));
             return interaction.showModal(modal);
         }
 
         if (customId === 'btn_econ_daily') {
-            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+            const config = await GuildConfig.findOne({ where: { guildId } });
             const modal = new ModalBuilder().setCustomId('modal_econ_daily').setTitle('Configure Daily Reward Limits');
             modal.addComponents(
                 new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('daily_min').setLabel("Minimum Reward (e.g. 50)").setStyle(TextInputStyle.Short).setValue(`${config?.dailyMin ?? 50}`).setRequired(true)),
@@ -80,7 +75,6 @@ module.exports = async (interaction, client) => {
             return interaction.showModal(modal);
         }
 
-        // 👇 NEW: OPENS A DROPDOWN INSTEAD OF A CLUNKY MODAL!
         if (customId === 'btn_econ_buddydays') {
             const row = new ActionRowBuilder().addComponents(
                 new StringSelectMenuBuilder().setCustomId('select_buddydays_type')
@@ -96,7 +90,7 @@ module.exports = async (interaction, client) => {
         }
 
         if (customId === 'btn_econ_scientist_reward') {
-            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+            const config = await GuildConfig.findOne({ where: { guildId } });
             const modal = new ModalBuilder().setCustomId('modal_econ_scientist_reward').setTitle('Scientist Kill Reward');
             modal.addComponents(new ActionRowBuilder().addComponents(
                 new TextInputBuilder().setCustomId('scientist_reward_amount').setLabel("Reward per Scientist Kill").setStyle(TextInputStyle.Short).setValue(`${config?.scientistKillReward ?? 10}`).setRequired(true)
@@ -105,7 +99,7 @@ module.exports = async (interaction, client) => {
         }
 
         if (customId === 'btn_econ_player_reward') {
-            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+            const config = await GuildConfig.findOne({ where: { guildId } });
             const modal = new ModalBuilder().setCustomId('modal_econ_player_reward').setTitle('Player Kill Reward');
             modal.addComponents(new ActionRowBuilder().addComponents(
                 new TextInputBuilder().setCustomId('player_reward_amount').setLabel("Reward per Player Kill").setStyle(TextInputStyle.Short).setValue(`${config?.playerKillReward ?? 50}`).setRequired(true)
@@ -124,7 +118,7 @@ module.exports = async (interaction, client) => {
         }
 
         if (customId === 'btn_econ_interest') {
-            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+            const config = await GuildConfig.findOne({ where: { guildId } });
             const modal = new ModalBuilder().setCustomId('modal_econ_interest').setTitle('Configure Bank Interest');
             modal.addComponents(
                 new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('interest_rate').setLabel("Interest Rate % (e.g. 2.5)").setStyle(TextInputStyle.Short).setValue(`${config?.bankInterestRate || 0}`).setRequired(true)),
@@ -134,8 +128,8 @@ module.exports = async (interaction, client) => {
         }
 
         if (customId === 'hub_economy_menu') {
-            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-            const user = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
+            const config = await GuildConfig.findOne({ where: { guildId } });
+            const user = await UserEconomy.findOne({ where: { guildId, userId: interaction.user.id } });
             const currency = config?.economyCurrency || 'Scrap';
             const streak = user?.buddyDaysStreak || 0;
 
@@ -158,15 +152,15 @@ module.exports = async (interaction, client) => {
         }
 
         if (customId === 'hub_balance') {
-            const user = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
-            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+            const user = await UserEconomy.findOne({ where: { guildId, userId: interaction.user.id } });
+            const config = await GuildConfig.findOne({ where: { guildId } });
             const currency = config?.economyCurrency || 'Scrap';
             return interaction.reply({ content: `💰 **Wallet:** ${user ? user.wallet : 0} ${currency}\n🏦 **Bank:** ${user ? user.bank : 0} ${currency}`, flags: 64 });
         }
 
         if (customId === 'hub_daily') {
-            const [user] = await UserEconomy.findOrCreate({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
-            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+            const [user] = await UserEconomy.findOrCreate({ where: { guildId, userId: interaction.user.id } });
+            const config = await GuildConfig.findOne({ where: { guildId } });
             const currency = config?.economyCurrency || 'Scrap';
             const now = new Date();
             
@@ -184,8 +178,8 @@ module.exports = async (interaction, client) => {
         }
 
         if (customId === 'hub_buddydays') {
-            const [user] = await UserEconomy.findOrCreate({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
-            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+            const [user] = await UserEconomy.findOrCreate({ where: { guildId, userId: interaction.user.id } });
+            const config = await GuildConfig.findOne({ where: { guildId } });
             const currency = config?.economyCurrency || 'Scrap';
             const now = new Date();
             
@@ -231,7 +225,7 @@ module.exports = async (interaction, client) => {
                     return interaction.reply({ content: `❌ You must link your Rust account first using the Player Hub to receive in-game kit rewards!`, flags: 64 });
                 }
                 try {
-                    await sendRconCommand(interaction.guild.id, `kit givetoplayer "${targetItem}" "${user.inGameName}"`);
+                    await sendRconCommand(guildId, `kit givetoplayer "${targetItem}" "${user.inGameName}"`);
                     await user.update({ buddyDaysStreak: streak, lastBuddyDaysClaim: now });
                     rewardDescription = `📦 Kit **${targetItem}** sent directly to your in-game player (**${user.inGameName}**)!`;
                 } catch(err) {
@@ -242,7 +236,7 @@ module.exports = async (interaction, client) => {
                     return interaction.reply({ content: `❌ You must link your Rust account first using the Player Hub to receive in-game resource rewards!`, flags: 64 });
                 }
                 try {
-                    await sendRconCommand(interaction.guild.id, `inventory.giveto "${user.inGameName}" ${targetItem} ${rAmount}`);
+                    await sendRconCommand(guildId, `inventory.giveto "${user.inGameName}" ${targetItem} ${rAmount}`);
                     await user.update({ buddyDaysStreak: streak, lastBuddyDaysClaim: now });
                     rewardDescription = `🪵 **${rAmount}x ${targetItem}** sent directly to your inventory in-game (**${user.inGameName}**)!`;
                 } catch(err) {
@@ -273,13 +267,10 @@ module.exports = async (interaction, client) => {
         }
     }
 
-    // ==========================================
-    // 3. SELECT MENUS
-    // ==========================================
     if (interaction.isUserSelectMenu()) {
         if (customId === 'select_admin_give_target') {
             const targetUserId = interaction.values[0];
-            const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
+            const targetUser = await UserEconomy.findOne({ where: { guildId, userId: targetUserId } });
             const displayName = targetUser?.inGameName || `<@${targetUserId}>`;
             const modal = new ModalBuilder().setCustomId(`modal_admin_give_exec_${targetUserId}`).setTitle(`Give Currency to ${displayName}`);
             modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel("Amount to GIVE").setStyle(TextInputStyle.Short).setRequired(true)));
@@ -287,7 +278,7 @@ module.exports = async (interaction, client) => {
         }
         if (customId === 'select_admin_take_target') {
             const targetUserId = interaction.values[0];
-            const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
+            const targetUser = await UserEconomy.findOne({ where: { guildId, userId: targetUserId } });
             const displayName = targetUser?.inGameName || `<@${targetUserId}>`;
             const modal = new ModalBuilder().setCustomId(`modal_admin_take_exec_${targetUserId}`).setTitle(`Take Currency from ${displayName}`);
             modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel("Amount to TAKE").setStyle(TextInputStyle.Short).setRequired(true)));
@@ -295,11 +286,10 @@ module.exports = async (interaction, client) => {
         }
     }
 
-    // 👇 FIXED: PROPERLY GRAB THE VALUE FROM interaction.values[0] 👇
     if (interaction.isStringSelectMenu()) {
         if (customId === 'select_buddydays_type') {
-            const selectedVal = interaction.values[0]; // e.g., 'type_currency'
-            const type = selectedVal.replace('type_', ''); // becomes 'currency', 'xp', 'item', or 'kit'
+            const selectedVal = interaction.values[0];
+            const type = selectedVal.replace('type_', '');
             
             let title = '';
             let showItemField = false;
@@ -325,15 +315,11 @@ module.exports = async (interaction, client) => {
             return await interaction.showModal(modal);
         }
     }
-    
 
-    // ==========================================
-    // 4. MODAL SUBMISSIONS
-    // ==========================================
     if (interaction.isModalSubmit()) {
         if (customId === 'modal_setup_economy') {
             const newName = interaction.fields.getTextInputValue('currency_name').trim();
-            await GuildConfig.upsert({ guildId: interaction.guild.id, economyCurrency: newName });
+            await GuildConfig.upsert({ guildId, economyCurrency: newName });
             return interaction.reply({ content: `✅ Currency name successfully updated to **${newName}**!`, flags: 64 });
         }
 
@@ -341,11 +327,10 @@ module.exports = async (interaction, client) => {
             let min = parseInt(interaction.fields.getTextInputValue('daily_min')) || 50;
             let max = parseInt(interaction.fields.getTextInputValue('daily_max')) || 250;
             if (min > max) { let temp = min; min = max; max = temp; }
-            await GuildConfig.upsert({ guildId: interaction.guild.id, dailyMin: min, dailyMax: max });
+            await GuildConfig.upsert({ guildId, dailyMin: min, dailyMax: max });
             return interaction.reply({ content: `✅ Daily Reward updated! Players will now get a randomized amount between **${min}** and **${max}** currency!`, flags: 64 });
         }
 
-        // 👇 NEW: CATCHES ALL 4 BUDDY DAYS MODALS
         if (customId.startsWith('modal_econ_bd_')) {
             const type = customId.replace('modal_econ_bd_', '');
             const dayNum = parseInt(interaction.fields.getTextInputValue('day_number'));
@@ -359,7 +344,7 @@ module.exports = async (interaction, client) => {
 
             if (isNaN(dayNum) || dayNum < 1 || dayNum > 30) return interaction.reply({ content: `❌ Invalid Day! Please enter a day between 1 and 30.`, flags: 64 });
 
-            const [config] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
+            const [config] = await GuildConfig.findOrCreate({ where: { guildId } });
             let currentConfig = {};
             try { currentConfig = JSON.parse(config.buddyDaysConfig || '{}'); } catch(e){}
 
@@ -374,7 +359,7 @@ module.exports = async (interaction, client) => {
             const amount = parseInt(interaction.fields.getTextInputValue('scientist_reward_amount'));
             const finalAmount = isNaN(amount) || amount < 0 ? 0 : amount;
             
-            let [config] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
+            let [config] = await GuildConfig.findOrCreate({ where: { guildId } });
             await config.update({ scientistKillReward: finalAmount });
             
             return interaction.reply({ content: `✅ Scientist Kill Reward updated to **${finalAmount}** currency!`, flags: 64 });
@@ -384,7 +369,7 @@ module.exports = async (interaction, client) => {
             const amount = parseInt(interaction.fields.getTextInputValue('player_reward_amount'));
             const finalAmount = isNaN(amount) || amount < 0 ? 0 : amount;
             
-            let [config] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
+            let [config] = await GuildConfig.findOrCreate({ where: { guildId } });
             await config.update({ playerKillReward: finalAmount });
             
             return interaction.reply({ content: `✅ Player Kill Reward updated to **${finalAmount}** currency!`, flags: 64 });
@@ -393,7 +378,7 @@ module.exports = async (interaction, client) => {
         if (customId === 'modal_econ_interest') {
             const rate = parseFloat(interaction.fields.getTextInputValue('interest_rate'));
             const hours = parseInt(interaction.fields.getTextInputValue('interest_hours')) || 24;
-            await GuildConfig.upsert({ guildId: interaction.guild.id, bankInterestRate: rate, bankInterestHours: hours, lastBankInterest: new Date() });
+            await GuildConfig.upsert({ guildId, bankInterestRate: rate, bankInterestHours: hours, lastBankInterest: new Date() });
             return interaction.reply({ content: `✅ Bank Interest configured! Players will earn **${rate}%** interest every **${hours} hours**.`, flags: 64 });
         }
 
@@ -402,8 +387,8 @@ module.exports = async (interaction, client) => {
             const amount = parseInt(interaction.fields.getTextInputValue('amount'));
             if (isNaN(amount) || amount <= 0) return interaction.reply({ content: '❌ Please enter a valid amount.', flags: 64 });
 
-            let [user] = await UserEconomy.findOrCreate({ where: { guildId: interaction.guild.id, userId: targetUserId }, defaults: { wallet: 0 } });
-            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+            let [user] = await UserEconomy.findOrCreate({ where: { guildId, userId: targetUserId }, defaults: { wallet: 0 } });
+            const config = await GuildConfig.findOne({ where: { guildId } });
             const currency = config?.economyCurrency || 'Scrap';
 
             await user.update({ wallet: user.wallet + amount });
@@ -416,8 +401,8 @@ module.exports = async (interaction, client) => {
             const amount = parseInt(interaction.fields.getTextInputValue('amount'));
             if (isNaN(amount) || amount <= 0) return interaction.reply({ content: '❌ Please enter a valid amount.', flags: 64 });
 
-            let [user] = await UserEconomy.findOrCreate({ where: { guildId: interaction.guild.id, userId: targetUserId }, defaults: { wallet: 0 } });
-            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+            let [user] = await UserEconomy.findOrCreate({ where: { guildId, userId: targetUserId }, defaults: { wallet: 0 } });
+            const config = await GuildConfig.findOne({ where: { guildId } });
             const currency = config?.economyCurrency || 'Scrap';
 
             const newWallet = Math.max(0, user.wallet - amount);
@@ -428,8 +413,8 @@ module.exports = async (interaction, client) => {
 
         if (customId === 'modal_hub_deposit') {
             const input = interaction.fields.getTextInputValue('amount').trim().toLowerCase();
-            const [user] = await UserEconomy.findOrCreate({ where: { guildId: interaction.guild.id, userId: interaction.user.id }, defaults: { wallet: 0, bank: 0 } });
-            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+            const [user] = await UserEconomy.findOrCreate({ where: { guildId, userId: interaction.user.id }, defaults: { wallet: 0, bank: 0 } });
+            const config = await GuildConfig.findOne({ where: { guildId } });
             const currency = config?.economyCurrency || 'Scrap';
 
             let amount = input === 'all' ? user.wallet : parseInt(input);
@@ -442,8 +427,8 @@ module.exports = async (interaction, client) => {
 
         if (customId === 'modal_hub_withdraw') {
             const input = interaction.fields.getTextInputValue('amount').trim().toLowerCase();
-            const [user] = await UserEconomy.findOrCreate({ where: { guildId: interaction.guild.id, userId: interaction.user.id }, defaults: { wallet: 0, bank: 0 } });
-            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+            const [user] = await UserEconomy.findOrCreate({ where: { guildId, userId: interaction.user.id }, defaults: { wallet: 0, bank: 0 } });
+            const config = await GuildConfig.findOne({ where: { guildId } });
             const currency = config?.economyCurrency || 'Scrap';
 
             let amount = input === 'all' ? user.bank : parseInt(input);

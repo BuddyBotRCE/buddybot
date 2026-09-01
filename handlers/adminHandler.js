@@ -121,7 +121,7 @@ async function renderMainPanel(interaction) {
     return await interaction.update({ embeds: [embed], components: [row1, row2], content: null }).catch(() => {});
 }
 
-async function fetchRceLiveKits(guildId) {
+async function fetchRceLiveKits(guildId, serverId = null) {
     return new Promise((resolve) => {
         const ws = activeConnections.get(guildId);
         if (!ws || ws.readyState !== WebSocket.OPEN) return resolve(['Test1']);
@@ -159,9 +159,9 @@ async function resolveTargetServer(guildId, sessionId, userId) {
     const session = adminActionSessions.get(userId);
     if (session && session.serverId) {
         const server = await GameServer.findByPk(session.serverId);
-        if (server) return { guildId: guildId, serverName: server.serverName };
+        if (server) return { guildId: guildId, serverName: server.serverName, serverId: server.id };
     }
-    return { guildId: guildId, serverName: 'Primary RCON' };
+    return { guildId: guildId, serverName: 'Primary RCON', serverId: null };
 }
 
 async function renderGiveKitPanel(interaction, session, messageOverride = '') {
@@ -200,7 +200,6 @@ const adminHandler = async (interaction, client) => {
         return await renderMainPanel(interaction);
     }
 
-    // 👇 INTERCEPT BOT SETTINGS SELECT INSTANTLY HERE 👇
     if (customId === 'admin_menu_select' && selectedValue === 'setup_bot_settings') {
         return await renderBotSettings(interaction, interaction.guild.id, 'reply');
     }
@@ -235,7 +234,6 @@ const adminHandler = async (interaction, client) => {
             const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('log_action_select').setPlaceholder('Select a log channel to configure...').addOptions([{ label: 'Set Admin Logs Channel', value: 'log_admin', emoji: '🛡️' }, { label: 'Set Game Feeds Channel', value: 'log_game', emoji: '🎮' }, { label: 'Set Discord Logs Channel', value: 'log_discord', emoji: '💬' }]));
             return interaction.reply({ embeds: [embed], components: [row, backRow], flags: 64 });
         }
-
 
         if (selectedValue === 'setup_multiserver') {
             const servers = await GameServer.findAll({ where: { guildId: interaction.guild.id } });
@@ -290,7 +288,7 @@ const adminHandler = async (interaction, client) => {
 
     if (interaction.isStringSelectMenu()) {
         if (customId === 'bot_settings_toggle_select') {
-            const selectedModules = interaction.values || []; // Which ones are checked
+            const selectedModules = interaction.values || [];
             const updateData = {};
             
             MODULES_LIST.forEach(m => {
@@ -423,9 +421,10 @@ const adminHandler = async (interaction, client) => {
         }
 
         if (customId === 'ak_panel_kit') {
+            const session = giveKitSessions.get(userId) || {};
             const loadingPayload = { content: '⏳ Fetching live kits from server...', components: [], embeds: [], flags: 64 };
             await interaction.update(loadingPayload);
-            let liveKits = await fetchRceLiveKits(interaction.guild.id);
+            let liveKits = await fetchRceLiveKits(interaction.guild.id, session.serverId);
             const kitOptions = liveKits.slice(0, 25).map(k => ({ label: k.substring(0, 100), value: k, emoji: '📦' }));
             const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('ak_panel_kit_select').setPlaceholder('Select a kit from your RCE server...').addOptions(kitOptions));
             return interaction.editReply({ content: '📦 **Select Kit from RCE Server:**', components: [row], embeds: [] });
@@ -439,15 +438,11 @@ const adminHandler = async (interaction, client) => {
             if (!targetUser || !targetUser.inGameName) return interaction.reply({ content: '❌ Target user has not linked their in-game Rust name!', flags: 64 });
 
             try {
-                if (session.serverId) {
-                    const serverObj = await GameServer.findByPk(session.serverId);
-                    if (serverObj) await sendRconCommand(interaction.guild.id, `kit givetoplayer "${session.kitName}" "${targetUser.inGameName}"`);
-                } else {
-                    await sendRconCommand(interaction.guild.id, `kit givetoplayer "${session.kitName}" "${targetUser.inGameName}"`);
-                }
+                const targetServer = await resolveTargetServer(interaction.guild.id, session.serverId, userId);
+                await sendRconCommand(interaction.guild.id, `kit givetoplayer "${session.kitName}" "${targetUser.inGameName}"`, client, targetServer.serverId);
                 
                 giveKitSessions.delete(userId);
-                return interaction.update({ content: `✅ Successfully gave kit **${session.kitName}** to **${targetUser.inGameName}** (<@${session.targetUserId}>)!`, components: [], embeds: [] });
+                return interaction.update({ content: `✅ Successfully gave kit **${session.kitName}** to **${targetUser.inGameName}** (<@${session.targetUserId}>) on **${targetServer.serverName}**!`, components: [], embeds: [] });
             } catch (e) { return interaction.reply({ content: `❌ RCON Error: \`${e.message}\``, flags: 64 }); }
         }
 
@@ -567,7 +562,7 @@ const adminHandler = async (interaction, client) => {
             const msg = interaction.fields.getTextInputValue('say_msg').replace(/"/g, "'"); 
             try {
                 const targetServer = await resolveTargetServer(interaction.guild.id, null, userId);
-                await sendRconCommand(targetServer.guildId, `say "<color=${hexColor}>${msg}</color>"`);
+                await sendRconCommand(targetServer.guildId, `say "<color=${hexColor}>${msg}</color>"`, client, targetServer.serverId);
                 return interaction.reply({ content: `📢 **Broadcast sent successfully to ${targetServer.serverName}!**`, flags: 64 });
             } catch(e) {
                 return interaction.reply({ content: `❌ Error sending broadcast: \`${e.message}\``, flags: 64 });
@@ -578,7 +573,7 @@ const adminHandler = async (interaction, client) => {
             const target = interaction.fields.getTextInputValue('ign').trim();
             try {
                 const targetServer = await resolveTargetServer(interaction.guild.id, null, userId);
-                await sendRconCommand(targetServer.guildId, `ownerid ${target} "VIP Status"`);
+                await sendRconCommand(targetServer.guildId, `ownerid ${target} "VIP Status"`, client, targetServer.serverId);
                 return interaction.reply({ content: `✅ Successfully granted VIP status to **${target}** on **${targetServer.serverName}**!`, flags: 64 });
             } catch (e) { return interaction.reply({ content: `❌ RCON Error executing VIP command: \`${e.message}\``, flags: 64 }); }
         }
@@ -586,7 +581,7 @@ const adminHandler = async (interaction, client) => {
             const target = interaction.fields.getTextInputValue('ign').trim();
             try {
                 const targetServer = await resolveTargetServer(interaction.guild.id, null, userId);
-                await sendRconCommand(targetServer.guildId, `moderatorid ${target} "Server Moderator"`);
+                await sendRconCommand(targetServer.guildId, `moderatorid ${target} "Server Moderator"`, client, targetServer.serverId);
                 return interaction.reply({ content: `✅ Successfully granted Moderator rights to **${target}** on **${targetServer.serverName}**!`, flags: 64 });
             } catch (e) { return interaction.reply({ content: `❌ RCON Error executing Moderator command: \`${e.message}\``, flags: 64 }); }
         }
@@ -639,7 +634,7 @@ const adminHandler = async (interaction, client) => {
                     return interaction.reply({ content: `❌ This player has not linked their Rust account!`, flags: 64 });
                 }
 
-                await sendRconCommand(targetServer.guildId, `inventory.giveto "${targetUser.inGameName}" ${shortname} ${amount}`);
+                await sendRconCommand(targetServer.guildId, `inventory.giveto "${targetUser.inGameName}" ${shortname} ${amount}`, client, targetServer.serverId);
                 return interaction.reply({ content: `✅ Successfully gave **${amount}x ${shortname}** to **${targetUser.inGameName}** on **${targetServer.serverName}**!`, flags: 64 });
             } catch(e) { 
                 return interaction.reply({ content: `❌ Error sending item: ${e.message}`, flags: 64 }); 
@@ -675,7 +670,7 @@ const adminHandler = async (interaction, client) => {
         if (customId === 'modal_admin_rcon') {
             try {
                 const targetServer = await resolveTargetServer(interaction.guild.id, null, userId);
-                await sendRconCommand(targetServer.guildId, interaction.fields.getTextInputValue('rcon_command'));
+                await sendRconCommand(targetServer.guildId, interaction.fields.getTextInputValue('rcon_command'), client, targetServer.serverId);
                 return interaction.reply({ content: `✅ RCON Command executed successfully on **${targetServer.serverName}**!`, flags: 64 });
             } catch(e) { return interaction.reply({ content: `❌ RCON Error: ${e.message}`, flags: 64 }); }
         }

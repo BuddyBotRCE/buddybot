@@ -1,12 +1,18 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, RoleSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { GuildConfig, ShopItem, UserEconomy, ShopCooldown } = require('../database/db');
+const { GuildConfig, ShopItem, UserEconomy, ShopCooldown, GameServer } = require('../database/db');
 const { sendRconCommand } = require('../utils/rconManager');
 const { RUST_CATEGORIES } = require('../utils/rustCatalog');
 const adminHandler = require('./adminHandler');
 
+const shopSessions = new Map();
+
 module.exports = async (interaction, client) => {
     const customId = interaction.customId || '';
-    const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
+    const selectedValue = interaction.isStringSelectMenu() && interaction.values ? interaction.values[0] : '';
+    const guildId = interaction.guild.id;
+
+    if (!shopSessions.has(guildId)) shopSessions.set(guildId, { serverId: null });
+    const session = shopSessions.get(guildId);
 
     if (customId === 'admin_menu_back') {
         if (adminHandler && adminHandler.renderMainPanel) {
@@ -16,8 +22,15 @@ module.exports = async (interaction, client) => {
     }
 
     async function renderShopManagePanel(interaction, messageText = '') {
-        const dbItems = await ShopItem.findAll({ where: { guildId: interaction.guild.id } });
+        const dbItems = await ShopItem.findAll({ where: { guildId, serverId: session.serverId } });
         const totalCount = dbItems.length;
+        const servers = await GameServer.findAll({ where: { guildId } });
+
+        let serverDisplay = '`Default / Main Server`';
+        if (session.serverId) {
+            const targetServer = servers.find(s => s.id == session.serverId);
+            if (targetServer) serverDisplay = `**${targetServer.serverName}**`;
+        }
 
         let categoryBreakdown = '';
         for (const catKey in RUST_CATEGORIES) {
@@ -30,11 +43,21 @@ module.exports = async (interaction, client) => {
         const embed = new EmbedBuilder()
             .setTitle('🛒 Server Shop Manager')
             .setDescription(messageText ? `**${messageText}**\n\n` : '' + 
-                `Manage your store categories, add prebuilt catalog items, custom gear, or adjust pricing multipliers.\n\n` +
+                `Manage your store categories, add prebuilt catalog items, custom gear, or adjust pricing multipliers per server.\n\n` +
+                `🖥️ **Target Server:** ${serverDisplay}\n` +
                 `📊 **Active Store Summary:**\n` +
                 `• **Total Items in Store:** \`${totalCount}\`\n\n` +
                 `📂 **Category Breakdown:**\n${categoryBreakdown}`)
             .setColor('#2ecc71');
+
+        let components = [];
+
+        if (servers.length > 0) {
+            const serverOptions = [{ label: 'Default / Main Server', value: 'shop_server_default', emoji: '🌐' }, ...servers.map(s => ({ label: s.serverName, value: `shop_server_${s.id}`, emoji: '🖥️' }))];
+            components.push(new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder().setCustomId('shop_menu_server_select').setPlaceholder('🖥️ Select target store server...').addOptions(serverOptions)
+            ));
+        }
 
         const row1 = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder().setCustomId('shop_action_select').setPlaceholder('Select shop action...')
@@ -51,20 +74,27 @@ module.exports = async (interaction, client) => {
             new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
         );
 
+        components.push(row1, row2);
+
         if (interaction.replied || interaction.deferred) {
-            return await interaction.editReply({ embeds: [embed], components: [row1, row2], content: null });
+            return await interaction.editReply({ embeds: [embed], components, content: null });
         } else if (interaction.isStringSelectMenu() || interaction.isButton()) {
-            return await interaction.update({ embeds: [embed], components: [row1, row2], content: null });
+            return await interaction.update({ embeds: [embed], components, content: null });
         } else {
-            return await interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
+            return await interaction.reply({ embeds: [embed], components, flags: 64 });
         }
     }
 
     if (customId === 'admin_menu_select' && selectedValue === 'setup_shop') return await renderShopManagePanel(interaction);
 
+    if (customId === 'shop_menu_server_select') {
+        session.serverId = selectedValue === 'shop_server_default' ? null : selectedValue.replace('shop_server_', '');
+        return await renderShopManagePanel(interaction, '🖥️ Store server view updated!');
+    }
+
     if (customId === 'shop_action_select') {
         if (selectedValue === 'shop_add_catalog') {
-            const dbItems = await ShopItem.findAll({ where: { guildId: interaction.guild.id } });
+            const dbItems = await ShopItem.findAll({ where: { guildId, serverId: session.serverId } });
             const catOptions = Object.keys(RUST_CATEGORIES).map(catKey => {
                 const count = dbItems.filter(i => i.category === catKey).length;
                 return { label: `${RUST_CATEGORIES[catKey].label} (${count} active)`, value: `shop_cat_${catKey}`, emoji: RUST_CATEGORIES[catKey].emoji };
@@ -89,15 +119,15 @@ module.exports = async (interaction, client) => {
         }
         if (selectedValue === 'shop_manage') return await renderShopManagePanel(interaction);
         if (selectedValue === 'shop_clear_all') {
-            await ShopItem.destroy({ where: { guildId: interaction.guild.id } });
-            return await renderShopManagePanel(interaction, '🗑️ Successfully wiped and cleared the entire shop!');
+            await ShopItem.destroy({ where: { guildId, serverId: session.serverId } });
+            return await renderShopManagePanel(interaction, '🗑️ Successfully wiped and cleared the entire shop for this server!');
         }
     }
 
     if (customId === 'shop_catalog_category') {
         const catKey = selectedValue.replace('shop_cat_', '');
         const categoryData = RUST_CATEGORIES[catKey];
-        const dbItems = await ShopItem.findAll({ where: { guildId: interaction.guild.id } });
+        const dbItems = await ShopItem.findAll({ where: { guildId, serverId: session.serverId } });
 
         const itemOptions = categoryData.items.slice(0, 25).map(item => {
             const isAlreadyAdded = dbItems.some(i => i.command.includes(item.shortname));
@@ -130,10 +160,10 @@ module.exports = async (interaction, client) => {
             
             if (catalogItem) {
                 const cmdString = `inventory.giveto "{player}" ${catalogItem.shortname} 1`;
-                const existing = await ShopItem.findOne({ where: { guildId: interaction.guild.id, command: cmdString } });
+                const existing = await ShopItem.findOne({ where: { guildId, serverId: session.serverId, command: cmdString } });
 
                 if (!existing) {
-                    await ShopItem.create({ guildId: interaction.guild.id, name: catalogItem.name, command: cmdString, price: catalogItem.basePrice, category: catKey, cooldownSeconds: 0 });
+                    await ShopItem.create({ guildId, serverId: session.serverId, name: catalogItem.name, command: cmdString, price: catalogItem.basePrice, category: catKey, cooldownSeconds: 0 });
                     addedCount++;
                 } else { duplicateCount++; }
             }
@@ -150,16 +180,35 @@ module.exports = async (interaction, client) => {
     }
 
     if (customId === 'hub_shop_menu') {
-        const embed = new EmbedBuilder().setTitle('🛒 Server Shop').setDescription('Choose an option below to browse items by category or check the real-time categorized price list.').setColor('#e67e22');
+        const servers = await GameServer.findAll({ where: { guildId } });
+        let components = [];
+
+        if (servers.length > 0) {
+            const serverOptions = [{ label: 'Default / Main Server', value: 'player_shop_srv_default', emoji: '🌐' }, ...servers.map(s => ({ label: s.serverName, value: `player_shop_srv_${s.id}`, emoji: '🖥️' }))];
+            components.push(new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder().setCustomId('player_shop_server_select').setPlaceholder('🖥️ Choose a server store to browse...').addOptions(serverOptions)
+            ));
+        }
+
+        const embed = new EmbedBuilder().setTitle('🛒 Server Shop').setDescription('Select a server above, then choose an option below to browse items or view the categorized price list.').setColor('#e67e22');
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('hub_shop_browse').setLabel('Browse Store (Categories)').setStyle(ButtonStyle.Primary).setEmoji('🛍️'),
             new ButtonBuilder().setCustomId('hub_shop_pricelist').setLabel('Live Price List').setStyle(ButtonStyle.Secondary).setEmoji('📋')
         );
-        return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+        components.push(row);
+
+        if (interaction.replied || interaction.deferred) return interaction.update({ embeds: [embed], components, flags: 64 });
+        return interaction.reply({ embeds: [embed], components, flags: 64 });
+    }
+
+    if (customId === 'player_shop_server_select') {
+        session.serverId = selectedValue === 'player_shop_srv_default' ? null : selectedValue.replace('player_shop_srv_', '');
+        const targetName = session.serverId ? (await GameServer.findByPk(session.serverId))?.serverName : 'Default / Main Server';
+        return interaction.update({ content: `🖥️ Server store switched to **${targetName}**! Click below to browse:`, components: interaction.message.components });
     }
 
     if (customId === 'hub_shop_browse') {
-        const dbItems = await ShopItem.findAll({ where: { guildId: interaction.guild.id } });
+        const dbItems = await ShopItem.findAll({ where: { guildId, serverId: session.serverId } });
         const catOptions = Object.keys(RUST_CATEGORIES).map(catKey => {
             const count = dbItems.filter(i => i.category === catKey).length;
             return { label: `${RUST_CATEGORIES[catKey].label} (${count} items)`, value: catKey, emoji: RUST_CATEGORIES[catKey].emoji };
@@ -174,12 +223,12 @@ module.exports = async (interaction, client) => {
     if (customId === 'player_shop_cat_select') {
         const catKey = selectedValue;
         const categoryData = RUST_CATEGORIES[catKey];
-        const dbItems = await ShopItem.findAll({ where: { guildId: interaction.guild.id } });
-        const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+        const dbItems = await ShopItem.findAll({ where: { guildId, serverId: session.serverId } });
+        const config = await GuildConfig.findOne({ where: { guildId } });
         const multiplier = (config?.shopMultiplier || 100) / 100;
         const availableItems = dbItems.filter(i => i.category === catKey || (catKey === 'custom' && i.category === 'custom'));
 
-        if (availableItems.length === 0) return interaction.update({ content: `❌ No items currently available in **${categoryData?.label || 'Custom'}**.`, components: [] });
+        if (availableItems.length === 0) return interaction.update({ content: `❌ No items currently available in **${categoryData?.label || 'Custom'}** for this server.`, components: [] });
 
         const options = availableItems.map(i => {
             const finalPrice = Math.round(i.price * multiplier);
@@ -200,12 +249,12 @@ module.exports = async (interaction, client) => {
     }
 
     if (customId === 'hub_shop_pricelist') {
-        const dbItems = await ShopItem.findAll({ where: { guildId: interaction.guild.id } });
-        const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+        const dbItems = await ShopItem.findAll({ where: { guildId, serverId: session.serverId } });
+        const config = await GuildConfig.findOne({ where: { guildId } });
         const currency = config?.economyCurrency || 'Scrap';
         const multiplier = (config?.shopMultiplier || 100) / 100;
 
-        if (dbItems.length === 0) return interaction.update({ content: '❌ There are currently no items for sale in the shop.', embeds: [], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('hub_shop_menu').setLabel('Go Back').setStyle(ButtonStyle.Secondary).setEmoji('🔙'))] });
+        if (dbItems.length === 0) return interaction.update({ content: '❌ There are currently no items for sale in the shop for this server.', embeds: [], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('hub_shop_menu').setLabel('Go Back').setStyle(ButtonStyle.Secondary).setEmoji('🔙'))] });
 
         const embed = new EmbedBuilder().setTitle('📋 Categorized Store Price List').setDescription('Here are all items currently available for purchase:').setColor('#3498db').setFooter({ text: 'Prices reflect real-time multipliers.' });
 
@@ -243,14 +292,14 @@ module.exports = async (interaction, client) => {
             const cmd = interaction.fields.getTextInputValue('item_cmd');
             const price = parseInt(interaction.fields.getTextInputValue('item_price')) || 100;
             const cd = parseInt(interaction.fields.getTextInputValue('item_cooldown')) || 0;
-            const newItem = await ShopItem.create({ guildId: interaction.guild.id, name, command: cmd, price, category: 'custom', cooldownSeconds: cd });
+            const newItem = await ShopItem.create({ guildId, serverId: session.serverId, name, command: cmd, price, category: 'custom', cooldownSeconds: cd });
             const roleMenu = new RoleSelectMenuBuilder().setCustomId(`shop_role_${newItem.id}`).setPlaceholder('Select required Discord role (Optional)...');
             return interaction.reply({ content: `✅ Custom item **${name}** added! Optional role restriction:`, components: [new ActionRowBuilder().addComponents(roleMenu)], flags: 64 });
         }
 
         if (customId === 'modal_shop_multiplier') {
             const mult = parseInt(interaction.fields.getTextInputValue('multiplier'));
-            await GuildConfig.upsert({ guildId: interaction.guild.id, shopMultiplier: mult });
+            await GuildConfig.upsert({ guildId, shopMultiplier: mult });
             return interaction.reply({ content: `✅ Global price multiplier set to **${mult}%**!`, flags: 64 });
         }
 
@@ -264,7 +313,7 @@ module.exports = async (interaction, client) => {
 
             if (shopItem.cooldownSeconds > 0) {
                 const now = new Date();
-                const [cooldownRecord] = await ShopCooldown.findOrCreate({ where: { guildId: interaction.guild.id, userId: interaction.user.id, itemId: shopItem.id }, defaults: { expiresAt: now } });
+                const [cooldownRecord] = await ShopCooldown.findOrCreate({ where: { guildId, userId: interaction.user.id, itemId: shopItem.id }, defaults: { expiresAt: now } });
 
                 if (new Date(cooldownRecord.expiresAt) > now) {
                     const secondsLeft = Math.ceil((new Date(cooldownRecord.expiresAt) - now) / 1000);
@@ -275,10 +324,10 @@ module.exports = async (interaction, client) => {
                 await cooldownRecord.update({ expiresAt: new Date(now.getTime() + shopItem.cooldownSeconds * 1000) });
             }
 
-            const userEconomy = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
+            const userEconomy = await UserEconomy.findOne({ where: { guildId, userId: interaction.user.id } });
             if (!userEconomy || !userEconomy.inGameName) return interaction.reply({ content: '❌ Link your Rust account first using `/playerpanel`!', flags: 64 });
 
-            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+            const config = await GuildConfig.findOne({ where: { guildId } });
             const currency = config?.economyCurrency || 'Scrap';
             const unitPrice = Math.round(shopItem.price * ((config?.shopMultiplier || 100) / 100));
             const totalPrice = unitPrice * qty;
@@ -297,7 +346,7 @@ module.exports = async (interaction, client) => {
 
                 const finalCommand = scaledCommand.replace(/{player}/gi, `"${userEconomy.inGameName}"`);
                 for (const c of finalCommand.split('\n')) {
-                    if (c.trim()) await sendRconCommand(interaction.guild.id, c.trim());
+                    if (c.trim()) await sendRconCommand(guildId, c.trim(), client, shopItem.serverId);
                 }
                 return interaction.reply({ content: `✅ **Purchase Successful!** You bought **${qty}x ${shopItem.name}** for **${totalPrice} ${currency}**. Delivered to your in-game inventory!`, flags: 64 });
             } catch (e) {

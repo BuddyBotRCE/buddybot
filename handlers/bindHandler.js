@@ -1,22 +1,28 @@
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, RoleSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } = require('discord.js');
-const { CustomBind, ServerKit } = require('../database/db');
+const { CustomBind, ServerKit, GameServer } = require('../database/db');
 const { queueAdminPos } = require('../utils/rconManager'); 
 const adminHandler = require('./adminHandler');
 
-// 👇 Importing the pristine, safe lists from our new utils file! (No need to write them all out here anymore!)
 const { CHAT_CATEGORIES, CHAT_OPTIONS_MAP } = require('../utils/d11ChatHandler');
 
 const bindSessions = new Map();
 
 const buildPanelPayload = async (guildId, messageOverride = '') => {
-    if (!bindSessions.has(guildId)) bindSessions.set(guildId, { selectedBindId: null, view: 'main', selectedCategory: null });
+    if (!bindSessions.has(guildId)) bindSessions.set(guildId, { selectedBindId: null, view: 'main', selectedCategory: null, serverId: null });
     const session = bindSessions.get(guildId);
     
     const allBinds = await CustomBind.findAll({ where: { guildId }, order: [['id', 'ASC']] });
+    const servers = await GameServer.findAll({ where: { guildId } });
     let components = [];
     
     const embed = new EmbedBuilder().setColor('#3498db').setTitle('🗣️ Custom Binds & Console Quick-Chat Manager');
     if (messageOverride) embed.setDescription(`**${messageOverride}**\n\n`);
+
+    let serverDisplay = '`Default / Main Server`';
+    if (session.serverId) {
+        const targetServer = servers.find(s => s.id == session.serverId);
+        if (targetServer) serverDisplay = `**${targetServer.serverName}**`;
+    }
 
     if (session.view === 'main') {
         let bindList = '';
@@ -26,9 +32,17 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
         }
 
         embed.addFields(
+            { name: '🖥️ Target Server', value: serverDisplay, inline: false },
             { name: '📋 Configured Custom Binds', value: bindList || "*No custom binds created yet.*", inline: false },
             { name: '🛠️ Create New Bind', value: "👇 **Click a button below to choose your bind type:**", inline: false }
         );
+
+        if (servers.length > 0) {
+            const serverOptions = [{ label: 'Default / Main Server', value: 'bind_server_default', emoji: '🌐' }, ...servers.map(s => ({ label: s.serverName, value: `bind_server_${s.id}`, emoji: '🖥️' }))];
+            components.push(new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder().setCustomId('bind_menu_server_select').setPlaceholder('🖥️ Select target server...').addOptions(serverOptions)
+            ));
+        }
 
         components.push(new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('bind_create_kit').setLabel('New Kit Bind').setStyle(ButtonStyle.Primary).setEmoji('📦'),
@@ -77,6 +91,7 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
         embed.setTitle(`🗣️ Managing Bind: ${activeBind.name} (${activeBind.actionType.toUpperCase()})`);
         
         embed.addFields(
+            { name: `🖥️ Target Server`, value: serverDisplay, inline: false },
             { name: `📊 Settings & Requirements`, value: `**Quick-Chat Wheel:** ${activeBind.emote || 'Not Set'}\n**Type:** ${activeBind.actionType}\n**Target Kit:** ${activeBind.targetValue || 'N/A'}\n**Coordinates:** ${posText}`, inline: true },
             { name: `🛡️ Economy & Security`, value: `**Cost:** ${activeBind.cost || 0} Scrap\n**Cooldown:** ${activeBind.cooldown || 0}s\n**Required Role:** ${roleDisplay}`, inline: true }
         );
@@ -173,7 +188,7 @@ const bindHandler = async (interaction, client) => {
         const customId = interaction.customId || '';
         const guildId = interaction.guild.id;
 
-        if (!bindSessions.has(guildId)) bindSessions.set(guildId, { selectedBindId: null, view: 'main' });
+        if (!bindSessions.has(guildId)) bindSessions.set(guildId, { selectedBindId: null, view: 'main', serverId: null });
         const session = bindSessions.get(guildId);
 
         const renderBindPanel = async (inter, messageOverride = '') => {
@@ -201,6 +216,12 @@ const bindHandler = async (interaction, client) => {
             session.selectedBindId = newBind.id;
             session.view = 'bind';
             return await renderBindPanel(interaction, `✨ Created new ${type} bind!`);
+        }
+
+        if (customId === 'bind_menu_server_select' && interaction.isStringSelectMenu()) {
+            const selectedVal = interaction.values[0];
+            session.serverId = selectedVal === 'bind_server_default' ? null : selectedVal.replace('bind_server_', '');
+            return await renderBindPanel(interaction, `🖥️ Target server updated!`);
         }
 
         if (customId === 'bind_manage_select' && interaction.isStringSelectMenu()) {
@@ -321,7 +342,7 @@ const bindHandler = async (interaction, client) => {
             if (customId === 'bind_btn_getpos') {
                 const loadingPayload = await buildPanelPayload(guildId, '⏳ **Extracting your position from the server...**');
                 await interaction.update(loadingPayload);
-                await queueAdminPos(interaction, 'custom_bind', session.selectedBindId);
+                await queueAdminPos(interaction, 'custom_bind', session.selectedBindId, session.serverId);
                 return;
             }
 
@@ -391,3 +412,4 @@ bindHandler.refreshPanelViaInteraction = async (interaction, messageOverride, bi
 };
 
 module.exports = bindHandler;
+module.exports.refreshPanelViaInteraction = bindHandler.refreshPanelViaInteraction;

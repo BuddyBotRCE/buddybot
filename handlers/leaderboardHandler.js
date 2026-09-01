@@ -1,9 +1,10 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require('discord.js');
-const { GuildConfig, UserEconomy } = require('../database/db');
+const { GuildConfig, UserEconomy, GameServer } = require('../database/db');
 
 module.exports = async (interaction, client) => {
     const customId = interaction.customId || '';
     const selectedValue = interaction.isStringSelectMenu() && interaction.values ? interaction.values[0] : '';
+    const guildId = interaction.guild.id;
 
     try {
         let category = 'wealth';
@@ -13,14 +14,12 @@ module.exports = async (interaction, client) => {
             category = customId.replace('lb_refresh_', '');
         }
 
-        // Fetch fresh config & fresh user economy records from the database
-        const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+        const config = await GuildConfig.findOne({ where: { guildId } });
         const currency = config ? config.economyCurrency : 'Scrap';
         
-        // Force a fresh reload from the database table (no cached models)
         const allPlayers = await UserEconomy.findAll({ 
-            where: { guildId: interaction.guild.id },
-            raw: true // pulls plain JS objects to prevent stale Sequelize instance caches
+            where: { guildId },
+            raw: true 
         });
 
         let leaderboardText = ''; 
@@ -96,10 +95,8 @@ module.exports = async (interaction, client) => {
             new ButtonBuilder().setCustomId(`lb_refresh_${category}`).setLabel('Refresh Leaderboard').setStyle(ButtonStyle.Secondary).setEmoji('🔄')
         );
 
-        // Acknowledge and update the interaction message components cleanly
         if (interaction.isRepliable()) {
             return await interaction.update({ embeds: [embed], components: [selectRow, btnRow] }).catch(async () => {
-                // Fallback if interaction update window expired
                 await interaction.followUp({ embeds: [embed], components: [selectRow, btnRow], flags: 64 }).catch(() => {});
             });
         }

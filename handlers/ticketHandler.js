@@ -1,5 +1,5 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionsBitField, AttachmentBuilder, ChannelSelectMenuBuilder, RoleSelectMenuBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { GuildConfig, TicketCategory } = require('../database/db');
+const { GuildConfig, TicketCategory, GameServer } = require('../database/db');
 const adminHandler = require('./adminHandler');
 
 // --- HELPER: RENDER ADMIN MENU ---
@@ -67,7 +67,6 @@ async function renderCategoryManager(interaction, guildId, action = 'update') {
     else await interaction.update(payload);
 }
 
-
 module.exports = async (interaction, client) => {
     try {
         const customId = interaction.customId || '';
@@ -80,9 +79,6 @@ module.exports = async (interaction, client) => {
             return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] });
         }
 
-        // ==========================================
-        // 1. ADMIN SETUP PANEL & ROUTING
-        // ==========================================
         if (customId === 'admin_menu_select' && interaction.isStringSelectMenu() && interaction.values[0] === 'setup_tickets') {
             return await renderAdminMenu(interaction, guildId, 'reply');
         }
@@ -90,7 +86,6 @@ module.exports = async (interaction, client) => {
         if (customId === 'tk_manage_cats') return await renderCategoryManager(interaction, guildId, 'update');
         if (customId === 'tk_back_main') return await renderAdminMenu(interaction, guildId, 'update');
 
-        // --- SETUP BUTTONS ---
         if (interaction.isButton()) {
             if (customId === 'btn_tk_setcat') {
                 const embed = new EmbedBuilder().setTitle('📂 Select Ticket Category').setDescription('Please select the Discord category where new support tickets will be spawned.').setColor('#3498db');
@@ -126,7 +121,6 @@ module.exports = async (interaction, client) => {
             }
         }
 
-        // --- SETUP DROPDOWN SAVERS ---
         if (interaction.isChannelSelectMenu()) {
             if (customId === 'tk_sel_cat') {
                 await GuildConfig.update({ ticketCategoryId: interaction.values[0] }, { where: { guildId } });
@@ -161,22 +155,44 @@ module.exports = async (interaction, client) => {
             return await renderCategoryManager(interaction, guildId, 'update');
         }
 
-
         // ==========================================
-        // 2. PLAYER CREATE TICKET (DROPDOWN)
+        // STEP 1: PLAYER CREATE TICKET (SERVER SELECTION HUB)
         // ==========================================
         if (customId === 'ticket_create') {
+            const servers = await GameServer.findAll({ where: { guildId } });
+            
+            let serverOptions = [
+                { label: '🌐 General / Discord Issue', value: 'scope_discord', description: 'Discord, website, or store problem', emoji: '💬' }
+            ];
+
+            if (servers.length > 0) {
+                servers.forEach(s => {
+                    serverOptions.push({ label: `🖥️ Server: ${s.serverName}`, value: `scope_server_${s.id}`, description: `In-game issue on ${s.serverName}`, emoji: '🖥️' });
+                });
+            }
+
+            const menu = new StringSelectMenuBuilder()
+                .setCustomId('tk_sel_scope')
+                .setPlaceholder('Select what your ticket is regarding...')
+                .addOptions(serverOptions);
+
+            return interaction.reply({ content: '🎫 **Support Ticket Setup (Step 1/2):**\nIs your issue related to a specific game server or a general Discord/community problem?', components: [new ActionRowBuilder().addComponents(menu)], flags: 64 });
+        }
+
+        // ==========================================
+        // STEP 2: PLAYER SELECT ISSUE CATEGORY
+        // ==========================================
+        if (interaction.isStringSelectMenu() && customId === 'tk_sel_scope') {
+            const scopeValue = interaction.values[0];
             const cats = await TicketCategory.findAll({ where: { guildId } });
 
             let options = [];
             if (cats.length === 0) {
-                // Default fallback options if the admin hasn't created any custom ones yet
                 options = [
-                    { label: 'General Support', description: 'Standard server inquiries and help.', value: 'General Support', emoji: '💬' },
+                    { label: 'General Support', description: 'Standard inquiries and help.', value: 'General Support', emoji: '💬' },
                     { label: 'Player Report', description: 'Report a rule breaker or cheater.', value: 'Player Report', emoji: '⚠️' }
                 ];
             } else {
-                // Map the custom categories from the database
                 options = cats.slice(0, 25).map(c => ({
                     label: c.name.substring(0, 100),
                     description: c.description ? c.description.substring(0, 100) : 'Open a ticket for this category.',
@@ -185,17 +201,18 @@ module.exports = async (interaction, client) => {
             }
 
             const menu = new StringSelectMenuBuilder()
-                .setCustomId('tk_sel_player_cat')
+                .setCustomId(`tk_sel_player_cat_${scopeValue}`)
                 .setPlaceholder('Select a ticket category...')
                 .addOptions(options);
 
-            return interaction.reply({ content: '🎫 **What do you need help with?**\nPlease select a category below to open your ticket:', components: [new ActionRowBuilder().addComponents(menu)], flags: 64 });
+            return interaction.update({ content: '🎫 **Support Ticket Setup (Step 2/2):**\nWhat specific category best describes your issue?', components: [new ActionRowBuilder().addComponents(menu)] });
         }
 
         // ==========================================
-        // 2.5 PLAYER TICKET SPAWN ROUTINE
+        // STEP 3: PLAYER TICKET SPAWN ROUTINE
         // ==========================================
-        if (interaction.isStringSelectMenu() && customId === 'tk_sel_player_cat') {
+        if (interaction.isStringSelectMenu() && customId.startsWith('tk_sel_player_cat_')) {
+            const scopeValue = customId.replace('tk_sel_player_cat_', '');
             const selectedCategory = interaction.values[0];
 
             const config = await GuildConfig.findOne({ where: { guildId } });
@@ -208,12 +225,17 @@ module.exports = async (interaction, client) => {
                 return interaction.update({ content: '❌ **Ticket System Error:** The configured ticket category no longer exists.', components: [] });
             }
 
-            // --- ROLE-BASED PRIORITY CHECKER LOGIC ---
+            let serverContextName = 'General / Discord';
+            let targetServerId = null;
+            if (scopeValue.startsWith('scope_server_')) {
+                targetServerId = scopeValue.replace('scope_server_', '');
+                const sObj = await GameServer.findByPk(targetServerId);
+                if (sObj) serverContextName = sObj.serverName;
+            }
+
             const member = await interaction.guild.members.fetch(interaction.user.id);
             const hasVipRole = config.ticketVipRoleId && member.roles.cache.has(config.ticketVipRoleId);
             const isPriorityCat = selectedCategory.toLowerCase().includes('priority');
-            
-            // If they have the VIP role OR they selected a category literally named "priority", flag it!
             const isPriority = hasVipRole || isPriorityCat;
             
             const channelPrefix = isPriority ? 'pri' : 'ticket';
@@ -246,7 +268,7 @@ module.exports = async (interaction, client) => {
 
             const ticketEmbed = new EmbedBuilder()
                 .setTitle(`${icon} ${selectedCategory} — ${interaction.user.tag}`)
-                .setDescription(`Welcome <@${interaction.user.id}>!${priorityTag}\n\nYou have opened a **${selectedCategory}** ticket.\nPlease describe your issue or question in as much detail as possible. A staff member will be with you shortly.`)
+                .setDescription(`Welcome <@${interaction.user.id}>!${priorityTag}\n\n**Target Scope:** \`${serverContextName}\`\n**Category:** ${selectedCategory}\n\nPlease describe your issue or question in as much detail as possible. A staff member will be with you shortly.`)
                 .setColor(embedColor)
                 .setTimestamp();
 
@@ -255,7 +277,6 @@ module.exports = async (interaction, client) => {
                 new ButtonBuilder().setCustomId('tk_close').setLabel('Close Ticket').setStyle(ButtonStyle.Danger).setEmoji('🔒')
             );
 
-            // Double ping if priority!
             const pingMsg = config.ticketAdminRoleId 
                 ? (isPriority ? `🚨 PRIORITY TICKET 🚨 <@&${config.ticketAdminRoleId}> | <@${interaction.user.id}>` : `<@${interaction.user.id}> | <@&${config.ticketAdminRoleId}>`)
                 : `<@${interaction.user.id}>`;
@@ -264,9 +285,8 @@ module.exports = async (interaction, client) => {
             return interaction.update({ content: `✅ Your ticket has been successfully created! Head over to ${ticketChannel}.`, components: [] });
         }
 
-
         // ==========================================
-        // 3. CLAIM TICKET
+        // 4. CLAIM TICKET
         // ==========================================
         if (customId === 'tk_claim') {
             const config = await GuildConfig.findOne({ where: { guildId } });
@@ -290,7 +310,7 @@ module.exports = async (interaction, client) => {
         }
 
         // ==========================================
-        // 4. CLOSE TICKET CONFIRMATION
+        // 5. CLOSE TICKET CONFIRMATION
         // ==========================================
         if (customId === 'tk_close') {
             const row = new ActionRowBuilder().addComponents(
@@ -305,7 +325,7 @@ module.exports = async (interaction, client) => {
         }
 
         // ==========================================
-        // 5. PROCESS CLOSE & TRANSCRIPT
+        // 6. PROCESS CLOSE & TRANSCRIPT
         // ==========================================
         if (customId === 'tk_confirm_close') {
             await interaction.update({ content: '🔒 **Ticket locked.** Generating transcript and closing in 5 seconds...', components: [] });
@@ -313,12 +333,10 @@ module.exports = async (interaction, client) => {
             const config = await GuildConfig.findOne({ where: { guildId } });
             const ticketCreatorId = interaction.channel.topic; 
             
-            // 1. Lock the channel so the player can't send more messages while we process
             if (ticketCreatorId) {
                 await interaction.channel.permissionOverwrites.edit(ticketCreatorId, { SendMessages: false }).catch(()=>{});
             }
 
-            // 2. Build the Transcript
             let messages = await interaction.channel.messages.fetch({ limit: 100 });
             messages = Array.from(messages.values()).reverse(); 
 
@@ -332,7 +350,6 @@ module.exports = async (interaction, client) => {
             const buffer = Buffer.from(`TICKET TRANSCRIPT: ${interaction.channel.name}\nGenerated on: ${new Date().toLocaleString()}\n-------------------------------------------------\n\n${logContent}`, 'utf-8');
             const attachment = new AttachmentBuilder(buffer, { name: `${interaction.channel.name}-transcript.txt` });
 
-            // 3. Send to Server Log Channel
             if (config?.ticketTranscriptChannelId) {
                 const logChannel = interaction.guild.channels.cache.get(config.ticketTranscriptChannelId);
                 if (logChannel) {
@@ -347,7 +364,6 @@ module.exports = async (interaction, client) => {
                 }
             }
 
-            // 4. DM to the Player
             if (ticketCreatorId) {
                 try {
                     const user = await client.users.fetch(ticketCreatorId);
@@ -360,7 +376,6 @@ module.exports = async (interaction, client) => {
                 }
             }
 
-            // 5. Delete Channel
             setTimeout(() => {
                 interaction.channel.delete().catch(() => {});
             }, 5000);

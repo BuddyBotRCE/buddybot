@@ -1,10 +1,11 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { GuildConfig, BuddyPassChallenge, BuddyPassReward, UserEconomy } = require('../database/db');
+const { GuildConfig, BuddyPassChallenge, BuddyPassReward, UserEconomy, GameServer } = require('../database/db');
 const adminHandler = require('./adminHandler');
 
 module.exports = async (interaction, client) => {
     const customId = interaction.customId || '';
     const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
+    const guildId = interaction.guild.id;
 
     if (customId === 'admin_menu_back') {
         if (adminHandler && adminHandler.renderMainPanel) {
@@ -13,11 +14,10 @@ module.exports = async (interaction, client) => {
         return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] });
     }
 
-    // --- ADMIN SETUP HUB ---
     if (customId === 'admin_menu_select' && selectedValue === 'setup_buddypass') {
-        const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-        const challenges = await BuddyPassChallenge.findAll({ where: { guildId: interaction.guild.id } });
-        const rewards = await BuddyPassReward.findAll({ where: { guildId: interaction.guild.id } });
+        const config = await GuildConfig.findOne({ where: { guildId } });
+        const challenges = await BuddyPassChallenge.findAll({ where: { guildId } });
+        const rewards = await BuddyPassReward.findAll({ where: { guildId } });
 
         const embed = new EmbedBuilder()
             .setTitle('⭐ BuddyPass Manager')
@@ -54,19 +54,18 @@ module.exports = async (interaction, client) => {
             rewardType = 'item'; rewardValue = `${parts[1]} ${parts[2]}`;
         }
 
-        await BuddyPassReward.upsert({ guildId: interaction.guild.id, level, rewardType, rewardValue });
+        await BuddyPassReward.upsert({ guildId, level, rewardType, rewardValue });
         return interaction.update({ content: `✅ Successfully assigned reward for **Level ${level}**: **${rewardType.toUpperCase()} (${rewardValue})**!`, components: [] });
     }
 
-    // --- BUTTON CLICKS ---
     if (interaction.isButton()) {
         if (customId === 'hub_buddypass_view') {
-            const challenges = await BuddyPassChallenge.findAll({ where: { guildId: interaction.guild.id } });
+            const challenges = await BuddyPassChallenge.findAll({ where: { guildId } });
             const challengeList = challenges.length 
                 ? challenges.map(c => `• **${c.title}** — Target: *${c.targetAmount} ${c.targetType}* | Reward: **+${c.rewardXp} XP**`).join('\n') 
                 : 'No active BuddyPass challenges configured on this server yet.';
 
-            const user = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
+            const user = await UserEconomy.findOne({ where: { guildId, userId: interaction.user.id } });
             const lvl = user?.level || 1;
             const xp = user?.xp || 0;
 
@@ -92,7 +91,7 @@ module.exports = async (interaction, client) => {
                 { title: 'Visit 3 Monuments', targetType: 'monument', targetAmount: 3, rewardXp: 100, isPreloaded: true }
             ];
             for (const d of defaults) {
-                await BuddyPassChallenge.findOrCreate({ where: { guildId: interaction.guild.id, title: d.title }, defaults: d });
+                await BuddyPassChallenge.findOrCreate({ where: { guildId, title: d.title }, defaults: d });
             }
             return interaction.reply({ content: `✅ Loaded preloaded challenges successfully!`, flags: 64 });
         }
@@ -115,11 +114,10 @@ module.exports = async (interaction, client) => {
         }
     }
 
-    // --- MODAL SUBMISSIONS ---
     if (interaction.isModalSubmit()) {
         if (customId === 'modal_bp_xp') {
             const rate = parseInt(interaction.fields.getTextInputValue('xp_rate')) || 10;
-            await GuildConfig.upsert({ guildId: interaction.guild.id, buddyPassXpRate: rate });
+            await GuildConfig.upsert({ guildId, buddyPassXpRate: rate });
             return interaction.reply({ content: `✅ BuddyPass XP rate multiplier set to **${rate}x**!`, flags: 64 });
         }
 
@@ -129,7 +127,7 @@ module.exports = async (interaction, client) => {
             const targetAmount = parseInt(interaction.fields.getTextInputValue('amount')) || 1;
             const rewardXp = parseInt(interaction.fields.getTextInputValue('xp')) || 100;
 
-            await BuddyPassChallenge.create({ guildId: interaction.guild.id, title, targetType, targetAmount, rewardXp, isPreloaded: false });
+            await BuddyPassChallenge.create({ guildId, title, targetType, targetAmount, rewardXp, isPreloaded: false });
             return interaction.reply({ content: `✅ Custom challenge **"${title}"** added successfully!`, flags: 64 });
         }
 

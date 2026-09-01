@@ -34,11 +34,21 @@ const buildGGPanelPayload = async (guildId, messageOverride = '') => {
     const ArenaSpawn = db.ArenaSpawn;
     const GunGameWeapon = db.GunGameWeapon;
     const ArenaPrize = db.ArenaPrize;
+    const GameServer = db.GameServer;
 
     const spawns = ArenaSpawn ? await ArenaSpawn.count({ where: { guildId } }).catch(() => 0) : 0;
     const weapons = GunGameWeapon ? await GunGameWeapon.count({ where: { guildId } }).catch(() => 0) : 0;
     const prizes = ArenaPrize ? await ArenaPrize.count({ where: { guildId } }).catch(() => 0) : 0;
     const prizeShare = prizes > 0 ? (100 / prizes).toFixed(1) : 0;
+    const servers = GameServer ? await GameServer.findAll({ where: { guildId } }).catch(() => []) : [];
+
+    let serverDisplay = '`Default / Main Server`';
+    const ggSession = global.ggSessions || new Map();
+    const session = ggSession.get(guildId) || { serverId: null };
+    if (session.serverId) {
+        const targetServer = servers.find(s => s.id == session.serverId);
+        if (targetServer) serverDisplay = `**${targetServer.serverName}**`;
+    }
 
     const embed = new EmbedBuilder()
         .setTitle('🎯 Gun Game Event Manager')
@@ -46,10 +56,20 @@ const buildGGPanelPayload = async (guildId, messageOverride = '') => {
         .setDescription(
             (messageOverride ? `**${messageOverride}**\n\n` : '') +
             `Configure automated Gun Game parameters for Rust Console Edition.\n\n` +
+            `• **Target Server:** ${serverDisplay}\n` +
             `• **Arena Spawns Mapped:** \`${spawns}\`\n` +
             `• **Active Tiers Set:** \`${weapons} / 21 Tiers\`\n` +
             `• **Lucky Dip Prizes:** \`${prizes} items (${prizeShare}% each)\``
         );
+
+    let components = [];
+
+    if (servers.length > 0) {
+        const serverOptions = [{ label: 'Default / Main Server', value: 'gg_server_default', emoji: '🌐' }, ...servers.map(s => ({ label: s.serverName, value: `gg_server_${s.id}`, emoji: '🖥️' }))];
+        components.push(new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder().setCustomId('gg_menu_server_select').setPlaceholder('🖥️ Select target server...').addOptions(serverOptions)
+        ));
+    }
 
     const row1 = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('gg_btn_add_spawn').setLabel('Add Spawn').setStyle(ButtonStyle.Success).setEmoji('📍'),
@@ -63,7 +83,9 @@ const buildGGPanelPayload = async (guildId, messageOverride = '') => {
         new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
     );
 
-    return { embeds: [embed], components: [row1, row2], flags: 64 };
+    components.push(row1, row2);
+
+    return { embeds: [embed], components, flags: 64 };
 };
 
 const gunGameHandler = async (interaction, client) => {
@@ -71,6 +93,10 @@ const gunGameHandler = async (interaction, client) => {
         const guildId = interaction.guild.id;
         const customId = interaction.customId || '';
         const selectedValue = interaction.isStringSelectMenu() && interaction.values ? interaction.values[0] : '';
+
+        if (!global.ggSessions) global.ggSessions = new Map();
+        if (!global.ggSessions.has(guildId)) global.ggSessions.set(guildId, { serverId: null });
+        const session = global.ggSessions.get(guildId);
 
         if (customId === 'admin_menu_back') {
             if (adminHandler && adminHandler.renderMainPanel) {
@@ -87,8 +113,7 @@ const gunGameHandler = async (interaction, client) => {
         if (customId === 'gg_btn_add_spawn') {
             const loadingPayload = await buildGGPanelPayload(guildId, '⏳ **Extracting your position from the server for Gun Game Spawn...**');
             await interaction.update(loadingPayload);
-            // Updated to 'custom_zone' type so rconManager handles and returns coordinates successfully
-            await queueAdminPos(interaction, 'custom_zone', 'gg_spawn');
+            await queueAdminPos(interaction, 'custom_zone', 'gg_spawn', session.serverId);
             return;
         }
 
@@ -149,6 +174,12 @@ const gunGameHandler = async (interaction, client) => {
         }
 
         if (interaction.isStringSelectMenu()) {
+            if (customId === 'gg_menu_server_select') {
+                session.serverId = selectedValue === 'gg_server_default' ? null : selectedValue.replace('gg_server_', '');
+                const payload = await buildGGPanelPayload(guildId, '🖥️ Target server updated!');
+                return interaction.update(payload);
+            }
+
             if (customId === 'gg_prize_category_select') {
                 const catKey = selectedValue.replace('gg_prize_cat_', '');
                 const categoryData = RUST_CATEGORIES[catKey];

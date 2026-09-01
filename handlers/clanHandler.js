@@ -1,5 +1,5 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder, StringSelectMenuBuilder, ChannelType, PermissionFlagsBits } = require('discord.js');
-const { GuildConfig, UserEconomy, Clan, ClanMember, ClanInvite } = require('../database/db');
+const { GuildConfig, UserEconomy, Clan, ClanMember, ClanInvite, GameServer } = require('../database/db');
 const adminHandler = require('./adminHandler');
 
 async function renderClanHub(interaction, member, editMode = false) {
@@ -62,6 +62,7 @@ module.exports = async (interaction, client) => {
     try {
         const customId = interaction.customId || '';
         const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
+        const guildId = interaction.guild.id;
 
         if (customId === 'admin_menu_back') {
             if (adminHandler && adminHandler.renderMainPanel) {
@@ -71,8 +72,8 @@ module.exports = async (interaction, client) => {
         }
 
         if (customId === 'admin_menu_select' && selectedValue === 'setup_clans') {
-            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-            const activeClans = await Clan.count({ where: { guildId: interaction.guild.id } });
+            const config = await GuildConfig.findOne({ where: { guildId } });
+            const activeClans = await Clan.count({ where: { guildId } });
             const currency = config?.economyCurrency || 'Scrap';
 
             const embed = new EmbedBuilder()
@@ -94,7 +95,7 @@ module.exports = async (interaction, client) => {
 
         if (interaction.isButton()) {
             if (customId === 'btn_clan_settings') {
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+                const config = await GuildConfig.findOne({ where: { guildId } });
                 const modal = new ModalBuilder().setCustomId('modal_clan_config').setTitle('Clan Creation Settings');
                 modal.addComponents(
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cost').setLabel("Creation Cost (e.g. 1000)").setStyle(TextInputStyle.Short).setValue(`${config?.clanCreationCost || 1000}`).setRequired(true)),
@@ -104,14 +105,14 @@ module.exports = async (interaction, client) => {
             }
 
             if (customId === 'btn_clan_toggle_sync') {
-                let [config] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
+                let [config] = await GuildConfig.findOrCreate({ where: { guildId } });
                 const newState = !(config?.clanDiscordSyncEnabled || false);
                 await config.update({ clanDiscordSyncEnabled: newState });
                 return interaction.reply({ content: `✅ Discord Auto-Sync for clans has been turned **${newState ? 'ON 🟢' : 'OFF 🔴'}**!`, flags: 64 });
             }
 
             if (customId === 'hub_clans') {
-                const userProfile = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
+                const userProfile = await UserEconomy.findOne({ where: { guildId, userId: interaction.user.id } });
                 if (!userProfile || !userProfile.inGameName) {
                     return interaction.reply({ content: '❌ You must link your Rust account first using `/playerpanel` before using the Clan system!', flags: 64 });
                 }
@@ -119,8 +120,8 @@ module.exports = async (interaction, client) => {
             }
 
             if (customId === 'btn_clan_create') {
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-                const user = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
+                const config = await GuildConfig.findOne({ where: { guildId } });
+                const user = await UserEconomy.findOne({ where: { guildId, userId: interaction.user.id } });
                 const currency = config?.economyCurrency || 'Scrap';
                 
                 if (!user || user.wallet < (config?.clanCreationCost || 1000)) {
@@ -143,10 +144,10 @@ module.exports = async (interaction, client) => {
             }
 
             if (customId.startsWith('btn_clan_bank_')) {
-                const memberData = await ClanMember.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
+                const memberData = await ClanMember.findOne({ where: { guildId, userId: interaction.user.id } });
                 const clan = await Clan.findByPk(memberData.clanId);
-                const user = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+                const user = await UserEconomy.findOne({ where: { guildId, userId: interaction.user.id } });
+                const config = await GuildConfig.findOne({ where: { guildId } });
                 const currency = config?.economyCurrency || 'Scrap';
 
                 const embed = new EmbedBuilder()
@@ -163,7 +164,7 @@ module.exports = async (interaction, client) => {
             }
 
             if (customId.startsWith('btn_clan_manage_')) {
-                const memberData = await ClanMember.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
+                const memberData = await ClanMember.findOne({ where: { guildId, userId: interaction.user.id } });
                 const members = await ClanMember.findAll({ where: { clanId: memberData.clanId } });
                 const memberList = members.map(m => `• <@${m.userId}> — \`${m.role}\``).join('\n');
 
@@ -191,7 +192,7 @@ module.exports = async (interaction, client) => {
             }
 
             if (customId.startsWith('btn_clan_leave_') || customId.startsWith('btn_clan_disband_')) {
-                const memberData = await ClanMember.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
+                const memberData = await ClanMember.findOne({ where: { guildId, userId: interaction.user.id } });
                 if (!memberData) return interaction.reply({ content: '❌ You are not in a clan.', flags: 64 });
 
                 if (memberData.role === 'Leader') {
@@ -211,7 +212,7 @@ module.exports = async (interaction, client) => {
             }
 
             if (customId.startsWith('btn_clan_codes_')) {
-                const memberData = await ClanMember.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
+                const memberData = await ClanMember.findOne({ where: { guildId, userId: interaction.user.id } });
                 const clan = await Clan.findByPk(memberData.clanId);
                 const embed = new EmbedBuilder().setTitle(`🔐 Base Codes: ${clan.name}`).setDescription(`• **Door Code:** \`${clan.doorCode || 'Not Set'}\`\n• **Cupboard Code:** \`${clan.tcCode || 'Not Set'}\``).setColor('#3498db');
                 const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_clan_set_codes').setLabel('Update Codes').setStyle(ButtonStyle.Primary));
@@ -231,9 +232,9 @@ module.exports = async (interaction, client) => {
         if (interaction.isUserSelectMenu()) {
             if (customId === 'select_clan_invite_target') {
                 const targetUserId = interaction.values[0];
-                const memberData = await ClanMember.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
+                const memberData = await ClanMember.findOne({ where: { guildId, userId: interaction.user.id } });
                 
-                await ClanInvite.create({ guildId: interaction.guild.id, clanId: memberData.clanId, userId: targetUserId });
+                await ClanInvite.create({ guildId, clanId: memberData.clanId, userId: targetUserId });
                 return interaction.reply({ content: `✅ Successfully sent a clan invite to <@${targetUserId}>!`, flags: 64 });
             }
         }
@@ -241,7 +242,7 @@ module.exports = async (interaction, client) => {
         if (interaction.isStringSelectMenu()) {
             if (customId === 'select_clan_kick') {
                 const targetUserId = selectedValue.replace('kick_', '');
-                await ClanMember.destroy({ where: { guildId: interaction.guild.id, userId: targetUserId } });
+                await ClanMember.destroy({ where: { guildId, userId: targetUserId } });
                 return interaction.update({ content: `✅ Successfully kicked member from the clan.`, components: [] });
             }
         }
@@ -250,14 +251,14 @@ module.exports = async (interaction, client) => {
             if (customId === 'modal_clan_config') {
                 const cost = parseInt(interaction.fields.getTextInputValue('cost')) || 1000;
                 const maxMembers = parseInt(interaction.fields.getTextInputValue('max_members')) || 4;
-                await GuildConfig.upsert({ guildId: interaction.guild.id, clanCreationCost: cost, clanDefaultMaxMembers: maxMembers });
+                await GuildConfig.upsert({ guildId, clanCreationCost: cost, clanDefaultMaxMembers: maxMembers });
                 return interaction.reply({ content: `✅ Clan creation settings updated!`, flags: 64 });
             }
 
             if (customId === 'modal_clan_create') {
                 await interaction.deferReply({ flags: 64 });
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-                const user = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
+                const config = await GuildConfig.findOne({ where: { guildId } });
+                const user = await UserEconomy.findOne({ where: { guildId, userId: interaction.user.id } });
                 const currency = config?.economyCurrency || 'Scrap';
                 
                 if (!user || user.wallet < (config?.clanCreationCost || 1000)) {
@@ -267,7 +268,7 @@ module.exports = async (interaction, client) => {
                 const rawName = interaction.fields.getTextInputValue('clan_name').trim();
                 const rawTag = interaction.fields.getTextInputValue('clan_tag').trim().toUpperCase();
 
-                const existingClan = await Clan.findOne({ where: { guildId: interaction.guild.id, tag: rawTag } });
+                const existingClan = await Clan.findOne({ where: { guildId, tag: rawTag } });
                 if (existingClan) {
                     return interaction.editReply({ content: `❌ The clan tag **${rawTag}** is already taken!` });
                 }
@@ -294,10 +295,10 @@ module.exports = async (interaction, client) => {
                 await user.update({ wallet: user.wallet - (config?.clanCreationCost || 1000) });
                 
                 const newClan = await Clan.create({
-                    guildId: interaction.guild.id, name: rawName, tag: rawTag, leaderId: interaction.user.id, maxMembers: config?.clanDefaultMaxMembers || 4, discordRoleId: roleId, discordTextChannelId: textId, discordVoiceChannelId: voiceId
+                    guildId, name: rawName, tag: rawTag, leaderId: interaction.user.id, maxMembers: config?.clanDefaultMaxMembers || 4, discordRoleId: roleId, discordTextChannelId: textId, discordVoiceChannelId: voiceId
                 });
 
-                await ClanMember.create({ guildId: interaction.guild.id, userId: interaction.user.id, clanId: newClan.id, role: 'Leader' });
+                await ClanMember.create({ guildId, userId: interaction.user.id, clanId: newClan.id, role: 'Leader' });
 
                 return await renderClanHub(interaction, interaction.member, true);
             }
@@ -305,7 +306,7 @@ module.exports = async (interaction, client) => {
             if (customId === 'modal_clan_update_codes') {
                 const door = interaction.fields.getTextInputValue('door').trim();
                 const tc = interaction.fields.getTextInputValue('tc').trim();
-                const memberData = await ClanMember.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
+                const memberData = await ClanMember.findOne({ where: { guildId, userId: interaction.user.id } });
                 await Clan.update({ doorCode: door, tcCode: tc }, { where: { id: memberData.clanId } });
                 return interaction.reply({ content: `✅ Base codes successfully updated!`, flags: 64 });
             }
@@ -314,10 +315,10 @@ module.exports = async (interaction, client) => {
                 const isDeposit = (customId === 'modal_clan_bank_deposit');
                 const input = interaction.fields.getTextInputValue('amount').trim().toLowerCase();
                 
-                const memberData = await ClanMember.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
+                const memberData = await ClanMember.findOne({ where: { guildId, userId: interaction.user.id } });
                 const clan = await Clan.findByPk(memberData.clanId);
-                const user = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+                const user = await UserEconomy.findOne({ where: { guildId, userId: interaction.user.id } });
+                const config = await GuildConfig.findOne({ where: { guildId } });
                 const currency = config?.economyCurrency || 'Scrap';
 
                 if (isDeposit) {

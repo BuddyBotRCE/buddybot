@@ -1,4 +1,5 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require('discord.js');
+const { GameServer } = require('../database/db');
 const adminHandler = require('./adminHandler');
 const gunGameHandler = require('./gunGameHandler');
 const battleRoyaleHandler = require('./battleRoyaleHandler');
@@ -7,6 +8,7 @@ module.exports = async (interaction, client) => {
     try {
         const customId = interaction.customId || '';
         const selectedValue = interaction.isStringSelectMenu() && interaction.values ? interaction.values[0] : '';
+        const guildId = interaction.guild.id;
 
         if (customId === 'admin_menu_back') {
             if (adminHandler && adminHandler.renderMainPanel) {
@@ -15,7 +17,6 @@ module.exports = async (interaction, client) => {
             return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] }).catch(() => {});
         }
 
-        // Show the Buddy Games Hub Menu
         const embed = new EmbedBuilder()
             .setTitle('🎮 Buddy Games: Arena Event Suite')
             .setDescription('Manage your Rust Console Edition automated arena minigames below:')

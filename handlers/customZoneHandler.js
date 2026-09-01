@@ -1,5 +1,5 @@
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } = require('discord.js');
-const { PveZone } = require('../database/db'); 
+const { PveZone, GameServer } = require('../database/db'); 
 const { queueAdminPos, sendRconCommand } = require('../utils/rconManager'); 
 const adminHandler = require('./adminHandler');
 
@@ -17,12 +17,19 @@ const ZONE_COLORS = [
 ];
 
 const buildPanelPayload = async (guildId, messageOverride = '') => {
-    if (!czSessions.has(guildId)) czSessions.set(guildId, { selectedZoneId: null, view: 'main' });
+    if (!czSessions.has(guildId)) czSessions.set(guildId, { selectedZoneId: null, view: 'main', serverId: null });
     const session = czSessions.get(guildId);
     
     const allZones = await PveZone.findAll({ where: { guildId }, order: [['id', 'ASC']] });
+    const servers = await GameServer.findAll({ where: { guildId } });
     let components = [];
     
+    let serverDisplay = '`Default / Main Server`';
+    if (session.serverId) {
+        const targetServer = servers.find(s => s.id == session.serverId);
+        if (targetServer) serverDisplay = `**${targetServer.serverName}**`;
+    }
+
     const embed = new EmbedBuilder().setColor('#e67e22').setTitle('🗺️ Custom Zone Builder');
     if (messageOverride) embed.setDescription(`**${messageOverride}**\n\n`);
 
@@ -37,10 +44,18 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
         }
 
         embed.addFields(
+            { name: '🖥️ Target Server', value: serverDisplay, inline: false },
             { name: '🟢 Active Zones', value: activeList || "*No active zones.*", inline: false },
             { name: '🔴 Disabled Zones', value: inactiveList || "*None.*", inline: false },
             { name: '🛠️ Manage Zones', value: "👇 **Click a zone below to manage its shape, flags, and rules.**", inline: false }
         );
+
+        if (servers.length > 0) {
+            const serverOptions = [{ label: 'Default / Main Server', value: 'cz_server_default', emoji: '🌐' }, ...servers.map(s => ({ label: s.serverName, value: `cz_server_${s.id}`, emoji: '🖥️' }))];
+            components.push(new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder().setCustomId('cz_menu_server_select').setPlaceholder('🖥️ Select target server...').addOptions(serverOptions)
+            ));
+        }
 
         const row1 = new ActionRowBuilder();
         for (const z of allZones.slice(0, 4)) {
@@ -73,6 +88,7 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
         const shapeDisplay = activeZone.shape === 'box' ? '📦 Box Zone' : '🟢 Sphere Zone';
 
         embed.addFields(
+            { name: `🖥️ Target Server`, value: serverDisplay, inline: false },
             { name: `📊 Configuration`, value: `**Shape:** ${shapeDisplay}\n**Radius / Size:** ${activeZone.radius || 0}m\n**Color:** ${colorDisplay}\n**Map Vis:** ${activeZone.visible ? '👁️ Visible' : '🙈 Hidden'}\n**Status:** ${activeZone.isEnabled ? '🟢 ENABLED' : '🔴 DISABLED'}`, inline: true },
             { name: `⚙️ Rule Flags`, value: `**PvP:** ${activeZone.pvp ? '🟢 ON' : '🔴 OFF'}\n**PvE:** ${activeZone.pve ? '🟢 ON' : '🔴 OFF'}\n**Build:** ${activeZone.build ? '🟢 ON' : '🔴 OFF'}`, inline: true },
             { name: `💬 In-Game Messages`, value: `**Enter:** ${activeZone.enterMessage || '*None*'}\n**Exit:** ${activeZone.exitMessage || '*None*'}`, inline: false },
@@ -157,7 +173,7 @@ const customZoneHandler = async (interaction, client) => {
         const customId = interaction.customId || '';
         const guildId = interaction.guild.id;
 
-        if (!czSessions.has(guildId)) czSessions.set(guildId, { selectedZoneId: null, view: 'main' });
+        if (!czSessions.has(guildId)) czSessions.set(guildId, { selectedZoneId: null, view: 'main', serverId: null });
         const session = czSessions.get(guildId);
 
         const renderCZPanel = async (inter, messageOverride = '') => {
@@ -211,6 +227,12 @@ const customZoneHandler = async (interaction, client) => {
             await PveZone.update({ color }, { where: { id: session.selectedZoneId } });
             session.view = 'zone';
             return await renderCZPanel(interaction, `🎨 Zone Color updated!`);
+        }
+
+        if (interaction.isStringSelectMenu() && customId === 'cz_menu_server_select') {
+            const selectedVal = interaction.values[0];
+            session.serverId = selectedVal === 'cz_server_default' ? null : selectedVal.replace('cz_server_', '');
+            return await renderCZPanel(interaction, `🖥️ Target server updated!`);
         }
 
         if (interaction.isButton()) {
@@ -328,19 +350,19 @@ const customZoneHandler = async (interaction, client) => {
                         const rotVal = (z.shape === 'box' && z.rotation) ? z.rotation : '0';
 
                         const createCmd = `zones.createcustomzone "${z.name}" (${z.posX},${z.posY || 35},${z.posZ}) ${rotVal} ${shapeType} ${sizeParam} ${pvpVal} ${pveVal} 0 ${buildDmgVal} ${buildVal}`;
-                        await sendRconCommand(guildId, createCmd, client);
+                        await sendRconCommand(guildId, createCmd, client, session.serverId);
 
-                        await sendRconCommand(guildId, `zones.editcustomzone "${z.name}" "showarea" "${showAreaVal}"`, client);
-                        await sendRconCommand(guildId, `zones.editcustomzone "${z.name}" "color" "${rgbColor}"`, client);
+                        await sendRconCommand(guildId, `zones.editcustomzone "${z.name}" "showarea" "${showAreaVal}"`, client, session.serverId);
+                        await sendRconCommand(guildId, `zones.editcustomzone "${z.name}" "color" "${rgbColor}"`, client, session.serverId);
 
                         if (z.enterMessage) {
-                            await sendRconCommand(guildId, `zones.editcustomzone "${z.name}" "entermessage" "${z.enterMessage}"`, client);
+                            await sendRconCommand(guildId, `zones.editcustomzone "${z.name}" "entermessage" "${z.enterMessage}"`, client, session.serverId);
                         }
                         if (z.exitMessage) {
-                            await sendRconCommand(guildId, `zones.editcustomzone "${z.name}" "leavemessage" "${z.exitMessage}"`, client);
+                            await sendRconCommand(guildId, `zones.editcustomzone "${z.name}" "leavemessage" "${z.exitMessage}"`, client, session.serverId);
                         }
                     } else if (!willBeEnabled) {
-                        await sendRconCommand(guildId, `zones.deletecustomzone "${z.name}"`, client);
+                        await sendRconCommand(guildId, `zones.deletecustomzone "${z.name}"`, client, session.serverId);
                     }
                 } catch (err) {
                     console.error("[RCON NATIVE ZONE ERROR]", err);
@@ -353,7 +375,7 @@ const customZoneHandler = async (interaction, client) => {
                 const z = await PveZone.findByPk(session.selectedZoneId);
                 if (z) {
                     try {
-                        await sendRconCommand(guildId, `zones.deletecustomzone "${z.name}"`, client);
+                        await sendRconCommand(guildId, `zones.deletecustomzone "${z.name}"`, client, session.serverId);
                     } catch(e) {}
                     await z.destroy();
                 }
@@ -366,7 +388,7 @@ const customZoneHandler = async (interaction, client) => {
             if (customId === 'cz_btn_getpos') {
                 const loadingPayload = await buildPanelPayload(guildId, '⏳ **Extracting your position from the server...**');
                 await interaction.update(loadingPayload);
-                await queueAdminPos(interaction, 'custom_zone', session.selectedZoneId);
+                await queueAdminPos(interaction, 'custom_zone', session.selectedZoneId, session.serverId);
                 return;
             }
         }

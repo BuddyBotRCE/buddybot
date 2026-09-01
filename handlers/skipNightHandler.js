@@ -1,100 +1,74 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { GuildConfig } = require('../database/db');
-const adminHandler = require('./adminHandler');
+const { OrpConfig, PlayerOrpBase, GameServer } = require('../database/db');
 
 module.exports = async (interaction, client) => {
     const customId = interaction.customId || '';
-    const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
+    const selectedValue = interaction.isStringSelectMenu() && interaction.values ? interaction.values[0] : '';
+    const guildId = interaction.guild.id;
 
-    if (customId === 'admin_menu_back') {
-        if (adminHandler && adminHandler.renderMainPanel) {
-            return await adminHandler.renderMainPanel(interaction);
-        }
-        return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] });
-    }
+    try {
+        if (selectedValue === 'setup_orp') {
+            const [orpConf] = await OrpConfig.findOrCreate({ where: { guildId } });
 
-    if (customId === 'admin_menu_select' && selectedValue === 'setup_skipnight') {
-        return await renderSkipNightPanel(interaction);
-    }
+            const embed = new EmbedBuilder()
+                .setTitle('🛡️ ORP Manager (Offline Raid Protection)')
+                .setDescription(`Configure your Offline Raid Protection (ORP) settings.\nPlayers can register their base coordinates in-game to automatically generate a protective zone when they log off.\n\n**Current Server Rules:**\n• **Protection Radius:** \`${orpConf.zoneSize} meters\`\n• **Online Color:** \`${orpConf.onlineColor}\`\n• **Offline Color:** \`${orpConf.offlineColor}\`\n• **Max Duration:** \`${orpConf.activeDurationHours} hours\``)
+                .setColor('#3498db');
 
-    if (interaction.isButton()) {
-        if (customId === 'btn_toggle_skipnight') {
-            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-            const newState = !(config?.skipNightEnabled || false);
-            await GuildConfig.upsert({ guildId: interaction.guild.id, skipNightEnabled: newState });
-            return await renderSkipNightPanel(interaction, `✅ Skip night feature turned **${newState ? 'ON 🟢' : 'OFF 🔴'}**!`);
-        }
-
-        if (customId === 'btn_set_skipnight_percentage') {
-            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-            const modal = new ModalBuilder().setCustomId('modal_skipnight_percentage').setTitle('Set Vote Percentage');
-            modal.addComponents(
-                new ActionRowBuilder().addComponents(
-                    new TextInputBuilder()
-                        .setCustomId('percentage_val')
-                        .setLabel('Required % of Players (e.g., 40, 50)')
-                        .setStyle(TextInputStyle.Short)
-                        .setValue(`${config?.skipNightPercentage || 50}`)
-                        .setRequired(true)
-                )
+            const row1 = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('btn_orp_config').setLabel('Configure Settings').setStyle(ButtonStyle.Primary).setEmoji('⚙️'),
+                new ButtonBuilder().setCustomId('btn_orp_clear').setLabel('Clear All Bases').setStyle(ButtonStyle.Danger).setEmoji('🗑️')
             );
-            return interaction.showModal(modal);
-        }
-    }
+            
+            const backRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+            );
 
-    if (interaction.isModalSubmit() && customId === 'modal_skipnight_percentage') {
-        const val = parseInt(interaction.fields.getTextInputValue('percentage_val'));
-        if (isNaN(val) || val < 1 || val > 100) {
-            return interaction.reply({ content: '❌ Please enter a valid percentage between 1 and 100.', flags: 64 });
+            return interaction.reply({ embeds: [embed], components: [row1, backRow], flags: 64 });
         }
-        await GuildConfig.upsert({ guildId: interaction.guild.id, skipNightPercentage: val });
-        return await renderSkipNightPanel(interaction, `✅ Vote threshold successfully set to **${val}%**!`);
+
+        if (interaction.isButton()) {
+            if (customId === 'btn_orp_config') {
+                const [orpConf] = await OrpConfig.findOrCreate({ where: { guildId } });
+                const modal = new ModalBuilder().setCustomId('modal_orp_config').setTitle('Configure ORP Parameters');
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('radius').setLabel("Zone Radius (meters)").setStyle(TextInputStyle.Short).setValue(`${orpConf.zoneSize}`).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('duration').setLabel("Max Duration (hours)").setStyle(TextInputStyle.Short).setValue(`${orpConf.activeDurationHours}`).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('online_color').setLabel("Online Color (hex or name)").setStyle(TextInputStyle.Short).setValue(`${orpConf.onlineColor}`).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('offline_color').setLabel("Offline Color (hex or name)").setStyle(TextInputStyle.Short).setValue(`${orpConf.offlineColor}`).setRequired(true))
+                );
+                return interaction.showModal(modal);
+            }
+
+            if (customId === 'btn_orp_clear') {
+                await PlayerOrpBase.destroy({ where: { guildId } });
+                return interaction.reply({ content: '✅ Cleared all registered ORP bases for this server.', flags: 64 });
+            }
+        }
+
+        if (interaction.isModalSubmit()) {
+            if (customId === 'modal_orp_config') {
+                const radius = parseInt(interaction.fields.getTextInputValue('radius')) || 25;
+                const duration = parseInt(interaction.fields.getTextInputValue('duration')) || 24;
+                const onlineCol = interaction.fields.getTextInputValue('online_color');
+                const offlineCol = interaction.fields.getTextInputValue('offline_color');
+
+                await OrpConfig.upsert({
+                    guildId,
+                    zoneSize: radius,
+                    activeDurationHours: duration,
+                    onlineColor: onlineCol,
+                    offlineColor: offlineCol
+                });
+
+                return interaction.reply({ content: `✅ **ORP Settings Updated!**\n• Radius: \`${radius}m\`\n• Max Duration: \`${duration}h\``, flags: 64 });
+            }
+        }
+
+    } catch (err) {
+        console.error('[ORP HANDLER ERROR]', err);
+        if (interaction.isRepliable() && !interaction.replied) {
+            return interaction.reply({ content: '❌ An error occurred processing the ORP action.', flags: 64 }).catch(() => {});
+        }
     }
 };
-
-async function renderSkipNightPanel(interaction, messageText = '') {
-    const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-    const isEnabled = config?.skipNightEnabled || false;
-    const percentage = config?.skipNightPercentage || 50;
-
-    const embed = new EmbedBuilder()
-        .setTitle('🌙 Skip Night Configuration')
-        .setDescription(
-            (messageText ? `**${messageText}**\n\n` : '') +
-            'Configure the in-game quick-chat vote system allowing players to skip the dark nighttime cycle.\n\n' +
-            `• **Status:** ${isEnabled ? '🟢 ACTIVE' : '🔴 DISABLED'}\n` +
-            `• **Required Vote Threshold:** \`${percentage}%\` of active players\n` +
-            `• **Trigger Emote Phrase:** \`Wait Here\` (In-game Quick Chat)`
-        )
-        .setColor('#e67e22');
-
-    const row1 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-            .setCustomId('btn_toggle_skipnight')
-            .setLabel(isEnabled ? 'Disable Skip Night' : 'Enable Skip Night')
-            .setStyle(isEnabled ? ButtonStyle.Danger : ButtonStyle.Success)
-            .setEmoji(isEnabled ? '🔴' : '🟢'),
-        new ButtonBuilder()
-            .setCustomId('btn_set_skipnight_percentage')
-            .setLabel('Set Vote Percentage')
-            .setStyle(ButtonStyle.Primary)
-            .setEmoji('📊')
-    );
-
-    const row2 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-            .setCustomId('admin_menu_back')
-            .setLabel('Back to Admin Panel')
-            .setStyle(ButtonStyle.Secondary)
-            .setEmoji('🔙')
-    );
-
-    const payload = { embeds: [embed], components: [row1, row2], flags: 64 };
-    if (interaction.replied || interaction.deferred) {
-        return await interaction.editReply(payload);
-    } else if (interaction.isButton() || interaction.isModalSubmit()) {
-        return await interaction.update(payload);
-    } else {
-        return await interaction.reply(payload);
-    }
-}
