@@ -124,6 +124,8 @@ const GuildConfig = sequelize.define('GuildConfig', {
     skipNightEmote: { type: DataTypes.STRING, defaultValue: 'Wait Here' },
     ticketTranscriptChannel: { type: DataTypes.STRING, allowNull: true },
     ticketSupportRole: { type: DataTypes.STRING, allowNull: true }, 
+    casinoWins: { type: DataTypes.INTEGER, defaultValue: 0 },
+    casinoLosses: { type: DataTypes.INTEGER, defaultValue: 0 }
 });
 
 const GameServer = sequelize.define('GameServer', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, serverName: { type: DataTypes.STRING, allowNull: false }, rconIp: { type: DataTypes.STRING, allowNull: false }, rconPort: { type: DataTypes.STRING, allowNull: false }, rconPassword: { type: DataTypes.STRING, allowNull: false }});
