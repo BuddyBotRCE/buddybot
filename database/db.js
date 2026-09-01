@@ -17,7 +17,6 @@ if (process.env.DATABASE_URL) {
     });
     console.log('[DATABASE] Connected to production PostgreSQL database.');
 } else {
-    // 👇 ADDED: SAFETY NET IF URL IS MISSING ON RAILWAY 👇
     if (process.env.NODE_ENV === 'production') {
         console.error("❌ CRITICAL ERROR: DATABASE_URL is missing from your Railway environment variables! The bot cannot start.");
         process.exit(1); 
@@ -36,7 +35,7 @@ const GuildConfig = sequelize.define('GuildConfig', {
     killfeedChannelId: { type: DataTypes.STRING, allowNull: true },
     giveawayChannelId: { type: DataTypes.STRING, allowNull: true },
     giveawayBannerUrl: { type: DataTypes.STRING, allowNull: true },
-    giveawayPingRoleId: { type: DataTypes.STRING, allowNull: true }, // Giveaway ping
+    giveawayPingRoleId: { type: DataTypes.STRING, allowNull: true },
     ticketCategoryId: { type: DataTypes.STRING, allowNull: true },
     ticketTranscriptChannelId: { type: DataTypes.STRING, allowNull: true },
     ticketAdminRoleId: { type: DataTypes.STRING, allowNull: true },
@@ -62,7 +61,6 @@ const GuildConfig = sequelize.define('GuildConfig', {
     statusChannelId: { type: DataTypes.STRING, allowNull: true },
     statusMessageId: { type: DataTypes.STRING, allowNull: true },
     
-    // 👇 NEW: BOT SETTINGS FEATURE TOGGLES 👇
     economyEnabled: { type: DataTypes.BOOLEAN, defaultValue: true },
     shopEnabled: { type: DataTypes.BOOLEAN, defaultValue: true },
     ticketsEnabled: { type: DataTypes.BOOLEAN, defaultValue: true },
@@ -76,7 +74,6 @@ const GuildConfig = sequelize.define('GuildConfig', {
     autoEventsEnabled: { type: DataTypes.BOOLEAN, defaultValue: true },
     orpEnabled: { type: DataTypes.BOOLEAN, defaultValue: true },
     homeTpEnabled: { type: DataTypes.BOOLEAN, defaultValue: true },
-    // 👆 END TOGGLES 👆
 
     aiProvider: { type: DataTypes.STRING, defaultValue: 'openai' },
     aiModel: { type: DataTypes.STRING, defaultValue: 'gpt-4o-mini' },
@@ -135,7 +132,19 @@ const Giveaway = sequelize.define('Giveaway', { messageId: { type: DataTypes.STR
 const CustomBind = sequelize.define('CustomBind', { guildId: { type: DataTypes.STRING, allowNull: false }, name: { type: DataTypes.STRING, defaultValue: 'Custom Bind' }, actionType: { type: DataTypes.STRING, defaultValue: 'custom' }, targetValue: { type: DataTypes.TEXT, allowNull: true }, rotation: { type: DataTypes.STRING, allowNull: true }, emote: { type: DataTypes.STRING, defaultValue: '⭐' }, command: { type: DataTypes.TEXT, allowNull: true }, cooldown: { type: DataTypes.INTEGER, defaultValue: 0 }, cost: { type: DataTypes.INTEGER, defaultValue: 0 }, roleId: { type: DataTypes.STRING, allowNull: true } });
 const BindCooldown = sequelize.define('BindCooldown', { guildId: { type: DataTypes.STRING, primaryKey: true }, userId: { type: DataTypes.STRING, primaryKey: true }, bindId: { type: DataTypes.INTEGER, primaryKey: true }, expiresAt: { type: DataTypes.DATE } });
 const ServerKit = sequelize.define('ServerKit', { guildId: { type: DataTypes.STRING }, kitName: { type: DataTypes.STRING }, items: { type: DataTypes.TEXT } });
-const ShopItem = sequelize.define('ShopItem', { guildId: { type: DataTypes.STRING }, name: { type: DataTypes.STRING }, command: { type: DataTypes.STRING }, price: { type: DataTypes.INTEGER }, category: { type: DataTypes.STRING, defaultValue: 'custom' }, cooldownSeconds: { type: DataTypes.INTEGER, defaultValue: 0 }, requiredRoleId: { type: DataTypes.STRING, allowNull: true } });
+
+// 👇 UPDATED: Added serverId to ShopItem definition 👇
+const ShopItem = sequelize.define('ShopItem', { 
+    guildId: { type: DataTypes.STRING }, 
+    serverId: { type: DataTypes.STRING, allowNull: true }, 
+    name: { type: DataTypes.STRING }, 
+    command: { type: DataTypes.STRING }, 
+    price: { type: DataTypes.INTEGER }, 
+    category: { type: DataTypes.STRING, defaultValue: 'custom' }, 
+    cooldownSeconds: { type: DataTypes.INTEGER, defaultValue: 0 }, 
+    requiredRoleId: { type: DataTypes.STRING, allowNull: true } 
+});
+
 const ShopCooldown = sequelize.define('ShopCooldown', { guildId: { type: DataTypes.STRING, primaryKey: true }, userId: { type: DataTypes.STRING, primaryKey: true }, itemId: { type: DataTypes.INTEGER, primaryKey: true }, expiresAt: { type: DataTypes.DATE } });
 const CasinoCooldown = sequelize.define('CasinoCooldown', { guildId: { type: DataTypes.STRING, primaryKey: true }, userId: { type: DataTypes.STRING, primaryKey: true }, expiresAt: { type: DataTypes.DATE } });
 const OrpConfig = sequelize.define('OrpConfig', { guildId: { type: DataTypes.STRING, primaryKey: true }, zoneSize: { type: DataTypes.INTEGER, defaultValue: 25 }, onlineColor: { type: DataTypes.STRING, defaultValue: 'green' }, offlineColor: { type: DataTypes.STRING, defaultValue: 'blue' }, activeDurationHours: { type: DataTypes.INTEGER, defaultValue: 24 } });
