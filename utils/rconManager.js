@@ -172,19 +172,22 @@ async function connectRcon(guildId, client, targetServerId = null) {
                                 } catch (error) {}
                             } 
                             else if (setupData.type === 'auto_event') {
-                                try {
-                                    const autoEventsHandler = require('../handlers/autoEventsHandler');
-                                    if (autoEventsHandler && autoEventsHandler.autoSaveLocation) {
-                                        await autoEventsHandler.autoSaveLocation(setupData.interaction.guild.id, posX, posY, posZ, setupData.targetId);
-                                    }
-                                    if (autoEventsHandler && autoEventsHandler.refreshPanelViaInteraction) {
-                                        await autoEventsHandler.refreshPanelViaInteraction(
-                                            setupData.interaction,
-                                            `✅ **Spawn Position Added!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``
-                                        );
-                                    }
-                                } catch (error) {}
-                            }
+    try {
+        const autoEventsHandler = require('../handlers/autoEventsHandler');
+        if (autoEventsHandler && autoEventsHandler.autoSaveLocation) {
+            await autoEventsHandler.autoSaveLocation(setupData.interaction.guild.id, posX, posY, posZ, setupData.targetId);
+        }
+        if (autoEventsHandler && autoEventsHandler.refreshPanelViaInteraction) {
+            await autoEventsHandler.refreshPanelViaInteraction(
+                setupData.interaction,
+                `✅ **Spawn Position Added!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``,
+                setupData.targetId
+            );
+        }
+    } catch (error) {
+        console.error('[AUTO EVENT RCON SAVE ERROR]', error);
+    }
+}
                             else if (setupData.type === 'custom_zone') {
                                 try {
                                     const customZoneHandler = require('../handlers/customZoneHandler');
