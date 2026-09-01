@@ -320,9 +320,9 @@ module.exports = async (interaction, client) => {
             return await economyHandler(interaction, client);
         }
 
-        if (customId === 'hub_casino' || customId === 'casino_game_select' || customId.startsWith('modal_play_') || customId.includes('casino') || customId === 'btn_casino_settings') {
+       if (customId === 'hub_casino' || customId === 'casino_game_select' || customId.startsWith('modal_play_') || customId.startsWith('g_') || customId.includes('casino') || customId === 'btn_casino_settings') {
             return await casinoHandler(interaction, client);
-        }
+        } 
 
         if (customId === 'hub_buddypass_view' || customId.startsWith('bp_') || customId.includes('buddypass')) {
             return await buddyPassHandler(interaction, client);
