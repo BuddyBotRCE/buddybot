@@ -131,7 +131,10 @@ module.exports = async (interaction, client) => {
             }
 
             if (customId === 'modal_ae_settings' || customId.startsWith('modal_ae_')) return await autoEventsHandler(interaction, client);
-            if (customId === 'modal_casino_config') return await casinoHandler(interaction, client);
+            if (customId === 'modal_casino_config' || customId.startsWith('modal_play_')) {
+                return await casinoHandler(interaction, client);
+            }
+
             if (customId.startsWith('modal_emb_') || customId === 'modal_admin_embed' || customId.startsWith('modal_rr_') || customId.startsWith('modal_edit_embed_prompt' ) || customId.startsWith('modal_attach_rr_prompt')) return await postEmbedHandler(interaction, client);
             if (customId.startsWith('modal_am_') || customId === 'modal_automod_config') return await autoModHandler(interaction, client);
             if (customId.startsWith('modal_cz_')) return await customZoneHandler(interaction, client);
@@ -384,7 +387,6 @@ module.exports = async (interaction, client) => {
         }
 
         return await adminHandler(interaction, client);
-
     } catch (error) {
         if (timeoutSafety) clearTimeout(timeoutSafety);
         console.error('[INTERACTION ERROR]', error);
@@ -393,5 +395,7 @@ module.exports = async (interaction, client) => {
         } else {
             await interaction.reply({ content: `❌ Error: ${error.message}`, flags: 64 }).catch(() => {});
         }
+    } finally {
+        if (timeoutSafety) clearTimeout(timeoutSafety);
     }
 };
