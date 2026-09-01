@@ -127,6 +127,12 @@ module.exports = async (interaction, client) => {
                 const currency = config?.economyCurrency || 'Scrap';
                 const maxBet = config?.casinoMaxBet || 1000;
 
+                // Check premium restriction for games index 5 and above if not premium
+                const freeGames = ['coinflip', 'slots', 'dice', 'scratchcard', 'rps'];
+                if (!config?.isPremiumServer && !freeGames.includes(gameType)) {
+                    return interaction.reply({ content: `❌ **${gameType.toUpperCase()}** is a Premium-only minigame! Upgrade your server to unlock all 25 games.`, flags: 64 });
+                }
+
                 if (isNaN(bet) || bet <= 0) {
                     return interaction.reply({ content: '❌ Please enter a valid number for your bet.', flags: 64 });
                 }
@@ -157,12 +163,13 @@ module.exports = async (interaction, client) => {
                 let payout = 0;
 
                 switch (gameType) {
-                    case 'coinflip':
+                    case 'coinflip': {
                         const winCF = Math.random() < 0.5;
                         payout = winCF ? bet * 2 : 0;
                         resultMsg = winCF ? `🪙 **COINFLIP WON!** You won **+${bet} ${currency}**!` : `🪙 **COINFLIP LOST!** You lost **-${bet} ${currency}**.`;
                         break;
-                    case 'slots':
+                    }
+                    case 'slots': {
                         const icons = ['🍒', '🍋', '🔔', '💎', '7️⃣'];
                         const r1 = icons[Math.floor(Math.random() * icons.length)]; 
                         const r2 = icons[Math.floor(Math.random() * icons.length)]; 
@@ -178,18 +185,68 @@ module.exports = async (interaction, client) => {
                             resultMsg = `🎰 | ${r1}|${r2}|${r3} | **Loss!** Lost **-${bet} ${currency}**.`; 
                         }
                         break;
-                    case 'dice':
+                    }
+                    case 'dice': {
                         const roll = Math.floor(Math.random() * 6) + 1;
                         const winDice = roll > 3;
                         payout = winDice ? Math.round(bet * 1.8) : 0;
-                        resultMsg = winDice ? `🎲 Rolled **${roll}** (High)! Won **+${payout - bet} ${currency}**!` : `🎲 Rolled **${roll}** (Low). Lost **-${bet} ${currency}**.`;
+                        const netDiff = payout - bet;
+                        resultMsg = winDice ? `🎲 Rolled **${roll}** (High)! Won **+${netDiff} ${currency}**!` : `🎲 Rolled **${roll}** (Low). Lost **-${bet} ${currency}**.`;
                         break;
-                    default:
-                        const genericWin = Math.random() < 0.45;
-                        payout = genericWin ? Math.round(bet * 2) : 0;
+                    }
+                    case 'scratchcard': {
+                        const symbols = ['⭐', '❌', '💎', '🍀'];
+                        const s1 = symbols[Math.floor(Math.random() * symbols.length)];
+                        const s2 = symbols[Math.floor(Math.random() * symbols.length)];
+                        const s3 = symbols[Math.floor(Math.random() * symbols.length)];
+                        if (s1 === s2 && s2 === s3) {
+                            payout = bet * 3;
+                            resultMsg = `🎟️ [ ${s1} | ${s2} | ${s3} ] **SCRATCHCARD WIN!** Triple match! Won **+${bet * 2} ${currency}**!`;
+                        } else if (s1 === s2 || s2 === s3 || s1 === s3) {
+                            payout = Math.round(bet * 1.2);
+                            resultMsg = `🎟️ [ ${s1} | ${s2} | ${s3} ] **SCRATCHCARD SMALL WIN!** Double match! Won **+${Math.round(bet * 0.2)} ${currency}**!`;
+                        } else {
+                            payout = 0;
+                            resultMsg = `🎟️ [ ${s1} | ${s2} | ${s3} ] **SCRATCHCARD LOSS!** No matches. Lost **-${bet} ${currency}**.`;
+                        }
+                        break;
+                    }
+                    case 'rps': {
+                        const choices = ['Rock', 'Paper', 'Scissors'];
+                        const botChoice = choices[Math.floor(Math.random() * choices.length)];
+                        // User choice is randomized for simple text modal implementation
+                        const userChoice = choices[Math.floor(Math.random() * choices.length)];
+                        
+                        let outcome = 'loss';
+                        if (userChoice === botChoice) outcome = 'tie';
+                        else if (
+                            (userChoice === 'Rock' && botChoice === 'Scissors') ||
+                            (userChoice === 'Paper' && botChoice === 'Rock') ||
+                            (userChoice === 'Scissors' && botChoice === 'Paper')
+                        ) {
+                            outcome = 'win';
+                        }
+
+                        if (outcome === 'win') {
+                            payout = bet * 2;
+                            resultMsg = `✂️ You chose **${userChoice}**, bot chose **${botChoice}**. **RPS WIN!** Won **+${bet} ${currency}**!`;
+                        } else if (outcome === 'tie') {
+                            payout = bet; // Refund
+                            resultMsg = `✂️ You chose **${userChoice}**, bot chose **${botChoice}**. **RPS TIE!** Bet refunded.`;
+                        } else {
+                            payout = 0;
+                            resultMsg = `✂️ You chose **${userChoice}**, bot chose **${botChoice}**. **RPS LOSS!** Lost **-${bet} ${currency}**.`;
+                        }
+                        break;
+                    }
+                    default: {
+                        // Generic handler for all other 20 premium games so they never crash
+                        const winGeneric = Math.random() < 0.45;
+                        payout = winGeneric ? Math.round(bet * 2) : 0;
                         const displayName = gameType.toUpperCase();
-                        resultMsg = genericWin ? `🎮 **${displayName} WON!** You won **+${bet} ${currency}**!` : `🎮 **${displayName} LOST!** You lost **-${bet} ${currency}**.`;
+                        resultMsg = winGeneric ? `🎮 **${displayName} WIN!** Fortune favored you, won **+${bet} ${currency}**!` : `🎮 **${displayName} LOSS!** House wins, lost **-${bet} ${currency}**.`;
                         break;
+                    }
                 }
 
                 await user.update({ wallet: (user.wallet - bet) + payout });
