@@ -1,11 +1,7 @@
 const { processHomeTpChat } = require('./chatHomeTp');
 const { processCustomBindChat } = require('./chatCustomBinds');
-const { processSkipNightChat } = require('./chatSkipNight'); // 👇 Imported Skip Night Logic!
+const { processSkipNightChat } = require('./chatSkipNight');
 
-// ==========================================
-// D11 QUICK CHAT MASTER LISTS
-// (Reserved commands for Home TP & Skip Night are removed)
-// ==========================================
 const CHAT_CATEGORIES = [
     { label: 'Combat', value: 'cat_combat', emoji: '⚔️', description: 'Under attack, move out, etc.' },
     { label: 'Building', value: 'cat_building', emoji: '🧱', description: 'Walls, beds, door codes, upkeep' },
@@ -21,7 +17,6 @@ const CHAT_CATEGORIES = [
 const CHAT_OPTIONS_MAP = {
     cat_combat: [
         { label: 'We\'re Under Attack', value: 'd11_quick_chat_combat_slot_0', emoji: '⚔️' }, 
-        // SLOT 1 (Retreat) REMOVED - Reserved for Home TP
         { label: 'Move Out', value: 'd11_quick_chat_combat_slot_2', emoji: '🚀' }, 
         { label: 'Don\'t Shoot', value: 'd11_quick_chat_combat_slot_3', emoji: '🛑' }, 
         { label: 'Be Careful - Better Armed', value: 'd11_quick_chat_combat_slot_4', emoji: '⚠️' }, 
@@ -33,7 +28,6 @@ const CHAT_OPTIONS_MAP = {
         { label: 'We Need Beds', value: 'd11_quick_chat_building_slot_1', emoji: '🛏️' }, 
         { label: 'I Need Building Auth', value: 'd11_quick_chat_building_slot_2', emoji: '🔑' }, 
         { label: 'What\'s the Door Code?', value: 'd11_quick_chat_building_slot_3', emoji: '🔢' }, 
-        // SLOT 4 (Can I Have a Key) REMOVED - Reserved for Set Home
         { label: 'We Need a Better Door', value: 'd11_quick_chat_building_slot_5', emoji: '🚪' }, 
         { label: 'Upkeep Running Low', value: 'd11_quick_chat_building_slot_6', emoji: '⏳' }, 
         { label: 'Which Chest is Free Game?', value: 'd11_quick_chat_building_slot_7', emoji: '📦' }
@@ -72,7 +66,6 @@ const CHAT_OPTIONS_MAP = {
         { label: 'Follow Me', value: 'd11_quick_chat_orders_slot_0', emoji: '👉' }, 
         { label: 'Go Away', value: 'd11_quick_chat_orders_slot_1', emoji: '🚷' }, 
         { label: 'Repair This', value: 'd11_quick_chat_orders_slot_2', emoji: '🔨' }, 
-        // SLOT 3 (Wait Here) REMOVED - Reserved for Skip Night
         { label: 'Come In', value: 'd11_quick_chat_orders_slot_4', emoji: '📥' }, 
         { label: 'Let\'s Go', value: 'd11_quick_chat_orders_slot_5', emoji: '🏃‍♂️' }, 
         { label: 'Here, Take This', value: 'd11_quick_chat_orders_slot_6', emoji: '🎁' }, 
@@ -110,21 +103,16 @@ const CHAT_OPTIONS_MAP = {
     ]
 };
 
-// ==========================================
-// THE TRAFFIC ROUTER
-// ==========================================
 async function processD11Router(guildId, rawUsername, rawContent, msgLower, client, homeTpPosQueue, sendRconCommand) {
     if (!rawUsername || !rawContent) return false;
 
     const isQuickChat = rawContent.includes('d11_quick_chat_');
 
-    // 1. SKIP NIGHT ROUTER (Catches 'Wait Here')
     const isSkipNight = (isQuickChat && rawContent.includes('d11_quick_chat_orders_slot_3')) || rawContent === '!skipnight' || rawContent === '/skipnight';
     if (isSkipNight) {
         return await processSkipNightChat(guildId, rawUsername, client, sendRconCommand);
     }
 
-    // 2. HOME TP ROUTER (Catches 'Can I have a key?' and 'Retreat')
     const isSetHome = (isQuickChat && rawContent.includes('d11_quick_chat_building_slot_4')) || rawContent === '!sethome' || rawContent === '/sethome';
     const isRetreat = (isQuickChat && rawContent.includes('d11_quick_chat_combat_slot_1')) || rawContent === '!home' || rawContent === '/home';
 
@@ -132,7 +120,6 @@ async function processD11Router(guildId, rawUsername, rawContent, msgLower, clie
         return await processHomeTpChat(guildId, rawUsername, isSetHome, isRetreat, client, homeTpPosQueue, sendRconCommand);
     }
 
-    // 3. CUSTOM BINDS ROUTER (Catches everything else)
     return await processCustomBindChat(guildId, rawUsername, rawContent, msgLower, client, sendRconCommand);
 }
 

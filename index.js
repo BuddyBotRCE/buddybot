@@ -122,7 +122,7 @@ try {
 }
 
 client.once('ready', async () => {
-    require('./events/ready')(client); // Hook into our ready event file
+    require('./events/ready')(client); 
     
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     const commandData = client.commands.map(cmd => cmd.data.toJSON());

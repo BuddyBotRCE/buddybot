@@ -1,11 +1,11 @@
 const { HomeTeleportConfig, HomeTeleportCooldown, HomeTeleportLocation, UserEconomy } = require('../database/db');
 
 async function processHomeTpChat(guildId, rawUsername, isSetHome, isRetreat, client, homeTpPosQueue, sendRconCommand) {
-    const registeredPlayers = await UserEconomy.findAll({ where: { guildId } });
-
+    const registeredPlayers = await UserEconomy.findAll({ where: { guildId: guildId } });
     let matchedPlayer = null;
+
     for (const player of registeredPlayers) {
-        if (player.inGameName && rawUsername.toLowerCase() === player.inGameName.toLowerCase()) {
+        if (player.inGameName && (rawUsername.toLowerCase() === player.inGameName.toLowerCase())) {
             matchedPlayer = player;
             break;
         }
@@ -15,7 +15,6 @@ async function processHomeTpChat(guildId, rawUsername, isSetHome, isRetreat, cli
 
     const guildObj = client.guilds.cache.get(guildId);
     const memberObj = await guildObj?.members.fetch(matchedPlayer.userId).catch(() => null);
-
     if (!memberObj) return false;
 
     const hometpConfig = await HomeTeleportConfig.findOne({ where: { guildId } });
@@ -27,24 +26,24 @@ async function processHomeTpChat(guildId, rawUsername, isSetHome, isRetreat, cli
         return true;
     }
 
-    // A. SET HOME
+    // A. SET HOME TRIGGER (Emote: Can I have a key)
     if (isSetHome) {
         await sendRconCommand(guildId, `kill "${matchedPlayer.inGameName}"`, client);
         await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, home set command received! Respawn at your bag to anchor coordinates."`, client);
-
+        
         if (homeTpPosQueue.has(matchedPlayer.userId)) clearTimeout(homeTpPosQueue.get(matchedPlayer.userId).timeoutTimer);
         const timeoutTimer = setTimeout(() => homeTpPosQueue.delete(matchedPlayer.userId), 30000);
         homeTpPosQueue.set(matchedPlayer.userId, { userId: matchedPlayer.userId, inGameName: matchedPlayer.inGameName, timeoutTimer });
-
+        
         await sendRconCommand(guildId, `printpos "${matchedPlayer.inGameName}"`, client);
         return true;
     }
 
-    // B. RETREAT TELEPORT
+    // B. RETREAT TELEPORT TRIGGER (Emote: Retreat)
     if (isRetreat) {
         const now = new Date();
         const [cd] = await HomeTeleportCooldown.findOrCreate({ where: { guildId, userId: matchedPlayer.userId }, defaults: { expiresAt: now } });
-
+        
         if (new Date(cd.expiresAt) > now) {
             const minsLeft = Math.ceil((new Date(cd.expiresAt) - now) / 60000);
             await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, Home Teleport is on cooldown for another ${minsLeft} minutes!"`, client);

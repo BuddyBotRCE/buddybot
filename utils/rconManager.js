@@ -1,10 +1,11 @@
 const WebSocket = require('ws');
 const { GuildConfig, GameServer, UserEconomy, CustomBind, BindCooldown, ActiveBounty, BountyCooldown, HomeTeleportConfig, HomeTeleportCooldown, HomeTeleportLocation } = require('../database/db');
 const { EmbedBuilder } = require('discord.js');
+const { processD11Router } = require('./d11ChatHandler'); // Linked to your D11 router
 
 const activeConnections = new Map();
 const adminPosQueue = new Map(); 
-const homeTpPosQueue = new Map(); // Queue for catching home coords after console kill
+const homeTpPosQueue = new Map(); 
 
 function registerEventParser(rconMock, emit) {
     rconMock.on('message', (msg) => {
@@ -118,7 +119,6 @@ async function connectRcon(guildId, client, targetServerId = null) {
                 let rawUsername = '';
                 let rawContent = msg;
 
-                // Parse Rust Console Edition chat format: "[CHAT LOCAL] Username : message"
                 if (msg.includes('[chat local]')) {
                     const parts = msg.split(':');
                     if (parts.length >= 2) {
@@ -128,7 +128,6 @@ async function connectRcon(guildId, client, targetServerId = null) {
                 }
 
                 const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
-                const guild = client ? client.guilds.cache.get(guildId) : null;
 
                 // ==========================================
                 // 1. POSITION INTERCEPTOR (ADMIN / SETUP TOOLS)
@@ -172,22 +171,22 @@ async function connectRcon(guildId, client, targetServerId = null) {
                                 } catch (error) {}
                             } 
                             else if (setupData.type === 'auto_event') {
-    try {
-        const autoEventsHandler = require('../handlers/autoEventsHandler');
-        if (autoEventsHandler && autoEventsHandler.autoSaveLocation) {
-            await autoEventsHandler.autoSaveLocation(setupData.interaction.guild.id, posX, posY, posZ, setupData.targetId);
-        }
-        if (autoEventsHandler && autoEventsHandler.refreshPanelViaInteraction) {
-            await autoEventsHandler.refreshPanelViaInteraction(
-                setupData.interaction,
-                `✅ **Spawn Position Added!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``,
-                setupData.targetId
-            );
-        }
-    } catch (error) {
-        console.error('[AUTO EVENT RCON SAVE ERROR]', error);
-    }
-}
+                                try {
+                                    const autoEventsHandler = require('../handlers/autoEventsHandler');
+                                    if (autoEventsHandler && autoEventsHandler.autoSaveLocation) {
+                                        await autoEventsHandler.autoSaveLocation(setupData.interaction.guild.id, posX, posY, posZ, setupData.targetId);
+                                    }
+                                    if (autoEventsHandler && autoEventsHandler.refreshPanelViaInteraction) {
+                                        await autoEventsHandler.refreshPanelViaInteraction(
+                                            setupData.interaction,
+                                            `✅ **Spawn Position Added!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``,
+                                            setupData.targetId
+                                        );
+                                    }
+                                } catch (error) {
+                                    console.error('[AUTO EVENT RCON SAVE ERROR]', error);
+                                }
+                            }
                             else if (setupData.type === 'custom_zone') {
                                 try {
                                     const customZoneHandler = require('../handlers/customZoneHandler');
@@ -235,7 +234,7 @@ async function connectRcon(guildId, client, targetServerId = null) {
                 }
 
                 // ==========================================
-                // 2. KILLFEED, BOUNTIES & KILL REWARDS (SCIENTISTS & PLAYERS)
+                // 2. KILLFEED, BOUNTIES & KILL REWARDS
                 // ==========================================
                 if ((msgLower.includes('killed') || msgLower.includes('murdered') || msgLower.includes('suicide') || msgLower.includes('died') || msgLower.includes('slain')) && !msg.includes('[Killfeed]')) {
                     await sendRconCommand(guildId, `say "[Killfeed] ${msg}"`, client);
@@ -280,104 +279,11 @@ async function connectRcon(guildId, client, targetServerId = null) {
                 }
 
                 // ==========================================
-                // 4. RUST CONSOLE QUICK-CHAT WHEEL INTERCEPTOR
+                // 4. D11 QUICK-CHAT ROUTER & CUSTOM BINDS
                 // ==========================================
-                if (msgLower.includes('d11_quick_chat_') || msgLower.includes('retreat')) {
-                    const registeredPlayers = await UserEconomy.findAll({ where: { guildId: guildId } });
-                    let matchedPlayer = null;
+                const handled = await processD11Router(guildId, rawUsername, rawContent, msgLower, client, homeTpPosQueue, sendRconCommand);
+                if (handled) return;
 
-                    for (const player of registeredPlayers) {
-                        if (player.inGameName && (rawUsername.toLowerCase() === player.inGameName.toLowerCase() || msgLower.includes(player.inGameName.toLowerCase()))) {
-                            matchedPlayer = player;
-                            break;
-                        }
-                    }
-
-                    if (matchedPlayer && client) {
-                        const guildObj = client.guilds.cache.get(guildId);
-                        const memberObj = await guildObj?.members.fetch(matchedPlayer.userId).catch(() => null);
-
-                        if (memberObj) {
-                            const hometpConfig = await HomeTeleportConfig.findOne({ where: { guildId } });
-                            if (hometpConfig) {
-                                // Check Role Requirement
-                                if (hometpConfig.requiredRoleId && !memberObj.roles.cache.has(hometpConfig.requiredRoleId)) {
-                                    await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, you lack the required Discord role to use Home Teleport!"`, client);
-                                    return;
-                                }
-
-                                // A. SET HOME TRIGGER
-                                if (rawContent.includes('d11_quick_chat_')) {
-                                    await sendRconCommand(guildId, `kill "${matchedPlayer.inGameName}"`, client);
-                                    await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, home set command received! Respawn at your bag to anchor coordinates."`, client);
-                                    
-                                    if (homeTpPosQueue.has(matchedPlayer.userId)) clearTimeout(homeTpPosQueue.get(matchedPlayer.userId).timeoutTimer);
-                                    const timeoutTimer = setTimeout(() => homeTpPosQueue.delete(matchedPlayer.userId), 30000);
-                                    homeTpPosQueue.set(matchedPlayer.userId, { userId: matchedPlayer.userId, inGameName: matchedPlayer.inGameName, timeoutTimer });
-                                    
-                                    await sendRconCommand(guildId, `printpos "${matchedPlayer.inGameName}"`, client);
-                                    return;
-                                }
-
-                                // B. RETREAT TELEPORT TRIGGER
-                                if (rawContent.includes('retreat') || rawContent.includes('combat_slot_1')) {
-                                    const now = new Date();
-                                    const [cd] = await HomeTeleportCooldown.findOrCreate({ where: { guildId, userId: matchedPlayer.userId }, defaults: { expiresAt: now } });
-                                    
-                                    if (new Date(cd.expiresAt) > now) {
-                                        const minsLeft = Math.ceil((new Date(cd.expiresAt) - now) / 60000);
-                                        await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, Home Teleport is on cooldown for another ${minsLeft} minutes!"`, client);
-                                        return;
-                                    }
-
-                                    const homeLoc = await HomeTeleportLocation.findOne({ where: { guildId, userId: matchedPlayer.userId } });
-                                    if (!homeLoc) {
-                                        await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, you have not set a home yet! Use the quick-chat wheel first."`, client);
-                                        return;
-                                    }
-
-                                    const expiryTime = new Date(now.getTime() + hometpConfig.cooldownMinutes * 60000);
-                                    await cd.update({ expiresAt: expiryTime });
-
-                                    await sendRconCommand(guildId, `teleportpos "${matchedPlayer.inGameName}" ${homeLoc.posX} ${homeLoc.posY} ${homeLoc.posZ}`, client);
-                                    await sendRconCommand(guildId, `say "[Teleport] ${matchedPlayer.inGameName} successfully retreated home!"`, client);
-                                    return;
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // ==========================================
-                // 5. CUSTOM BINDS CATCHER
-                // ==========================================
-                const serverBinds = await CustomBind.findAll({ where: { guildId: guildId } });
-                if (serverBinds.length === 0) return;
-                const registeredPlayers = await UserEconomy.findAll({ where: { guildId: guildId } });
-
-                for (const bind of serverBinds) {
-                    if (!bind.targetValue) continue;
-                    const phrase = bind.targetValue.toLowerCase();
-                    if (rawContent.includes(phrase) || msgLower.includes(phrase)) {
-                        let matchedPlayer = null;
-                        for (const player of registeredPlayers) {
-                            if (player.inGameName && (rawUsername.toLowerCase() === player.inGameName.toLowerCase() || msgLower.includes(player.inGameName.toLowerCase()))) { matchedPlayer = player; break; }
-                        }
-                        if (matchedPlayer) {
-                            if (bind.cost > 0 && matchedPlayer.wallet < bind.cost) {
-                                await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, you need ${bind.cost} ${currentConfig?.economyCurrency || 'Scrap'} to use this!"`, client);
-                                return;
-                            }
-                            if (bind.cost > 0) await matchedPlayer.update({ wallet: matchedPlayer.wallet - bind.cost });
-
-                            const finalCommandString = bind.command.replace(/{player}/gi, matchedPlayer.inGameName);
-                            for (const cmd of finalCommandString.split('\n')) {
-                                if (cmd.trim() !== '') await sendRconCommand(guildId, cmd.trim(), client);
-                            }
-                            break; 
-                        }
-                    }
-                }
             } catch (e) {}
         });
     });
@@ -474,7 +380,7 @@ async function fetchServerKits(guildId) {
 
         const activeWs = activeConnections.get(guildId);
         activeWs.on('message', tempListener);
-        activeWs.send(JSON.stringify({ Identifier: 999, Message: "kit.list", Name: "BuddyBot" }));
+        activeWs.send(JSON.stringify({ Identifier: 999, Message: "kit.list", Name: "AdminWizard" }));
 
         setTimeout(() => {
             activeWs.off('message', tempListener);
