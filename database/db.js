@@ -60,7 +60,7 @@ const GuildConfig = sequelize.define('GuildConfig', {
     subscriptionExpiresAt: { type: DataTypes.DATE, allowNull: true },
     statusChannelId: { type: DataTypes.STRING, allowNull: true },
     statusMessageId: { type: DataTypes.STRING, allowNull: true },
-    
+    playtimeHours: { type: DataTypes.FLOAT, defaultValue: 0 },
     economyEnabled: { type: DataTypes.BOOLEAN, defaultValue: true },
     shopEnabled: { type: DataTypes.BOOLEAN, defaultValue: true },
     ticketsEnabled: { type: DataTypes.BOOLEAN, defaultValue: true },

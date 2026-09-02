@@ -1,5 +1,5 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require('discord.js');
-const { GuildConfig, UserEconomy, GameServer } = require('../database/db');
+const { GuildConfig, UserEconomy } = require('../database/db');
 
 module.exports = async (interaction, client) => {
     const customId = interaction.customId || '';
@@ -48,7 +48,7 @@ module.exports = async (interaction, client) => {
                 const ign = player.inGameName ? `**${player.inGameName}**` : 'Unlinked'; 
                 leaderboardText += `${rank} ${ign} (<@${player.userId}>) - **Level ${player.level || 1}** (${(player.xp || 0).toLocaleString()} XP)\n`; 
             });
-        } else if (category === 'pvp' || category === 'pvpKills') {
+        } else if (category === 'pvp') {
             const sortedPlayers = allPlayers.sort((a, b) => {
                 const killsA = a.pvpKills || 0;
                 const deathsA = a.deaths || 0;
@@ -72,6 +72,26 @@ module.exports = async (interaction, client) => {
                 const kd = deaths === 0 ? kills.toFixed(2) : (kills / deaths).toFixed(2);
                 leaderboardText += `${rank} ${ign} (<@${player.userId}>) — **K: ${kills} | D: ${deaths} | KD: ${kd}**\n`;
             });
+        } else if (category === 'pve') {
+            const sortedPlayers = allPlayers.sort((a, b) => (b.pveKills || 0) - (a.pveKills || 0)).slice(0, 10);
+            embedTitle = '🐻 PvE Monster & Scientist Kills'; 
+            embedColor = '#3498db';
+            sortedPlayers.forEach((player, index) => {
+                const rank = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `**#${index + 1}**`; 
+                const ign = player.inGameName ? `**${player.inGameName}**` : 'Unlinked';
+                const pveKills = player.pveKills || 0;
+                leaderboardText += `${rank} ${ign} (<@${player.userId}>) — **${pveKills.toLocaleString()} PvE Kills**\n`;
+            });
+        } else if (category === 'hours') {
+            const sortedPlayers = allPlayers.sort((a, b) => (b.playtimeHours || 0) - (a.playtimeHours || 0)).slice(0, 10);
+            embedTitle = '⏱️ In-Game Playtime Leaderboard'; 
+            embedColor = '#9b59b6';
+            sortedPlayers.forEach((player, index) => {
+                const rank = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `**#${index + 1}**`; 
+                const ign = player.inGameName ? `**${player.inGameName}**` : 'Unlinked';
+                const hours = (player.playtimeHours || 0).toFixed(1);
+                leaderboardText += `${rank} ${ign} (<@${player.userId}>) — **${hours} Hours**\n`;
+            });
         }
 
         const embed = new EmbedBuilder()
@@ -87,7 +107,9 @@ module.exports = async (interaction, client) => {
                 .addOptions([
                     { label: 'Wealth (Wallet + Bank)', value: 'wealth', emoji: '💰', default: category === 'wealth' },
                     { label: 'BuddyPass Level & XP', value: 'level', emoji: '⭐', default: category === 'level' },
-                    { label: 'PvP K/D Ratio', value: 'pvp', emoji: '⚔️', default: category === 'pvp' }
+                    { label: 'PvP K/D Ratio', value: 'pvp', emoji: '⚔️', default: category === 'pvp' },
+                    { label: 'PvE Monster Kills', value: 'pve', emoji: '🐻', default: category === 'pve' },
+                    { label: 'In-Game Playtime (Hours)', value: 'hours', emoji: '⏱️', default: category === 'hours' }
                 ])
         );
 
