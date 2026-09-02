@@ -134,10 +134,13 @@ client.once('ready', async () => {
         console.error('[COMMAND SYNC ERROR]', error);
     }
 
-    // --- LIVE GIVEAWAY TIME REMAINING UPDATER ---
+    // --- LIVE GIVEAWAY TIMER & AUTOMATIC WINNER DRAW LOOP ---
     setInterval(async () => {
         try {
             const { Giveaway } = require('./database/db');
+            const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+            const now = new Date();
+
             const activeGiveaways = await Giveaway.findAll({ where: { isActive: true } });
 
             for (const giveaway of activeGiveaways) {
@@ -149,25 +152,71 @@ client.once('ready', async () => {
                 const message = await channel.messages.fetch(giveaway.messageId).catch(() => null);
                 if (!message) continue;
 
-                const entries = JSON.parse(giveaway.entries || '[]');
+                let entries = [];
+                try { entries = JSON.parse(giveaway.entries || '[]'); } catch (e) {}
                 const endTimeUnix = Math.floor(new Date(giveaway.endTime).getTime() / 1000);
 
-                if (message.embeds && message.embeds.length > 0) {
-                    const updatedEmbed = EmbedBuilder.from(message.embeds[0])
+                // Check if the giveaway has expired
+                if (new Date(giveaway.endTime) <= now) {
+                    // Mark as inactive in database
+                    await giveaway.update({ isActive: false });
+
+                    let winnerMentions = 'No valid entries / No winner';
+                    if (entries.length > 0) {
+                        const winnersCount = giveaway.winnersCount || 1;
+                        const shuffled = [...entries].sort(() => 0.5 - Math.random());
+                        const selectedWinners = shuffled.slice(0, winnersCount);
+                        winnerMentions = selectedWinners.map(id => `<@${id}>`).join(', ');
+                    }
+
+                    // Update embed to show ended state
+                    const endedEmbed = EmbedBuilder.from(message.embeds[0])
+                        .setTitle('🎉 GIVEAWAY ENDED 🎉')
                         .setDescription(
                             `**Prize:** ${giveaway.prize}\n` +
-                            `**Winners:** ${giveaway.winnersCount}\n` +
                             `**Participants:** ${entries.length}\n` +
-                            `**Ends:** <t:${endTimeUnix}:R>`
-                        );
+                            `**Winner(s):** ${winnerMentions}\n` +
+                            `Status: **Ended**`
+                        )
+                        .setColor('#e74c3c');
 
-                    await message.edit({ embeds: [updatedEmbed] }).catch(() => {});
+                    // Disable the entry button
+                    const disabledButtonRow = new ActionRowBuilder().addComponents(
+                        new ButtonBuilder()
+                            .setCustomId('ended_giveaway')
+                            .setLabel('Giveaway Ended')
+                            .setStyle(ButtonStyle.Secondary)
+                            .setDisabled(true)
+                            .setEmoji('🏁')
+                    );
+
+                    await message.edit({ embeds: [endedEmbed], components: [disabledButtonRow] }).catch(() => {});
+
+                    // Send announcement message in channel
+                    if (entries.length > 0) {
+                        await channel.send(`🎉 **Giveaway Ended!** Congratulations ${winnerMentions}! You won the **${giveaway.prize}**! 🎁`).catch(() => {});
+                    } else {
+                        await channel.send(`❌ **Giveaway Ended!** Unfortunately, there were no participants for the **${giveaway.prize}** giveaway.`).catch(() => {});
+                    }
+                } else {
+                    // Just update the live countdown text if still running
+                    if (message.embeds && message.embeds.length > 0) {
+                        const updatedEmbed = EmbedBuilder.from(message.embeds[0])
+                            .setDescription(
+                                `**Prize:** ${giveaway.prize}\n` +
+                                `**Winners:** ${giveaway.winnersCount}\n` +
+                                `**Participants:** ${entries.length}\n` +
+                                `**Ends:** <t:${endTimeUnix}:R>`
+                            );
+
+                        await message.edit({ embeds: [updatedEmbed] }).catch(() => {});
+                    }
                 }
             }
         } catch (err) {
             console.error('[GIVEAWAY TIMER ERROR]', err);
         }
-    }, 60000);
+    }, 30000); // Check every 30 seconds
 
     // --- LIVE RCON STATUS MONITOR LOOP ---
     setInterval(async () => {

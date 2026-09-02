@@ -50,6 +50,19 @@ module.exports = async (interaction, client) => {
             }
         }, 2500);
 
+        // 🚨 TOP ROUTING FOR GIVEAWAYS (Buttons, Selects, Modals) 🚨
+        if (
+            customId === 'giveaway_action_select' || 
+            customId === 'enter_giveaway' || 
+            customId.startsWith('ga_') || 
+            customId.startsWith('select_ga_') ||
+            customId.includes('giveaway') ||
+            selectedValue === 'setup_giveaways'
+        ) {
+            clearTimeout(timeoutSafety);
+            return await giveawayHandler(interaction, client);
+        }
+
         // 🚨 TOP ROUTING FOR BUDDY GAMES, GUN GAME, & BR 🚨
         if (customId === 'admin_menu_select_2') {
             if (selectedValue === 'setup_buddy_games') {
