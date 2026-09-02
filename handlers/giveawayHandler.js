@@ -108,7 +108,6 @@ module.exports = async (interaction, client) => {
 
     if (customId === 'enter_giveaway') {
         const giveaway = await Giveaway.findOne({ where: { messageId: interaction.message.id } });
-        // Assume active if isActive is null (in case of old databases) or true
         if (!giveaway || giveaway.isActive === false) return interaction.reply({ content: '❌ This giveaway has ended or does not exist!', flags: 64 });
         
         let entries = [];
@@ -118,9 +117,10 @@ module.exports = async (interaction, client) => {
             entries.push(interaction.user.id); 
             await giveaway.update({ entries: JSON.stringify(entries) }); 
 
-            // 👇 UPDATED: Live embed refresh to display new participant count 👇
+            // Live embed refresh with countdown timer formatting
+            const endTimeUnix = Math.floor(new Date(giveaway.endTime).getTime() / 1000);
             const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
-                .setDescription(`**Prize:** ${giveaway.prize}\n**Winners:** ${giveaway.winnersCount}\n**Participants:** ${entries.length}\n**Ends:** <t:${Math.floor(new Date(giveaway.endTime).getTime()/1000)}:R>`);
+                .setDescription(`**Prize:** ${giveaway.prize}\n**Winners:** ${giveaway.winnersCount}\n**Participants:** ${entries.length}\n**Ends:** <t:${endTimeUnix}:R>`);
             
             await interaction.message.edit({ embeds: [updatedEmbed] }).catch(() => {});
 
@@ -142,17 +142,16 @@ module.exports = async (interaction, client) => {
             const winners = parseInt(interaction.fields.getTextInputValue('winners')) || 1;
             const prize = interaction.fields.getTextInputValue('prize');
             const endTime = new Date(Date.now() + minutes * 60000);
+            const endTimeUnix = Math.floor(endTime.getTime() / 1000);
 
-            // 👇 UPDATED: Start with "Participants: 0" inside the embed description 👇
             const embed = new EmbedBuilder()
                 .setTitle('🎉 GIVEAWAY TIME 🎉')
-                .setDescription(`**Prize:** ${prize}\n**Winners:** ${winners}\n**Participants:** 0\n**Ends:** <t:${Math.floor(endTime.getTime()/1000)}:R>`)
+                .setDescription(`**Prize:** ${prize}\n**Winners:** ${winners}\n**Participants:** 0\n**Ends:** <t:${endTimeUnix}:R>`)
                 .setColor('#9b59b6')
                 .setFooter({ text: 'Giveaway ID: Pending... | Click below to enter!' });
 
             if (config?.giveawayBannerUrl) embed.setImage(config.giveawayBannerUrl);
             
-            // Generate the ping text based on config
             let pingText = '🎊 **New Giveaway Started!**';
             if (config?.giveawayPingRoleId) {
                 pingText += ` <@&${config.giveawayPingRoleId}>`;

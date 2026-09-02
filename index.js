@@ -134,6 +134,41 @@ client.once('ready', async () => {
         console.error('[COMMAND SYNC ERROR]', error);
     }
 
+    // --- LIVE GIVEAWAY TIME REMAINING UPDATER ---
+    setInterval(async () => {
+        try {
+            const { Giveaway } = require('./database/db');
+            const activeGiveaways = await Giveaway.findAll({ where: { isActive: true } });
+
+            for (const giveaway of activeGiveaways) {
+                const guild = client.guilds.cache.get(giveaway.guildId);
+                if (!guild) continue;
+                const channel = guild.channels.cache.get(giveaway.channelId);
+                if (!channel) continue;
+
+                const message = await channel.messages.fetch(giveaway.messageId).catch(() => null);
+                if (!message) continue;
+
+                const entries = JSON.parse(giveaway.entries || '[]');
+                const endTimeUnix = Math.floor(new Date(giveaway.endTime).getTime() / 1000);
+
+                if (message.embeds && message.embeds.length > 0) {
+                    const updatedEmbed = EmbedBuilder.from(message.embeds[0])
+                        .setDescription(
+                            `**Prize:** ${giveaway.prize}\n` +
+                            `**Winners:** ${giveaway.winnersCount}\n` +
+                            `**Participants:** ${entries.length}\n` +
+                            `**Ends:** <t:${endTimeUnix}:R>`
+                        );
+
+                    await message.edit({ embeds: [updatedEmbed] }).catch(() => {});
+                }
+            }
+        } catch (err) {
+            console.error('[GIVEAWAY TIMER ERROR]', err);
+        }
+    }, 60000);
+
     // --- LIVE RCON STATUS MONITOR LOOP ---
     setInterval(async () => {
         try {
