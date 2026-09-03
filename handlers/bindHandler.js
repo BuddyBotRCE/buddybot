@@ -391,8 +391,8 @@ const bindHandler = async (interaction, client) => {
                 
                 let newCommand = '';
                 if (bind.actionType === 'teleport') {
-                    // Uses global.teleportpos matching your preferred server syntax
-                    newCommand = `global.teleportpos (${cX},${loweredY},${cZ}) "{player}"`;
+                    // Correct Rust Console Edition syntax: teleportpos x,y,z "player"
+                    newCommand = `teleportpos ${cX},${loweredY},${cZ} "{player}"`;
                 } else if (bind.actionType === 'recycler') {
                     newCommand = `spawn recycler_static (${cX},${loweredY},${cZ})`;
                 }
