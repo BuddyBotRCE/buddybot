@@ -264,27 +264,38 @@ const bindHandler = async (interaction, client) => {
             session.view = 'bind';
             return await renderBindPanel(interaction, `🛡️ Required Role updated successfully!`);
         }
-
+        
         if (interaction.isModalSubmit()) {
-            
-            // Replace the bind_modal_name block inside interaction.isModalSubmit() with this:
-            if (customId === 'bind_modal_name') {
-                await interaction.deferUpdate().catch(() => {});
-                const name = interaction.fields.getTextInputValue('b_name').trim() || "Custom Bind";
-                if (session.selectedBindId) {
-                    await CustomBind.update({ name }, { where: { id: session.selectedBindId } });
-                } else {
-                    // Fallback safety if session bind ID was dropped
-                   const latestBind = await CustomBind.findOne({ where: { guildId }, order: [['updatedAt', 'DESC']] });
-                   if (latestBind) {
-                       session.selectedBindId = latestBind.id;
-                       await latestBind.update({ name });
+            if (customId === 'modal_bind_name') {
+                try {
+                    // Immediately acknowledge the modal so Discord never throws "Something went wrong"
+                    if (!interaction.deferred && !interaction.replied) {
+                        await interaction.deferReply({ flags: 64 }).catch(() => {});
                     }
+
+                    const name = interaction.fields.getTextInputValue('b_name').trim() || "Custom Bind";
+                    
+                    if (session.selectedBindId) {
+                        await CustomBind.update({ name }, { where: { id: session.selectedBindId } });
+                    } else {
+                        // Fallback: grab the most recently modified bind for this guild if session ID dropped
+                        const latestBind = await CustomBind.findOne({ where: { guildId }, order: [['updatedAt', 'DESC']] });
+                        if (latestBind) {
+                            session.selectedBindId = latestBind.id;
+                            await latestBind.update({ name });
+                        }
+                    }
+
+                    const payload = await buildPanelPayload(guildId, `✅ Bind renamed to **${name}** successfully!`);
+                    return await interaction.editReply(payload);
+                } catch (modalErr) {
+                    console.error('[RENAME MODAL ERROR]', modalErr);
+                    return await interaction.editReply({ content: `❌ Failed to rename bind: ${modalErr.message}` }).catch(() => {});
                 }
-                return await renderBindPanel(interaction, `✅ Bind renamed successfully!`);
             }
 
             if (customId === 'bind_modal_economy') {
+                await interaction.deferReply({ flags: 64 }).catch(() => {});
                 let cost = parseInt(interaction.fields.getTextInputValue('b_cost'));
                 let cooldown = parseInt(interaction.fields.getTextInputValue('b_cd'));
                 
@@ -294,9 +305,12 @@ const bindHandler = async (interaction, client) => {
                 if (session.selectedBindId) {
                     await CustomBind.update({ cost, cooldown }, { where: { id: session.selectedBindId } });
                 }
-                return await renderBindPanel(interaction, `⚙️ Cost and Cooldown saved!`);
+                const payload = await buildPanelPayload(guildId, `⚙️ Cost and Cooldown saved!`);
+                return await interaction.editReply(payload);
             }
         }
+            
+            
 
         if (interaction.isButton()) {
 
