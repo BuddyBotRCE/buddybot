@@ -366,12 +366,13 @@ const bindHandler = async (interaction, client) => {
 
                 const loweredY = (cY - 0.5).toFixed(2);
                 
-               let newCommand = '';
-if (bind.actionType === 'teleport') {
-    newCommand = `teleport2pos "{player}" ${cX} ${loweredY} ${cZ}`;
-} else if (bind.actionType === 'recycler') {
-    newCommand = `spawn recycler_static (${cX},${loweredY},${cZ})`;
-}
+                let newCommand = '';
+                if (bind.actionType === 'teleport') {
+                    // Uses global.teleportpos matching your preferred server syntax
+                    newCommand = `global.teleportpos (${cX},${loweredY},${cZ}) "{player}"`;
+                } else if (bind.actionType === 'recycler') {
+                    newCommand = `spawn recycler_static (${cX},${loweredY},${cZ})`;
+                }
                 
                 await CustomBind.update({ command: newCommand }, { where: { id: session.selectedBindId } });
                 session.view = 'bind';

@@ -27,7 +27,7 @@ const customZoneHandler = require(handlerPath('customZoneHandler'));
 const autoModHandler = require(handlerPath('autoModHandler'));
 const wipeHandler = require(handlerPath('wipeHandler')); 
 const homeTpHandler = require(handlerPath('homeTpHandler'));
-const skipNightHandler = require(handlerPath('skipNightHandler')); // <-- Added Skip Night Handler
+const skipNightHandler = require(handlerPath('skipNightHandler'));
 
 module.exports = async (interaction, client) => {
     try {
@@ -50,8 +50,13 @@ module.exports = async (interaction, client) => {
         // 🚦 0. MODAL SUBMISSION ROUTER
         // ====================================================================
         if (interaction.isModalSubmit()) {
+            // 👇 PLACED AT THE TOP SO BIND MODALS ARE NEVER SKIPPED 👇
+            if (customId === 'modal_bind_name' || customId.startsWith('bind_') || customId.includes('bind')) {
+                return await bindHandler(interaction, client);
+            }
+
             if (customId === 'modal_hometp_settings') return await homeTpHandler(interaction, client);
-            if (customId === 'modal_skipnight_percentage') return await skipNightHandler(interaction, client); // <-- Added Skip Night Modal
+            if (customId === 'modal_skipnight_percentage') return await skipNightHandler(interaction, client);
             if (customId.startsWith('modal_givekit_exec_')) return await adminHandler(interaction, client);
             if (customId === 'modal_shop_multiplier' || customId === 'modal_shop_custom' || customId.startsWith('modal_buy_qty_')) return await shopHandler(interaction, client);
             if (customId === 'modal_wipe_full' || customId.startsWith('modal_wipe_sel_') || customId === 'modal_wipe_cooldowns') return await wipeHandler(interaction, client);
@@ -61,15 +66,13 @@ module.exports = async (interaction, client) => {
             if (customId === 'modal_setup_economy' || customId === 'modal_econ_interest' || customId === 'modal_hub_deposit' || customId === 'modal_hub_withdraw' || customId.startsWith('modal_admin_give_exec_') || customId.startsWith('modal_admin_take_exec_')) return await economyHandler(interaction, client);
             if (customId === 'modal_ae_settings' || customId.startsWith('modal_ae_')) return await autoEventsHandler(interaction, client);
             if (customId === 'modal_casino_config') return await casinoHandler(interaction, client);
-            if (customId.startsWith('modal_emb_') || customId === 'modal_admin_embed' || customId.startsWith('modal_rr_') || customId === 'modal_edit_embed_prompt' || customId === 'modal_attach_rr_prompt') return await postEmbedHandler(interaction, client);
+            if (customId.startsWith('modal_emb_') || customId === 'modal_admin_embed' || customId.startsWith('modal_rr_') || customId.startsWith('modal_edit_embed_prompt') || customId.startsWith('modal_attach_rr_prompt')) return await postEmbedHandler(interaction, client);
             if (customId.startsWith('modal_am_') || customId === 'modal_automod_config') return await autoModHandler(interaction, client);
             if (customId.startsWith('modal_cz_')) return await customZoneHandler(interaction, client);
             if (customId.startsWith('modal_clan_') || customId.startsWith('clan_modal_')) return await clanHandler(interaction, client);
             if (customId.startsWith('modal_tk_')) return await ticketHandler(interaction, client);
             if (customId.startsWith('modal_ga_')) return await giveawayHandler(interaction, client);
-            if (customId === 'modal_bind_name' || customId.startsWith('bind_') || customId.includes('bind')) {
-                return await bindHandler(interaction, client);
-            }
+            
             return await adminHandler(interaction, client);
         }
 
@@ -117,7 +120,7 @@ module.exports = async (interaction, client) => {
                 return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
             }
 
-            if (selectedValue === 'setup_skipnight') return await skipNightHandler(interaction, client); // <-- Added Skip Night Option
+            if (selectedValue === 'setup_skipnight') return await skipNightHandler(interaction, client);
             if (selectedValue === 'setup_wipe') return await wipeHandler(interaction, client);
             if (selectedValue === 'setup_autoevents') return await autoEventsHandler(interaction, client);
             if (selectedValue === 'setup_economy') return await economyHandler(interaction, client);
@@ -170,13 +173,10 @@ module.exports = async (interaction, client) => {
         // ====================================================================
         // 🚦 4. BUTTONS & COMPONENT ROUTING
         // ====================================================================
-        
-        // Skip Night Buttons
         if (customId === 'btn_toggle_skipnight' || customId === 'btn_set_skipnight_percentage') {
             return await skipNightHandler(interaction, client);
         }
 
-        // Home TP Buttons & Player Panel Home Info
         if (customId === 'hometp_btn_settings' || customId === 'admin_menu_back') {
             return await homeTpHandler(interaction, client);
         }
@@ -206,7 +206,7 @@ module.exports = async (interaction, client) => {
                 } 
             });
 
-            let pvpText = '### ⚔️ Live Active PvP Areas & Monuments\n\n\`All areas are currently Safe PvE (No active PvP zones).\`';
+            let pvpText = '### ⚔️ Live Active PvP Areas & Monuments\n\n`All areas are currently Safe PvE (No active PvP zones).`';
             
             if (activePvpZones && activePvpZones.length > 0) {
                 pvpText = '### ⚔️ Live Active PvP Areas & Monuments\n\n' + 
@@ -216,7 +216,6 @@ module.exports = async (interaction, client) => {
             return interaction.reply({ content: pvpText, flags: 64 });
         }
 
-        // Player Hub & Core Modules
         if (customId === 'hub_link_account' || customId === 'select_link_server_target' || customId === 'hub_leaderboards' || customId === 'hub_lb_select' || customId.startsWith('lb_refresh_') || customId === 'btn_admin_kit' || customId.startsWith('ak_panel_') || customId === 'ak_panel_kit_select' || customId.includes('admin_kit_choice') || customId.startsWith('admin_kit_target_') || customId.startsWith('admin_kit_target_select')) {
             return await adminHandler(interaction, client);
         }
@@ -253,7 +252,6 @@ module.exports = async (interaction, client) => {
             return await suggestionHandler(interaction, client);
         }
 
-        // Admin Specific Tools
         if (customId === 'btn_wipe_full' || customId === 'btn_wipe_selective' || customId === 'btn_wipe_cooldowns' || customId === 'select_wipe_custom') {
             return await wipeHandler(interaction, client);
         }
