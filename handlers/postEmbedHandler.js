@@ -34,7 +34,7 @@ module.exports = async (interaction, client) => {
         // ====================================================================
         if (customId === 'unified_embed_select') {
             if (selectedValue === 'setup_postembed') {
-                embedSessions.set(guildId, { title: '📢 Server Announcement', description: 'Type your announcement details here.', color: '#3498db', thumbnailUrl: '', imageUrl: '', footerText: '', editMode: false });
+                embedSessions.set(guildId, { title: '📢 Server Announcement', description: 'Type your announcement details here.', color: '#3498db', thumbnailUrl: '', imageUrl: '', footerText: '', pingTarget: null, editMode: false });
             }
             if (selectedValue === 'edit_postembed') {
                 const modal = new ModalBuilder().setCustomId('modal_edit_embed_prompt').setTitle('Edit Existing Embed');
@@ -92,6 +92,7 @@ module.exports = async (interaction, client) => {
                     embSession.thumbnailUrl = oldEmbed.thumbnail?.url || '';
                     embSession.imageUrl = oldEmbed.image?.url || '';
                     embSession.footerText = oldEmbed.footer?.text || '';
+                    embSession.pingTarget = null;
                     embSession.editMode = true;
                     embSession.targetChannelId = targetChannelId;
                     embSession.targetMessageId = msg.id;
@@ -280,7 +281,7 @@ module.exports = async (interaction, client) => {
         if (customId.startsWith('emb_') || customId.startsWith('select_emb_') || customId.startsWith('btn_emb_') || customId.startsWith('modal_emb_') || (customId === 'unified_embed_select' && selectedValue === 'setup_postembed') || customId === 'modal_edit_embed_prompt') {
             
             if (!embedSessions.has(guildId)) {
-                embedSessions.set(guildId, { title: '📢 Server Announcement', description: 'Type your announcement details here.', color: '#3498db', thumbnailUrl: '', imageUrl: '', footerText: '', editMode: false });
+                embedSessions.set(guildId, { title: '📢 Server Announcement', description: 'Type your announcement details here.', color: '#3498db', thumbnailUrl: '', imageUrl: '', footerText: '', pingTarget: null, editMode: false });
             }
             const embSession = embedSessions.get(guildId);
 
@@ -290,7 +291,12 @@ module.exports = async (interaction, client) => {
                 if (embSession.imageUrl) previewEmbed.setImage(embSession.imageUrl);
                 if (embSession.footerText) previewEmbed.setFooter({ text: embSession.footerText });
 
-                const configEmbed = new EmbedBuilder().setTitle(embSession.editMode ? '✏️ Editing Existing Embed' : '🎨 Post Embed Builder').setDescription(`${messageOverride ? `**${messageOverride}**\n\n` : ''}${embSession.editMode ? 'Modify the fields below and click Save Edits to push changes to the live message.' : 'Design your custom announcement with banners, thumbnails, and custom text, then publish it live.'}`).setColor(embSession.editMode ? '#e67e22' : '#f39c12');
+                let pingDisplay = '`None (No Ping)`';
+                if (embSession.pingTarget === '@everyone') pingDisplay = '@everyone';
+                else if (embSession.pingTarget === '@here') pingDisplay = '@here';
+                else if (embSession.pingTarget) pingDisplay = `<@&${embSession.pingTarget}>`;
+
+                const configEmbed = new EmbedBuilder().setTitle(embSession.editMode ? '✏️ Editing Existing Embed' : '🎨 Post Embed Builder').setDescription(`${messageOverride ? `**${messageOverride}**\n\n` : ''}${embSession.editMode ? 'Modify the fields below and click Save Edits to push changes to the live message.' : 'Design your custom announcement with banners, thumbnails, role pings, and custom text, then publish it live.'}\n\n• **Active Ping:** ${pingDisplay}`).setColor(embSession.editMode ? '#e67e22' : '#f39c12');
 
                 const components = [];
                 if (!embSession.editMode) {
@@ -302,6 +308,11 @@ module.exports = async (interaction, client) => {
                     .addOptions([
                         { label: 'Red (Hostile / Alert)', value: '#e74c3c', emoji: '🔴' }, { label: 'Green (Safe / Success)', value: '#2ecc71', emoji: '🟢' }, { label: 'Blue (Neutral / Info)', value: '#3498db', emoji: '🔵' }, { label: 'Yellow (Warning)', value: '#f1c40f', emoji: '🟡' }, { label: 'Orange (Event)', value: '#e67e22', emoji: '🟠' }, { label: 'Purple (Premium)', value: '#9b59b6', emoji: '🟣' }, { label: 'Black / Dark (Sleek)', value: '#2b2d31', emoji: '⚫' }, { label: 'White (Clean)', value: '#ffffff', emoji: '⚪' }
                     ])
+                ));
+
+                // Add Role Select Menu for Member / Role Pings
+                components.push(new ActionRowBuilder().addComponents(
+                    new RoleSelectMenuBuilder().setCustomId('select_emb_ping_role').setPlaceholder('🔔 Select Role or Mentions to Ping...').setMinValues(1).setMaxValues(1)
                 ));
 
                 components.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_emb_title').setLabel('Title').setStyle(ButtonStyle.Primary).setEmoji('✏️'), new ButtonBuilder().setCustomId('btn_emb_desc').setLabel('Description').setStyle(ButtonStyle.Primary).setEmoji('📝'), new ButtonBuilder().setCustomId('btn_emb_thumb').setLabel('Thumbnail').setStyle(ButtonStyle.Secondary).setEmoji('🖼️'), new ButtonBuilder().setCustomId('btn_emb_image').setLabel('Banner Image').setStyle(ButtonStyle.Secondary).setEmoji('🌟'), new ButtonBuilder().setCustomId('btn_emb_footer').setLabel('Footer Text').setStyle(ButtonStyle.Secondary).setEmoji('📌')));
@@ -341,6 +352,14 @@ module.exports = async (interaction, client) => {
                 return await renderBuilder(interaction, `🎨 Embed color updated!`);
             }
 
+            if (interaction.isRoleSelectMenu() && customId === 'select_emb_ping_role') {
+                embSession.pingTarget = selectedValue;
+                embedSessions.set(guildId, embSession);
+                const roleObj = interaction.guild.roles.cache.get(selectedValue);
+                await interaction.deferUpdate();
+                return await renderBuilder(interaction, `🔔 Ping target updated to **${roleObj?.name || selectedValue}**!`);
+            }
+
             if (interaction.isButton()) {
                 if (customId === 'btn_emb_title') { const modal = new ModalBuilder().setCustomId('modal_emb_title').setTitle('Set Embed Title'); modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('val').setLabel('Title Text').setStyle(TextInputStyle.Short).setValue(embSession.title).setRequired(true))); return await interaction.showModal(modal); }
                 if (customId === 'btn_emb_desc') { const modal = new ModalBuilder().setCustomId('modal_emb_desc').setTitle('Set Embed Description'); modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('val').setLabel('Description').setStyle(TextInputStyle.Paragraph).setValue(embSession.description).setRequired(true))); return await interaction.showModal(modal); }
@@ -359,7 +378,10 @@ module.exports = async (interaction, client) => {
                     if (embSession.imageUrl) finalEmbed.setImage(embSession.imageUrl);
                     if (embSession.footerText) finalEmbed.setFooter({ text: embSession.footerText });
                     
-                    await msg.edit({ embeds: [finalEmbed] });
+                    let contentString = '';
+                    if (embSession.pingTarget) contentString = `<@&${embSession.pingTarget}>`;
+
+                    await msg.edit({ content: contentString, embeds: [finalEmbed] });
                     embSession.editMode = false;
                     embedSessions.delete(guildId);
                     return interaction.update({ content: `✅ Successfully edited the embed on the server!`, embeds: [], components: [] });
@@ -376,7 +398,10 @@ module.exports = async (interaction, client) => {
                 if (embSession.imageUrl) finalEmbed.setImage(embSession.imageUrl);
                 if (embSession.footerText) finalEmbed.setFooter({ text: embSession.footerText });
 
-                await channel.send({ embeds: [finalEmbed] });
+                let contentString = '';
+                if (embSession.pingTarget) contentString = `<@&${embSession.pingTarget}>`;
+
+                await channel.send({ content: contentString, embeds: [finalEmbed] });
                 embedSessions.delete(guildId);
                 return await interaction.update({ content: `✅ Announcement successfully posted to <#${channelId}>!`, components: [], embeds: [] });
             }

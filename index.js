@@ -111,16 +111,6 @@ if (fs.existsSync(interactionCreateEvent)) {
     console.log('[SYSTEM] Loaded event: interactionCreate');
 }
 
-// --- INITIALIZE BACKGROUND AUTO-EVENT MANAGER ---
-try {
-    const { startAutoEventLoop } = require('./utils/autoEventManager');
-    if (typeof startAutoEventLoop === 'function') {
-        startAutoEventLoop(client);
-    }
-} catch (e) {
-    console.log('[SYSTEM] Auto event loop file skipped or not found.');
-}
-
 client.once('ready', async () => {
     require('./events/ready')(client); 
     
@@ -133,6 +123,65 @@ client.once('ready', async () => {
     } catch (error) {
         console.error('[COMMAND SYNC ERROR]', error);
     }
+
+    // --- LIVE AUTO-EVENTS BACKGROUND SCHEDULER LOOP ---
+    setInterval(async () => {
+        try {
+            const { AutoEvent, AutoEventLocation, GameServer } = require('./database/db');
+            const { sendRconCommand } = require('./utils/rconManager');
+            
+            const TYPE_INFO = { 
+                hackable: { prefab: 'codelockedhackablecrate' }, 
+                supply: { prefab: 'supply_drop' }, 
+                elite: { prefab: 'crate_elite' }, 
+                node: { prefab: 'stone-ore' },
+                cargo: { prefab: 'cargoshipdynamic1' }
+            };
+
+            const now = Date.now();
+            const enabledEvents = await AutoEvent.findAll({ where: { isEnabled: true } });
+
+            if (!global.autoEventExecMap) global.autoEventExecMap = new Map();
+
+            for (const ev of enabledEvents) {
+                const intervalMs = (ev.interval || 60) * 60 * 1000; // Convert minutes to milliseconds
+                const lastRun = global.autoEventExecMap.get(ev.id) || 0;
+
+                if (now - lastRun >= intervalMs) {
+                    global.autoEventExecMap.set(ev.id, now);
+
+                    const locations = await AutoEventLocation.findAll({ where: { eventId: ev.id } });
+                    if (locations.length === 0) continue;
+
+                    const prefabInfo = TYPE_INFO[ev.eventType];
+                    if (!prefabInfo) continue;
+
+                    const servers = await GameServer.findAll({ where: { guildId: ev.guildId } });
+                    const targetServerId = servers.length > 0 ? servers[0].id : null;
+
+                    let firedCount = 0;
+                    for (let i = 0; i < (ev.amount || 1); i++) {
+                        for (const loc of locations) {
+                            try {
+                                await sendRconCommand(
+                                    ev.guildId, 
+                                    `spawn ${prefabInfo.prefab} "${loc.posX},${loc.posY},${loc.posZ}"`, 
+                                    client, 
+                                    targetServerId
+                                );
+                                firedCount++;
+                            } catch (rconErr) {
+                                console.error(`[AUTO EVENT ERROR] Failed to fire event ${ev.name}:`, rconErr.message);
+                            }
+                        }
+                    }
+                    console.log(`[AUTO EVENTS] Triggered scheduled event "${ev.name}" (${firedCount} items spawned).`);
+                }
+            }
+        } catch (err) {
+            console.error('[AUTO EVENT LOOP ERROR]', err);
+        }
+    }, 30000);
 
     // --- LIVE GIVEAWAY TIMER & AUTOMATIC WINNER DRAW LOOP ---
     setInterval(async () => {
@@ -158,7 +207,6 @@ client.once('ready', async () => {
 
                 // Check if the giveaway has expired
                 if (new Date(giveaway.endTime) <= now) {
-                    // Mark as inactive in database
                     await giveaway.update({ isActive: false });
 
                     let winnerMentions = 'No valid entries / No winner';
@@ -169,7 +217,6 @@ client.once('ready', async () => {
                         winnerMentions = selectedWinners.map(id => `<@${id}>`).join(', ');
                     }
 
-                    // Update embed to show ended state
                     const endedEmbed = EmbedBuilder.from(message.embeds[0])
                         .setTitle('🎉 GIVEAWAY ENDED 🎉')
                         .setDescription(
@@ -180,7 +227,6 @@ client.once('ready', async () => {
                         )
                         .setColor('#e74c3c');
 
-                    // Disable the entry button
                     const disabledButtonRow = new ActionRowBuilder().addComponents(
                         new ButtonBuilder()
                             .setCustomId('ended_giveaway')
@@ -192,14 +238,12 @@ client.once('ready', async () => {
 
                     await message.edit({ embeds: [endedEmbed], components: [disabledButtonRow] }).catch(() => {});
 
-                    // Send announcement message in channel
                     if (entries.length > 0) {
                         await channel.send(`🎉 **Giveaway Ended!** Congratulations ${winnerMentions}! You won the **${giveaway.prize}**! 🎁`).catch(() => {});
                     } else {
                         await channel.send(`❌ **Giveaway Ended!** Unfortunately, there were no participants for the **${giveaway.prize}** giveaway.`).catch(() => {});
                     }
                 } else {
-                    // Just update the live countdown text if still running
                     if (message.embeds && message.embeds.length > 0) {
                         const updatedEmbed = EmbedBuilder.from(message.embeds[0])
                             .setDescription(
@@ -216,7 +260,7 @@ client.once('ready', async () => {
         } catch (err) {
             console.error('[GIVEAWAY TIMER ERROR]', err);
         }
-    }, 30000); // Check every 30 seconds
+    }, 30000);
 
     // --- LIVE RCON STATUS MONITOR LOOP ---
     setInterval(async () => {
