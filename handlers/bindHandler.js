@@ -267,10 +267,19 @@ const bindHandler = async (interaction, client) => {
 
         if (interaction.isModalSubmit()) {
             
+            // Replace the bind_modal_name block inside interaction.isModalSubmit() with this:
             if (customId === 'bind_modal_name') {
+                await interaction.deferUpdate().catch(() => {});
                 const name = interaction.fields.getTextInputValue('b_name').trim() || "Custom Bind";
                 if (session.selectedBindId) {
                     await CustomBind.update({ name }, { where: { id: session.selectedBindId } });
+                } else {
+                    // Fallback safety if session bind ID was dropped
+                   const latestBind = await CustomBind.findOne({ where: { guildId }, order: [['updatedAt', 'DESC']] });
+                   if (latestBind) {
+                       session.selectedBindId = latestBind.id;
+                       await latestBind.update({ name });
+                    }
                 }
                 return await renderBindPanel(interaction, `✅ Bind renamed successfully!`);
             }
