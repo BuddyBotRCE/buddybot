@@ -266,12 +266,13 @@ const bindHandler = async (interaction, client) => {
         }
 
         if (interaction.isModalSubmit()) {
+            
             if (customId === 'bind_modal_name') {
                 const name = interaction.fields.getTextInputValue('b_name').trim() || "Custom Bind";
                 if (session.selectedBindId) {
                     await CustomBind.update({ name }, { where: { id: session.selectedBindId } });
-                }
-                return await renderBindPanel(interaction, `✅ Bind renamed successfully!`);
+              }
+              return await renderBindPanel(interaction, `✅ Bind renamed successfully!`);
             }
 
             if (customId === 'bind_modal_economy') {

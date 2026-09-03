@@ -161,7 +161,7 @@ async function connectRcon(guildId, client, targetServerId = null) {
                                 try {
                                     const bind = await CustomBind.findByPk(setupData.targetId);
                                     if (bind) {
-                                        let command = bind.actionType === 'teleport' ? `teleportpos "${setupData.inGameName}" ${posX} ${posY} ${posZ}` : `spawn recycler_static (${posX},${posY},${posZ})`;
+                                       let command = bind.actionType === 'teleport' ? `teleportpos "{player}" ${posX} ${posY} ${posZ}` : `spawn recycler_static (${posX},${posY},${posZ})`;
                                         await bind.update({ command });
                                     }
                                     const bindHandler = require('../handlers/bindHandler');
