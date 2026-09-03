@@ -67,7 +67,9 @@ module.exports = async (interaction, client) => {
             if (customId.startsWith('modal_clan_') || customId.startsWith('clan_modal_')) return await clanHandler(interaction, client);
             if (customId.startsWith('modal_tk_')) return await ticketHandler(interaction, client);
             if (customId.startsWith('modal_ga_')) return await giveawayHandler(interaction, client);
-            
+            if (customId === 'modal_bind_name' || customId.startsWith('bind_') || customId.includes('bind')) {
+                return await bindHandler(interaction, client);
+            }
             return await adminHandler(interaction, client);
         }
 

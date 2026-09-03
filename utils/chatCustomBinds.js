@@ -28,7 +28,10 @@ async function processCustomBindChat(guildId, rawUsername, rawContent, msgLower,
                 }
                 if (bind.cost > 0) await matchedPlayer.update({ wallet: matchedPlayer.wallet - bind.cost });
 
+                // Ensure {player} is replaced with the player's exact in-game name
                 const finalCommandString = bind.command.replace(/{player}/gi, matchedPlayer.inGameName);
+                console.log(`[BIND EXECUTED] Running RCON: ${finalCommandString}`); // Debug log to see exact command
+
                 for (const cmd of finalCommandString.split('\n')) {
                     if (cmd.trim() !== '') await sendRconCommand(guildId, cmd.trim(), client);
                 }
