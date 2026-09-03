@@ -65,11 +65,41 @@ module.exports = async (interaction, client) => {
 
         // 🚨 TOP ROUTING FOR BUDDY GAMES, GUN GAME, & BR 🚨
         if (customId === 'admin_menu_select_2') {
+            clearTimeout(timeoutSafety);
             if (selectedValue === 'setup_buddy_games') {
-                clearTimeout(timeoutSafety);
                 return await buddyGamesHandler(interaction, client);
             }
-            Object.defineProperty(interaction, 'customId', { value: 'admin_menu_select', writable: true, configurable: true });
+            if (selectedValue === 'setup_autoevents') return await autoEventsHandler(interaction, client);
+            if (selectedValue === 'setup_automod') return await autoModHandler(interaction, client);
+            if (selectedValue === 'setup_buddypass') return await buddyPassHandler(interaction, client);
+            if (selectedValue === 'setup_clans') return await clanHandler(interaction, client);
+            if (selectedValue === 'setup_bounties') return await bountyHandler(interaction, client);
+            if (selectedValue === 'setup_binds') return await bindHandler(interaction, client);
+            if (selectedValue === 'setup_ai') return await adminHandler(interaction, client);
+            if (selectedValue === 'setup_tier') return await premiumHandler(interaction, client);
+            if (selectedValue === 'setup_embeds_roles') {
+                const embed = new EmbedBuilder()
+                    .setTitle('🎨 Embeds & Interactive Panels')
+                    .setDescription('Choose what type of panel or announcement you want to build and deploy to your server.')
+                    .setColor('#9b59b6');
+                const row = new ActionRowBuilder().addComponents(
+                    new StringSelectMenuBuilder().setCustomId('unified_embed_select').setPlaceholder('Select panel type...')
+                    .addOptions([
+                        { label: 'Create New Embed', value: 'setup_postembed', description: 'Create and send a new announcement', emoji: '📢' },
+                        { label: 'Edit Existing Embed', value: 'edit_postembed', description: 'Edit an embed already in chat', emoji: '✏️' },
+                        { label: 'Create Reaction Panel', value: 'create_reaction_panel', description: 'Send a new role claimer', emoji: '🎭' },
+                        { label: 'Create Verification Panel', value: 'create_verification_panel', description: 'Send a new verify button', emoji: '🔐' },
+                        { label: 'Attach Roles to Message', value: 'attach_reaction_panel', description: 'Add buttons to an existing message', emoji: '📎' }
+                    ])
+                );
+                return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+            }
+            if (selectedValue === 'setup_giveaways') return await giveawayHandler(interaction, client);
+            if (selectedValue === 'setup_suggestions') return await suggestionHandler(interaction, client);
+            if (selectedValue === 'setup_hometp') return await homeTpHandler(interaction, client);
+            if (selectedValue === 'setup_skipnight') return await skipNightHandler(interaction, client);
+            
+            return await adminHandler(interaction, client);
         }
 
         if (customId === 'buddy_games_hub_select') {
