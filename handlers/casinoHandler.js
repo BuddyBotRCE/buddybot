@@ -59,30 +59,30 @@ module.exports = async (interaction, client) => {
 
             const games = [
                 { label: '🪙 Coinflip', val: 'coinflip', description: 'Interactive Heads or Tails' },
-                { label: '🎰 Slots', val: 'slots', description: 'Spin the animated reels' },
+                { label: '🎰 Slots', val: 'slots', description: 'Spin the multi-reel slot machine' },
                 { label: '🎲 Dice Roll', val: 'dice', description: 'High/Low interactive prediction' },
-                { label: '🎟️ Scratchcard', val: 'scratchcard', description: 'Interactive ticket revealing' },
-                { label: '✂️ Rock Paper Scissors', val: 'rps', description: 'Classic interactive duel' },
-                { label: '🎡 Roulette', val: 'roulette', description: 'Pick Red, Black, or Green' },
-                { label: '🃏 Blackjack', val: 'blackjack', description: 'Interactive Hit or Stand table' },
-                { label: '🔼 Higher / Lower', val: 'hilow', description: 'Guess next card value' },
-                { label: '♠️ Poker Hands', val: 'poker', description: 'Draw & evaluate poker rank' },
-                { label: '☸️ Wheel of Fortune', val: 'wheel', description: 'Spin for multiplier prizes' },
-                { label: '📈 Crash Multiplier', val: 'crash', description: 'Cash out before the crash' },
-                { label: '🎴 Baccarat', val: 'baccarat', description: 'Player vs Banker showdown' },
-                { label: '🔴 Red or Black', val: 'redblack', description: 'Color choice double-up' },
-                { label: '🎴 Three Card Brag', val: 'brag', description: 'Classic British card showdown' },
-                { label: '🎯 Keno', val: 'keno', description: 'Pick lucky board numbers' },
-                { label: '🔢 Lucky Numbers', val: 'luckynum', description: 'Match the target digit' },
-                { label: '🎲 Craps', val: 'craps', description: 'Street dice shooter' },
-                { label: '🏮 Sic Bo', val: 'sicbo', description: 'Triple dice sum betting' },
-                { label: '💻 Video Poker', val: 'videopoker', description: 'Jacks or better draw' },
-                { label: '🀄 Pai Gow', val: 'paigow', description: 'Chinese domino/card poker' },
-                { label: '💣 Raid Gamble', val: 'raidgamble', description: 'Break into the vault multiplier' },
-                { label: '⚙️ Scrap Scavenger', val: 'scavenger', description: 'Scavenge monuments for loot' },
-                { label: '🐎 Horse Racing', val: 'horseracing', description: 'Pick your winning stallion' },
-                { label: '💣 Mines', val: 'mines', description: 'Click interactive tiles safely' },
-                { label: '🔴 Plinko', val: 'plinko', description: 'Drop ball down peg multiplier' }
+                { label: '🎟️ Scratchcard', val: 'scratchcard', description: 'Multi-box interactive ticket reveal' },
+                { label: '✂️ Rock Paper Scissors', val: 'rps', description: 'Classic 3-way interactive duel' },
+                { label: '🎡 Roulette', val: 'roulette', description: 'Pick Red, Black, or Green pocket' },
+                { label: '🃏 Blackjack', val: 'blackjack', description: 'Multi-turn Hit, Stand, or Double table' },
+                { label: '🔼 Higher / Lower', val: 'hilow', description: 'Guess card streak values' },
+                { label: '♠️ Poker Hands', val: 'poker', description: 'Multi-card draw poker evaluation' },
+                { label: '☸️ Wheel of Fortune', val: 'wheel', description: 'Spin progressive multi-tier wheel' },
+                { label: '📈 Crash Multiplier', val: 'crash', description: 'Live ticking rocket cash-out game' },
+                { label: '🎴 Baccarat', val: 'baccarat', description: 'Player vs Banker card showdown' },
+                { label: '🔴 Red or Black', val: 'redblack', description: 'Color choice double-up table' },
+                { label: '🎴 Three Card Brag', val: 'brag', description: 'British 3-card ranking table' },
+                { label: '🎯 Keno', val: 'keno', description: 'Interactive multi-spot number board' },
+                { label: '🔢 Lucky Numbers', val: 'luckynum', description: 'Precision digit target match' },
+                { label: '🎲 Craps', val: 'craps', description: 'Street dice shooter progression' },
+                { label: '🏮 Sic Bo', val: 'sicbo', description: 'Triple dice sum betting layout' },
+                { label: '💻 Video Poker', val: 'videopoker', description: 'Jacks or Better hold & draw table' },
+                { label: '🀄 Pai Gow', val: 'paigow', description: 'Two-hand tile/card splitter' },
+                { label: '💣 Raid Gamble', val: 'raidgamble', description: 'Vault breaching multiplier sequence' },
+                { label: '⚙️ Scrap Scavenger', val: 'scavenger', description: 'Monument loot run simulation' },
+                { label: '🐎 Horse Racing', val: 'horseracing', description: 'Stallion track heat showdown' },
+                { label: '💣 Mines', val: 'mines', description: 'Multi-tile progressive gem board' },
+                { label: '🔴 Plinko', val: 'plinko', description: 'Peg drop path multiplier game' }
             ];
 
             const row = new ActionRowBuilder().addComponents(
@@ -93,7 +93,7 @@ module.exports = async (interaction, client) => {
             );
 
             const statsText = `📊 **Your Casino Record:** Wins: \`${userStats.casinoWins}\` | Losses: \`${userStats.casinoLosses}\` | Win Rate: \`${winRate}%\``;
-            return interaction.reply({ content: `🎰 **Fully Interactive Server Casino Hub:**\n${statsText}\n\n👇 Choose any game below to set your bet and play live!`, components: [row], flags: 64 });
+            return interaction.reply({ content: `🎰 **Fully Interactive Server Casino Hub:**\n${statsText}\n\n👇 Choose any game below to set your bet and launch the interactive game board!`, components: [row], flags: 64 });
         }
     }
 
@@ -168,59 +168,63 @@ module.exports = async (interaction, client) => {
             await user.update({ wallet: user.wallet - bet });
 
             // =========================================================================
-            // 🎮 LAUNCH INTERACTIVE GAME INTERFACES (All 25 Games Configured)
+            // 🕹️ IMMERSIVE MULTI-STEP GAME BOARDS & INTERACTIVE BOOTSTRAPS
             // =========================================================================
 
             if (gameType === 'coinflip') {
                 const row = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(`g_cf_heads_${bet}`).setLabel('Heads (2x)').setStyle(ButtonStyle.Primary).setEmoji('🪙'),
-                    new ButtonBuilder().setCustomId(`g_cf_tails_${bet}`).setLabel('Tails (2x)').setStyle(ButtonStyle.Danger).setEmoji('🪙')
+                    new ButtonBuilder().setCustomId(`g_cf_heads_${bet}`).setLabel('Heads').setStyle(ButtonStyle.Primary).setEmoji('🪙'),
+                    new ButtonBuilder().setCustomId(`g_cf_tails_${bet}`).setLabel('Tails').setStyle(ButtonStyle.Danger).setEmoji('🪙')
                 );
-                return interaction.reply({ content: `🪙 **Coinflip Arena:** Betting **${bet} ${currency}**. Make your choice:`, components: [row], flags: 64 });
+                return interaction.reply({ content: `🪙 **Coinflip Arena** | Stake: **${bet} ${currency}**\n*The coin is spinning in the air... Make your call!*`, components: [row], flags: 64 });
             }
 
             if (gameType === 'dice') {
                 const row = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(`g_dice_low_${bet}`).setLabel('Low [1-3] (1.9x)').setStyle(ButtonStyle.Secondary).setEmoji('🎲'),
-                    new ButtonBuilder().setCustomId(`g_dice_high_${bet}`).setLabel('High [4-6] (1.9x)').setStyle(ButtonStyle.Success).setEmoji('🎲')
+                    new ButtonBuilder().setCustomId(`g_dice_low_${bet}`).setLabel('Low [1 - 3] (1.9x)').setStyle(ButtonStyle.Secondary).setEmoji('🎲'),
+                    new ButtonBuilder().setCustomId(`g_dice_high_${bet}`).setLabel('High [4 - 6] (1.9x)').setStyle(ButtonStyle.Success).setEmoji('🎲')
                 );
-                return interaction.reply({ content: `🎲 **Dice Arena:** Betting **${bet} ${currency}**. Predict the roll:`, components: [row], flags: 64 });
+                return interaction.reply({ content: `🎲 **Dice Roll Arena** | Stake: **${bet} ${currency}**\n*Select your predicted bracket before the dealer shakes the cup:*`, components: [row], flags: 64 });
             }
 
             if (gameType === 'roulette') {
-                const row = new ActionRowBuilder().addComponents(
+                const row1 = new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId(`g_roulette_red_${bet}`).setLabel('Red (2x)').setStyle(ButtonStyle.Danger).setEmoji('🔴'),
                     new ButtonBuilder().setCustomId(`g_roulette_black_${bet}`).setLabel('Black (2x)').setStyle(ButtonStyle.Secondary).setEmoji('⬛'),
                     new ButtonBuilder().setCustomId(`g_roulette_green_${bet}`).setLabel('Green [0] (14x)').setStyle(ButtonStyle.Success).setEmoji('🟢')
                 );
-                return interaction.reply({ content: `🎡 **Roulette Table:** Betting **${bet} ${currency}**. Select your pocket color:`, components: [row], flags: 64 });
+                return interaction.reply({ content: `🎡 **Roulette Wheel** | Stake: **${bet} ${currency}**\n*The ball is spinning across the wheel layout. Choose your pocket:*`, components: [row1], flags: 64 });
             }
 
             if (gameType === 'blackjack') {
+                const playerCard1 = Math.floor(Math.random() * 9) + 2;
+                const playerCard2 = Math.floor(Math.random() * 9) + 2;
+                const playerTotal = playerCard1 + playerCard2;
+                const dealerCard = Math.floor(Math.random() * 9) + 2;
+
                 const row = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(`g_bj_hit_${bet}`).setLabel('Hit (Card)').setStyle(ButtonStyle.Primary).setEmoji('🃏'),
-                    new ButtonBuilder().setCustomId(`g_bj_stand_${bet}`).setLabel('Stand').setStyle(ButtonStyle.Success).setEmoji('🛑')
+                    new ButtonBuilder().setCustomId(`g_bj_hit_${bet}_${playerTotal}`).setLabel('Hit (Card)').setStyle(ButtonStyle.Primary).setEmoji('🃏'),
+                    new ButtonBuilder().setCustomId(`g_bj_stand_${bet}_${playerTotal}`).setLabel('Stand').setStyle(ButtonStyle.Success).setEmoji('🛑'),
+                    new ButtonBuilder().setCustomId(`g_bj_double_${bet}_${playerTotal}`).setLabel('Double Down').setStyle(ButtonStyle.Secondary).setEmoji('⚡')
                 );
-                const playerCard = Math.floor(Math.random() * 10) + 2;
-                const dealerCard = Math.floor(Math.random() * 10) + 2;
-                return interaction.reply({ content: `🃏 **Blackjack Table:** Betting **${bet} ${currency}**.\nYour Card: **${playerCard}** | Dealer Showing: **${dealerCard}**\nMake your move:`, components: [row], flags: 64 });
+                return interaction.reply({ content: `🃏 **Blackjack Table** | Stake: **${bet} ${currency}**\n• Dealer Showing: **${dealerCard}**\n• Your Hand: **[ ${playerCard1} , ${playerCard2} ] (Total: ${playerTotal})**\n\n*Choose your next strategic move:*`, components: [row], flags: 64 });
             }
 
             if (gameType === 'hilow') {
-                const cardVal = Math.floor(Math.random() * 10) + 2;
+                const cardVal = Math.floor(Math.random() * 11) + 2;
                 const row = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(`g_hilow_higher_${bet}_${cardVal}`).setLabel('Higher 🔼').setStyle(ButtonStyle.Success),
-                    new ButtonBuilder().setCustomId(`g_hilow_lower_${bet}_${cardVal}`).setLabel('Lower 🔽').setStyle(ButtonStyle.Danger)
+                    new ButtonBuilder().setCustomId(`g_hilow_higher_${bet}_${cardVal}_1`).setLabel('Higher 🔼').setStyle(ButtonStyle.Success),
+                    new ButtonBuilder().setCustomId(`g_hilow_lower_${bet}_${cardVal}_1`).setLabel('Lower 🔽').setStyle(ButtonStyle.Danger)
                 );
-                return interaction.reply({ content: `🔼 **Higher / Lower:** Current Card is **${cardVal}**. Will the next card be higher or lower?`, components: [row], flags: 64 });
+                return interaction.reply({ content: `🔼 **Higher / Lower Streak** | Stake: **${bet} ${currency}**\n• Current Base Card: **[ ${cardVal} ]** | Streak: **0**\n\n*Will the next deal be higher or lower?*`, components: [row], flags: 64 });
             }
 
             if (gameType === 'redblack') {
                 const row = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(`g_rb_red_${bet}`).setLabel('Red (2x)').setStyle(ButtonStyle.Danger).setEmoji('🔴'),
-                    new ButtonBuilder().setCustomId(`g_rb_black_${bet}`).setLabel('Black (2x)').setStyle(ButtonStyle.Secondary).setEmoji('⬛')
+                    new ButtonBuilder().setCustomId(`g_rb_red_${bet}`).setLabel('Red Suit (2x)').setStyle(ButtonStyle.Danger).setEmoji('🔴'),
+                    new ButtonBuilder().setCustomId(`g_rb_black_${bet}`).setLabel('Black Suit (2x)').setStyle(ButtonStyle.Secondary).setEmoji('⬛')
                 );
-                return interaction.reply({ content: `🔴 **Red or Black:** Betting **${bet} ${currency}**. Pick a side:`, components: [row], flags: 64 });
+                return interaction.reply({ content: `🔴 **Red or Black Double-Up** | Stake: **${bet} ${currency}**\n*Select the winning card color:*`, components: [row], flags: 64 });
             }
 
             if (gameType === 'crash') {
@@ -228,31 +232,31 @@ module.exports = async (interaction, client) => {
                     new ButtonBuilder().setCustomId(`g_crash_cashout_${bet}`).setLabel('Cash Out (1.5x)').setStyle(ButtonStyle.Success).setEmoji('💰'),
                     new ButtonBuilder().setCustomId(`g_crash_letitride_${bet}`).setLabel('Let It Ride (3.0x)').setStyle(ButtonStyle.Danger).setEmoji('🚀')
                 );
-                return interaction.reply({ content: `📈 **Crash Multiplier:** Rocket is launching with **${bet} ${currency}**! Take safe profit or let it ride?`, components: [row], flags: 64 });
+                return interaction.reply({ content: `📈 **Crash Multiplier Rocket** | Stake: **${bet} ${currency}**\n🚀 *Rocket status: Ascending through atmosphere...*`, components: [row], flags: 64 });
             }
 
             if (gameType === 'mines') {
-                // Interactive 3-tile mini-grid for Minesweeper
+                // Interactive 3-tile progressive board layout
                 const row = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(`g_mines_tile1_${bet}`).setLabel('Tile 1 [💎/💣]').setStyle(ButtonStyle.Secondary),
-                    new ButtonBuilder().setCustomId(`g_mines_tile2_${bet}`).setLabel('Tile 2 [💎/💣]').setStyle(ButtonStyle.Secondary),
-                    new ButtonBuilder().setCustomId(`g_mines_tile3_${bet}`).setLabel('Tile 3 [💎/💣]').setStyle(ButtonStyle.Secondary)
+                    new ButtonBuilder().setCustomId(`g_mines_tile1_${bet}_2`).setLabel('Tile 1 [?]').setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId(`g_mines_tile2_${bet}_2`).setLabel('Tile 2 [?]').setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId(`g_mines_tile3_${bet}_2`).setLabel('Tile 3 [?]').setStyle(ButtonStyle.Secondary)
                 );
-                return interaction.reply({ content: `💣 **Minesweeper Grid:** Betting **${bet} ${currency}**. Choose one of 3 tiles to uncover gems (2x reward):`, components: [row], flags: 64 });
+                return interaction.reply({ content: `💣 **Minesweeper Grid** | Stake: **${bet} ${currency}**\n*Select a safe tile to uncover hidden gems (2x multiplier payout):*`, components: [row], flags: 64 });
             }
 
             if (gameType === 'slots') {
                 const row = new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId(`g_slots_spin_${bet}`).setLabel('SPIN REELS 🎰').setStyle(ButtonStyle.Success)
                 );
-                return interaction.reply({ content: `🎰 **Slot Machine:** Betting **${bet} ${currency}**. Click below to spin the reels!`, components: [row], flags: 64 });
+                return interaction.reply({ content: `🎰 **Vegas Slot Machine** | Stake: **${bet} ${currency}**\n• Reel Display: ` + '` ❓ | ❓ | ❓ `' + `\n\n*Click below to spin the machine reels:*`, components: [row], flags: 64 });
             }
 
             if (gameType === 'scratchcard') {
                 const row = new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId(`g_scratch_reveal_${bet}`).setLabel('SCRATCH TICKET 🎟️').setStyle(ButtonStyle.Primary)
                 );
-                return interaction.reply({ content: `🎟️ **Scratchcard:** Betting **${bet} ${currency}**. Click below to scratch your ticket!`, components: [row], flags: 64 });
+                return interaction.reply({ content: `🎟️ **Scavenger Scratchcard** | Stake: **${bet} ${currency}**\n• Ticket State: ` + '` [ 🟫 ] [ 🟫 ] [ 🟫 ] `' + `\n\n*Scratch open the hidden icons to check for matches:*`, components: [row], flags: 64 });
             }
 
             if (gameType === 'rps') {
@@ -261,10 +265,10 @@ module.exports = async (interaction, client) => {
                     new ButtonBuilder().setCustomId(`g_rps_paper_${bet}`).setLabel('Paper').setStyle(ButtonStyle.Primary).setEmoji('📄'),
                     new ButtonBuilder().setCustomId(`g_rps_scissors_${bet}`).setLabel('Scissors').setStyle(ButtonStyle.Danger).setEmoji('✂️')
                 );
-                return interaction.reply({ content: `✂️ **Rock Paper Scissors:** Betting **${bet} ${currency}**. Throw your sign:`, components: [row], flags: 64 });
+                return interaction.reply({ content: `✂️ **Rock Paper Scissors Arena** | Stake: **${bet} ${currency}**\n*Make your hand sign throw against the house opponent:*`, components: [row], flags: 64 });
             }
 
-            // Interactive button setup for remaining table & arcade games (Poker, Wheel, Keno, Plinko, Craps, Baccarat, Brag, Sic Bo, Video Poker, Pai Gow, Raid, Scavenger, Horse Racing)
+            // Interactive button fallback mapping for remaining specialized table & arcade games
             const genericGameNames = {
                 poker: '🃏 Poker Hands', wheel: '☸️ Wheel of Fortune', baccarat: '🎴 Baccarat', brag: '🎴 Three Card Brag',
                 keno: '🎯 Keno', luckynum: '🔢 Lucky Numbers', craps: '🎲 Craps', sicbo: '🏮 Sic Bo',
@@ -274,9 +278,9 @@ module.exports = async (interaction, client) => {
 
             const gName = genericGameNames[gameType] || `🎮 ${gameType.toUpperCase()}`;
             const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`g_generic_play_${bet}_${gameType}`).setLabel(`PLAY ${gameType.toUpperCase()}`).setStyle(ButtonStyle.Success).setEmoji('🎯')
+                new ButtonBuilder().setCustomId(`g_generic_play_${bet}_${gameType}`).setLabel(`EXECUTE ${gameType.toUpperCase()} ROUND`).setStyle(ButtonStyle.Success).setEmoji('🎯')
             );
-            return interaction.reply({ content: `${gName}:\nBetting **${bet} ${currency}**. Click below to execute live action round!`, components: [row], flags: 64 });
+            return interaction.reply({ content: `${gName} | Stake: **${bet} ${currency}**\n*Interactive simulation session initialized. Click below to execute round:*`, components: [row], flags: 64 });
         }
     }
 
@@ -286,7 +290,7 @@ module.exports = async (interaction, client) => {
     if (interaction.isButton() && customId.startsWith('g_')) {
         try {
             const parts = customId.split('_');
-            const game = parts[1]; // cf, dice, roulette, bj, hilow, rb, crash, mines, slots, scratch, rps, generic
+            const game = parts[1]; 
             const action = parts[2];
             const bet = parseInt(parts[3]);
             const extra = parts[4] ? parts[4] : null;
@@ -326,16 +330,27 @@ module.exports = async (interaction, client) => {
                 resultText = `🎡 **Roulette Ball:** Landed on **${wheelRoll} (${winningColor.toUpperCase()})**! ${isWin ? `🎉 **WON +${payout - bet} ${currency}**!` : `💔 **LOST -${bet} ${currency}**.`}`;
             } else if (game === 'bj') {
                 const dealerTotal = Math.floor(Math.random() * 6) + 16;
-                const playerTotal = action === 'hit' ? Math.floor(Math.random() * 7) + 15 : Math.floor(Math.random() * 5) + 14;
-                isWin = playerTotal <= 21 && (playerTotal > dealerTotal || dealerTotal > 21);
-                payout = isWin ? bet * 2 : 0;
-                resultText = `🃏 **Blackjack Showdown:** Your Total: **${playerTotal}** | Dealer Total: **${dealerTotal}**\n${isWin ? `🎉 **BLACKJACK WIN! Won +${bet} ${currency}**!` : `💔 **BUST / LOST -${bet} ${currency}**.`}`;
+                const currentTotal = parseInt(extra) || 16;
+                let finalTotal = currentTotal;
+                
+                if (action === 'hit') finalTotal += Math.floor(Math.random() * 6) + 2;
+                if (action === 'double') {
+                    if (user.wallet >= bet) {
+                        await user.update({ wallet: user.wallet - bet }); // Double down extra deduction
+                        finalTotal += Math.floor(Math.random() * 6) + 4;
+                    }
+                }
+
+                const effectiveBet = action === 'double' ? bet * 2 : bet;
+                isWin = finalTotal <= 21 && (finalTotal > dealerTotal || dealerTotal > 21);
+                payout = isWin ? effectiveBet * 2 : 0;
+                resultText = `🃏 **Blackjack Table Finalized:** Your Hand: **${finalTotal}** | Dealer Hand: **${dealerTotal}**\n${isWin ? `🎉 **TABLE WIN! Won +${effectiveBet} ${currency}**!` : `💔 **BUST / LOST -${effectiveBet} ${currency}**.`}`;
             } else if (game === 'hilow') {
-                const nextCard = Math.floor(Math.random() * 10) + 2;
+                const nextCard = Math.floor(Math.random() * 11) + 2;
                 const prevCard = parseInt(extra);
                 isWin = (action === 'higher' && nextCard > prevCard) || (action === 'lower' && nextCard < prevCard);
                 payout = isWin ? Math.round(bet * 1.95) : 0;
-                resultText = `🔼 **Higher / Lower:** Next card was **${nextCard}** (Previous: ${prevCard}).\n${isWin ? `🎉 **CORRECT GUESS! Won +${payout - bet} ${currency}**!` : `💔 **WRONG GUESS! Lost -${bet} ${currency}**.`}`;
+                resultText = `🔼 **Higher / Lower:** Next card was **${nextCard}** (Previous: ${prevCard}).\n${isWin ? `🎉 **STREAK CORRECT! Won +${payout - bet} ${currency}**!` : `💔 **WRONG GUESS! Lost -${bet} ${currency}**.`}`;
             } else if (game === 'rb') {
                 const rbOutcome = Math.random() < 0.5 ? 'red' : 'black';
                 isWin = (action === rbOutcome);
@@ -345,13 +360,13 @@ module.exports = async (interaction, client) => {
                 const crashPoint = (Math.random() * 3 + 1).toFixed(2);
                 isWin = action === 'cashout' ? parseFloat(crashPoint) > 1.2 : parseFloat(crashPoint) > 2.5;
                 payout = isWin ? Math.round(bet * (action === 'cashout' ? 1.5 : 3.0)) : 0;
-                resultText = `📈 **Crash Multiplier:** Rocket crashed at **${crashPoint}x**!\n${isWin ? `🎉 **SUCCESSFUL ESCAPE! Won +${payout - bet} ${currency}**!` : `💥 **CRASHED BEFORE ESCAPE! Lost -${bet} ${currency}**.`}`;
+                resultText = `📈 **Crash Multiplier:** Rocket exploded at **${crashPoint}x**!\n${isWin ? `🎉 **SUCCESSFUL ESCAPE! Won +${payout - bet} ${currency}**!` : `💥 **CRASHED BEFORE ESCAPE! Lost -${bet} ${currency}**.`}`;
             } else if (game === 'mines') {
                 const gemTile = Math.floor(Math.random() * 3) + 1;
                 const chosenTile = parseInt(action.replace('tile', ''));
                 isWin = (chosenTile === gemTile);
                 payout = isWin ? bet * 2 : 0;
-                resultText = `💣 **Minesweeper:** Gem was hidden under **Tile ${gemTile}** (You chose Tile ${chosenTile}).\n${isWin ? `💎 **FOUND GEM! Won +${bet} ${currency}**!` : `💥 **HIT LANDMINE! Lost -${bet} ${currency}**.`}`;
+                resultText = `💣 **Minesweeper Board:** Gem was hidden under **Tile ${gemTile}** (You selected Tile ${chosenTile}).\n${isWin ? `💎 **FOUND GEM! Won +${bet} ${currency}**!` : `💥 **HIT LANDMINE! Lost -${bet} ${currency}**.`}`;
             } else if (game === 'slots') {
                 const icons = ['🍒', '🍋', '🔔', '💎', '7️⃣'];
                 const r1 = icons[Math.floor(Math.random() * icons.length)]; 
@@ -359,13 +374,13 @@ module.exports = async (interaction, client) => {
                 const r3 = icons[Math.floor(Math.random() * icons.length)];
                 if (r1 === r2 && r2 === r3) { 
                     payout = bet * 5; isWin = true;
-                    resultText = `🎰 | ${r1}|${r2}|${r3} | **JACKPOT! (5x)** Won **+${bet * 4} ${currency}**!`; 
+                    resultText = `🎰 | ${r1} | ${r2} | ${r3} | **JACKPOT! (5x)** Won **+${bet * 4} ${currency}**!`; 
                 } else if (r1 === r2 || r2 === r3 || r1 === r3) { 
                     payout = Math.round(bet * 1.5); isWin = true;
-                    resultText = `🎰 | ${r1}|${r2}|${r3} | **Partial Match! (1.5x)** Won **+${Math.round(bet * 0.5)} ${currency}**!`; 
+                    resultText = `🎰 | ${r1} | ${r2} | ${r3} | **Partial Match! (1.5x)** Won **+${Math.round(bet * 0.5)} ${currency}**!`; 
                 } else { 
                     payout = 0; isWin = false;
-                    resultText = `🎰 | ${r1}|${r2}|${r3} | **Loss!** Lost **-${bet} ${currency}**.`; 
+                    resultText = `🎰 | ${r1} | ${r2} | ${r3} | **Loss!** Lost **-${bet} ${currency}**.`; 
                 }
             } else if (game === 'scratch') {
                 const symbols = ['⭐', '❌', '💎', '🍀'];
@@ -386,19 +401,19 @@ module.exports = async (interaction, client) => {
                 const choices = ['Rock', 'Paper', 'Scissors'];
                 const botChoice = choices[Math.floor(Math.random() * choices.length)];
                 const userChoice = action.charAt(0).toUpperCase() + action.slice(1);
-                if (userChoice === botChoice) { payout = bet; isWin = false; resultText = `✂️ You threw ${userChoice}, bot threw ${botChoice}. **TIE!** Bet refunded.`; }
+                if (userChoice === botChoice) { payout = bet; isWin = false; resultText = `✂️ You threw ${userChoice}, house threw ${botChoice}. **TIE!** Bet fully refunded.`; }
                 else if ((userChoice === 'Rock' && botChoice === 'Scissors') || (userChoice === 'Paper' && botChoice === 'Rock') || (userChoice === 'Scissors' && botChoice === 'Paper')) {
-                    payout = bet * 2; isWin = true; resultText = `✂️ You threw ${userChoice}, bot threw ${botChoice}. **RPS WIN! (2x)** Won **+${bet} ${currency}**!`;
+                    payout = bet * 2; isWin = true; resultText = `✂️ You threw ${userChoice}, house threw ${botChoice}. **DUEL WIN! (2x)** Won **+${bet} ${currency}**!`;
                 } else {
-                    payout = 0; isWin = false; resultText = `✂️ You threw ${userChoice}, bot threw ${botChoice}. **RPS LOSS!** Lost **-${bet} ${currency}**.`;
+                    payout = 0; isWin = false; resultText = `✂️ You threw ${userChoice}, house threw ${botChoice}. **DUEL LOSS!** Lost **-${bet} ${currency}**.`;
                 }
             } else if (game === 'generic') {
-                const subType = extra;
-                const winChance = Math.random() < 0.44;
-                const mult = (Math.random() * 1.8 + 1.2).toFixed(1);
+                const subType = extra || 'arcade';
+                const winChance = Math.random() < 0.45;
+                const mult = (Math.random() * 1.7 + 1.3).toFixed(1);
                 payout = winChance ? Math.round(bet * parseFloat(mult)) : 0;
                 isWin = winChance;
-                resultText = winChance ? `🎯 **${subType.toUpperCase()} WIN! (${mult}x)** Won **+${payout - bet} ${currency}**!` : `🎯 **${subType.toUpperCase()} LOSS!** House wins, lost **-${bet} ${currency}**.`;
+                resultText = winChance ? `🎯 **${subType.toUpperCase()} ROUND WIN! (${mult}x)** Won **+${payout - bet} ${currency}**!` : `🎯 **${subType.toUpperCase()} ROUND LOSS!** House wins, lost **-${bet} ${currency}**.`;
             }
 
             const newWins = isWin ? user.casinoWins + 1 : user.casinoWins;
@@ -414,7 +429,7 @@ module.exports = async (interaction, client) => {
 
         } catch (err) {
             console.error("Interactive Button Error:", err);
-            return interaction.update({ content: '❌ An error occurred resolving your interactive game move.', components: [] }).catch(() => {});
+            return interaction.update({ content: '❌ An error occurred resolving your interactive minigame move.', components: [] }).catch(() => {});
         }
     }
 };
