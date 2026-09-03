@@ -63,9 +63,15 @@ module.exports = async (interaction, client) => {
             return await giveawayHandler(interaction, client);
         }
 
-        // 🚨 TOP ROUTING FOR BUDDY GAMES, GUN GAME, & BR 🚨
+        // 🚨 TOP ROUTING FOR PANEL 2 (ADVANCED MODULES) 🚨
         if (customId === 'admin_menu_select_2') {
             clearTimeout(timeoutSafety);
+            
+            // Defer update immediately to prevent 3-second timeouts
+            if (interaction.isRepliable() && !interaction.deferred && !interaction.replied) {
+                await interaction.deferUpdate().catch(() => {});
+            }
+
             if (selectedValue === 'setup_buddy_games') {
                 return await buddyGamesHandler(interaction, client);
             }
@@ -92,7 +98,7 @@ module.exports = async (interaction, client) => {
                         { label: 'Attach Roles to Message', value: 'attach_reaction_panel', description: 'Add buttons to an existing message', emoji: '📎' }
                     ])
                 );
-                return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+                return interaction.editReply({ embeds: [embed], components: [row] });
             }
             if (selectedValue === 'setup_giveaways') return await giveawayHandler(interaction, client);
             if (selectedValue === 'setup_suggestions') return await suggestionHandler(interaction, client);
