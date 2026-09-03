@@ -271,8 +271,8 @@ const bindHandler = async (interaction, client) => {
                 const name = interaction.fields.getTextInputValue('b_name').trim() || "Custom Bind";
                 if (session.selectedBindId) {
                     await CustomBind.update({ name }, { where: { id: session.selectedBindId } });
-              }
-              return await renderBindPanel(interaction, `✅ Bind renamed successfully!`);
+                }
+                return await renderBindPanel(interaction, `✅ Bind renamed successfully!`);
             }
 
             if (customId === 'bind_modal_economy') {
@@ -368,9 +368,9 @@ const bindHandler = async (interaction, client) => {
                 
                 let newCommand = '';
                 if (bind.actionType === 'teleport') {
-                    newCommand = `global.teleportpos (${cX},${loweredY},${cZ}) "{player}"`;
+                    newCommand = `teleportpos "{player}" ${cX} ${loweredY} ${cZ}`;
                 } else if (bind.actionType === 'recycler') {
-                    newCommand = `spawn recycler_static (${cX},${loweredY},${cZ})`;
+                    newCommand = `spawn recycler_static "${cX},${loweredY},${cZ}"`;
                 }
                 
                 await CustomBind.update({ command: newCommand }, { where: { id: session.selectedBindId } });
