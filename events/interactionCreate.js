@@ -63,13 +63,11 @@ module.exports = async (interaction, client) => {
             return await giveawayHandler(interaction, client);
         }
 
-        // 🚨 TOP ROUTING FOR PANEL 2 (ADVANCED MODULES) 🚨
-        if (customId === 'admin_menu_select_2') {
+        // 🚨 UNIFIED ROUTING FOR PANEL 1 & PANEL 2 DROPDOWNS 🚨
+        if (customId === 'admin_menu_select' || customId === 'admin_menu_select_2') {
             clearTimeout(timeoutSafety);
 
-            if (selectedValue === 'setup_buddy_games') {
-                return await buddyGamesHandler(interaction, client);
-            }
+            if (selectedValue === 'setup_buddy_games') return await buddyGamesHandler(interaction, client);
             if (selectedValue === 'setup_autoevents') return await autoEventsHandler(interaction, client);
             if (selectedValue === 'setup_automod') return await autoModHandler(interaction, client);
             if (selectedValue === 'setup_buddypass') return await buddyPassHandler(interaction, client);
@@ -99,7 +97,17 @@ module.exports = async (interaction, client) => {
             if (selectedValue === 'setup_suggestions') return await suggestionHandler(interaction, client);
             if (selectedValue === 'setup_hometp') return await homeTpHandler(interaction, client);
             if (selectedValue === 'setup_skipnight') return await skipNightHandler(interaction, client);
-            
+            if (selectedValue === 'setup_shop') return await shopHandler(interaction, client);
+            if (selectedValue === 'setup_economy') return await economyHandler(interaction, client);
+            if (selectedValue === 'setup_tickets') return await ticketHandler(interaction, client);
+            if (selectedValue === 'setup_logging') return await loggingHandler(interaction, client);
+            if (selectedValue === 'setup_multiserver') return await adminHandler(interaction, client);
+            if (selectedValue === 'admin_tools') return await adminHandler(interaction, client);
+            if (selectedValue === 'setup_wipe') return await wipeHandler(interaction, client);
+            if (selectedValue === 'setup_custom_zones') return await customZoneHandler(interaction, client);
+            if (selectedValue === 'setup_server_roles') return await adminHandler(interaction, client);
+            if (selectedValue === 'setup_crosschat') return await adminHandler(interaction, client);
+
             return await adminHandler(interaction, client);
         }
 
@@ -185,79 +193,6 @@ module.exports = async (interaction, client) => {
             if (customId.startsWith('modal_clan_') || customId.startsWith('clan_modal_')) return await clanHandler(interaction, client);
             if (customId.startsWith('modal_tk_')) return await ticketHandler(interaction, client);
             if (customId.startsWith('modal_ga_')) return await giveawayHandler(interaction, client);
-            
-            return await adminHandler(interaction, client);
-        }
-
-        // ====================================================================
-        // 🚦 1. ADMIN MENU DROPDOWN SELECT ROUTER
-        // ====================================================================
-        if (customId === 'admin_menu_select') {
-            clearTimeout(timeoutSafety);
-            if (selectedValue === 'setup_bot_settings') {
-                return await adminHandler(interaction, client);
-            }
-
-            if (selectedValue === 'setup_server_roles') {
-                const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-                const adminRoleDisplay = config?.adminRoleId ? `<@&${config.adminRoleId}>` : '`Not Set`';
-                const modRoleDisplay = config?.modRoleId ? `<@&${config.modRoleId}>` : '`Not Set`';
-
-                const embed = new EmbedBuilder()
-                    .setTitle('👑 Admin & Moderator Roles Manager')
-                    .setDescription(`Configure which Discord roles are recognized by BuddyBot as Server Admins and Moderators.\n\n` +
-                        `• **Current Admin Role:** ${adminRoleDisplay}\n` +
-                        `• **Current Mod Role:** ${modRoleDisplay}`)
-                    .setColor('#e67e22');
-
-                const row1 = new ActionRowBuilder().addComponents(
-                    new RoleSelectMenuBuilder().setCustomId('select_config_admin_role').setPlaceholder('Select Bot Admin Role...').setMinValues(1).setMaxValues(1)
-                );
-                const row2 = new ActionRowBuilder().addComponents(
-                    new RoleSelectMenuBuilder().setCustomId('select_config_mod_role').setPlaceholder('Select Bot Moderator Role...').setMinValues(1).setMaxValues(1)
-                );
-
-                return interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
-            }
-
-            if (selectedValue === 'setup_embeds_roles') {
-                const embed = new EmbedBuilder()
-                    .setTitle('🎨 Embeds & Interactive Panels')
-                    .setDescription('Choose what type of panel or announcement you want to build and deploy to your server.')
-                    .setColor('#9b59b6');
-                const row = new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder().setCustomId('unified_embed_select').setPlaceholder('Select panel type...')
-                    .addOptions([
-                        { label: 'Create New Embed', value: 'setup_postembed', description: 'Create and send a new announcement', emoji: '📢' },
-                        { label: 'Edit Existing Embed', value: 'edit_postembed', description: 'Edit an embed already in chat', emoji: '✏️' },
-                        { label: 'Create Reaction Panel', value: 'create_reaction_panel', description: 'Send a new role claimer', emoji: '🎭' },
-                        { label: 'Create Verification Panel', value: 'create_verification_panel', description: 'Send a new verify button', emoji: '🔐' },
-                        { label: 'Attach Roles to Message', value: 'attach_reaction_panel', description: 'Add buttons to an existing message', emoji: '📎' }
-                    ])
-                );
-                return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
-            }
-
-            if (selectedValue === 'setup_skipnight') return await skipNightHandler(interaction, client);
-            if (selectedValue === 'setup_wipe') return await wipeHandler(interaction, client);
-            if (selectedValue === 'setup_autoevents') return await autoEventsHandler(interaction, client);
-            if (selectedValue === 'setup_economy') return await economyHandler(interaction, client);
-            if (selectedValue === 'setup_tier') return await premiumHandler(interaction, client);
-            if (selectedValue === 'setup_suggestions') return await suggestionHandler(interaction, client);
-            if (selectedValue === 'setup_tickets') return await ticketHandler(interaction, client);
-            if (selectedValue === 'setup_giveaways') return await giveawayHandler(interaction, client);
-            if (selectedValue === 'setup_shop') return await shopHandler(interaction, client);
-            if (selectedValue === 'setup_clans') return await clanHandler(interaction, client);
-            if (selectedValue === 'setup_buddypass') return await buddyPassHandler(interaction, client);
-            if (selectedValue === 'setup_minigames') return await casinoHandler(interaction, client);
-            if (selectedValue === 'setup_bounties') return await bountyHandler(interaction, client);
-            if (selectedValue === 'setup_kits') return await kitHandler(interaction, client);
-            if (selectedValue === 'setup_logging' || selectedValue.includes('log')) return await loggingHandler(interaction, client);
-            if (selectedValue === 'setup_binds') return await bindHandler(interaction, client);
-            if (selectedValue === 'setup_orp') return await orpHandler(interaction, client);
-            if (selectedValue.includes('pve') || selectedValue.includes('zone') || selectedValue === 'setup_custom_zones') return await customZoneHandler(interaction, client);
-            if (selectedValue === 'setup_automod') return await autoModHandler(interaction, client);
-            if (selectedValue === 'setup_hometp') return await homeTpHandler(interaction, client);
             
             return await adminHandler(interaction, client);
         }
