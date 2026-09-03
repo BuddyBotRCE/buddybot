@@ -42,18 +42,6 @@ module.exports = async (interaction, client) => {
         const selectedValue = interaction.isStringSelectMenu() && interaction.values ? interaction.values[0] : '';
         console.log(`[INTERACTION DEBUG] CustomId: "${customId}" | SelectedValue: "${selectedValue}"`);
 
-        // 🚨 PREVENT 10062 UNKNOWN INTERACTION TIMEOUTS BY DEFERRING INSTANTLY 🚨
-        if (interaction.isChatInputCommand() || interaction.isStringSelectMenu() || interaction.isButton()) {
-            if (!interaction.deferred && !interaction.replied) {
-                // Use ephemeral defer update/reply so it doesn't throw errors if already handled
-                if (interaction.isMessageComponent()) {
-                    await interaction.deferUpdate().catch(() => {});
-                } else {
-                    await interaction.deferReply({ flags: 64 }).catch(() => {});
-                }
-            }
-        }
-
         // 🚨 TOP ROUTING FOR GIVEAWAYS 🚨
         if (
             customId === 'giveaway_action_select' || 
@@ -92,7 +80,7 @@ module.exports = async (interaction, client) => {
                         { label: 'Attach Roles to Message', value: 'attach_reaction_panel', description: 'Add buttons to an existing message', emoji: '📎' }
                     ])
                 );
-                return interaction.editReply({ embeds: [embed], components: [row] }).catch(() => {});
+                return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
             }
             if (selectedValue === 'setup_giveaways') return await giveawayHandler(interaction, client);
             if (selectedValue === 'setup_suggestions') return await suggestionHandler(interaction, client);
@@ -167,12 +155,12 @@ module.exports = async (interaction, client) => {
             if (customId === 'select_config_admin_role') {
                 const roleId = interaction.values[0];
                 await GuildConfig.upsert({ guildId: interaction.guild.id, adminRoleId: roleId });
-                return interaction.editReply({ content: `✅ Bot **Admin Role** successfully set to <@&${roleId}>!`, components: [] }).catch(() => {});
+                return interaction.reply({ content: `✅ Bot **Admin Role** successfully set to <@&${roleId}>!`, flags: 64 });
             }
             if (customId === 'select_config_mod_role') {
                 const roleId = interaction.values[0];
                 await GuildConfig.upsert({ guildId: interaction.guild.id, modRoleId: roleId });
-                return interaction.editReply({ content: `✅ Bot **Moderator Role** successfully set to <@&${roleId}>!`, components: [] }).catch(() => {});
+                return interaction.reply({ content: `✅ Bot **Moderator Role** successfully set to <@&${roleId}>!`, flags: 64 });
             }
         }
 
@@ -189,7 +177,7 @@ module.exports = async (interaction, client) => {
             if (adminHandler && adminHandler.renderMainPanel) return await adminHandler.renderMainPanel(interaction);
         }  
         if (customId === 'hub_hometp_info') {
-            return interaction.editReply({ content: `🏠 **Home Teleport Hub Guide:**\n• Use the in-game quick-chat wheel and select **"Can I have a key"** to anchor your home respawn location.\n• Use the quick-chat wheel and select **"Retreat"** to teleport straight back home!` }).catch(() => {});
+            return interaction.reply({ content: `🏠 **Home Teleport Hub Guide:**\n• Use the in-game quick-chat wheel and select **"Can I have a key"** to anchor your home respawn location.\n• Use the quick-chat wheel and select **"Retreat"** to teleport straight back home!`, flags: 64 });
         }
         if (customId === 'hub_pvp_areas') {
             const { PveZone } = require('../database/db');
@@ -198,7 +186,7 @@ module.exports = async (interaction, client) => {
             if (activePvpZones && activePvpZones.length > 0) {
                 pvpText = '### ⚔️ Live Active PvP Areas & Monuments\n\n' + activePvpZones.map(z => `• 🔴 **${z.name || 'Custom Zone'}** — Radius: \`${z.radius || 50}m\``).join('\n');
             }
-            return interaction.editReply({ content: pvpText }).catch(() => {});
+            return interaction.reply({ content: pvpText, flags: 64 });
         }
         if (customId === 'hub_leaderboards' || customId === 'hub_lb_select' || customId.startsWith('lb_refresh_')) return await leaderboardHandler(interaction, client);
         if (customId === 'hub_link_account' || customId.includes('admin_kit')) return await adminHandler(interaction, client);
@@ -224,6 +212,10 @@ module.exports = async (interaction, client) => {
         return await adminHandler(interaction, client);
     } catch (error) {
         console.error('[INTERACTION ERROR]', error);
-        await interaction.editReply({ content: `❌ Error: ${error.message}` }).catch(() => {});
+        if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
+            await interaction.reply({ content: `❌ Error: ${error.message}`, flags: 64 }).catch(() => {});
+        } else if (interaction.deferred) {
+            await interaction.editReply({ content: `❌ Error: ${error.message}` }).catch(() => {});
+        }
     }
 };
