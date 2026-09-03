@@ -1,5 +1,5 @@
 // ============================================================================
-// MASTER ROUTER: events/interactionCreate.js
+// MASTER ROUTER: events/interactionCreate.js (DIAGNOSTIC VERSION)
 // ============================================================================
 const path = require('path');
 const { EmbedBuilder, ActionRowBuilder, RoleSelectMenuBuilder, StringSelectMenuBuilder } = require('discord.js');
@@ -31,7 +31,6 @@ const skipNightHandler = require(handlerPath('skipNightHandler'));
 const leaderboardHandler = require(handlerPath('leaderboardHandler'));
 const orpHandler = require(handlerPath('orpHandler'));
 
-// 👇 BUDDY GAMES IMPORTS 👇
 const buddyGamesHandler = require(handlerPath('buddyGamesHandler'));
 const gunGameHandler = require(handlerPath('gunGameHandler'));
 const battleRoyaleHandler = require(handlerPath('battleRoyaleHandler'));
@@ -40,181 +39,85 @@ module.exports = async (interaction, client) => {
     try {
         const customId = interaction.customId || '';
         const selectedValue = interaction.isStringSelectMenu() && interaction.values ? interaction.values[0] : '';
-        console.log(`[INTERACTION DEBUG] CustomId: "${customId}" | SelectedValue: "${selectedValue}"`);
+        
+        console.log(`[CLICK DEBUG] -----------------------------------------`);
+        console.log(`[CLICK DEBUG] Type: ${interaction.type} | CustomId: "${customId}" | Value: "${selectedValue}"`);
 
-        // 🚨 TOP ROUTING FOR GIVEAWAYS 🚨
-        if (
-            customId === 'giveaway_action_select' || 
-            customId === 'enter_giveaway' || 
-            customId.startsWith('ga_') || 
-            customId.startsWith('select_ga_') ||
-            customId.includes('giveaway') ||
-            selectedValue === 'setup_giveaways'
-        ) {
+        // Instant safe acknowledgment so Discord never throws "Unknown Interaction"
+        if (interaction.isRepliable() && !interaction.deferred && !interaction.replied) {
+            await interaction.deferReply({ flags: 64 }).catch(() => {});
+        }
+
+        const safeEdit = async (payload) => {
+            try {
+                if (interaction.deferred || interaction.replied) {
+                    return await interaction.editReply(payload);
+                }
+                return await interaction.reply({ ...payload, flags: 64 });
+            } catch (e) {
+                console.error("[SAFE EDIT ERROR]", e.message);
+            }
+        };
+
+        // 1. Giveaways
+        if (customId.includes('giveaway') || selectedValue === 'setup_giveaways') {
             return await giveawayHandler(interaction, client);
         }
 
-        // 🚨 UNIFIED ROUTING FOR PANEL 1 & PANEL 2 DROPDOWNS 🚨
-        if (customId === 'admin_menu_select' || customId === 'admin_menu_select_2') {
-            if (selectedValue === 'setup_buddy_games') return await buddyGamesHandler(interaction, client);
-            if (selectedValue === 'setup_autoevents') return await autoEventsHandler(interaction, client);
-            if (selectedValue === 'setup_automod') return await autoModHandler(interaction, client);
-            if (selectedValue === 'setup_buddypass') return await buddyPassHandler(interaction, client);
-            if (selectedValue === 'setup_clans') return await clanHandler(interaction, client);
-            if (selectedValue === 'setup_bounties') return await bountyHandler(interaction, client);
-            if (selectedValue === 'setup_binds') return await bindHandler(interaction, client);
-            if (selectedValue === 'setup_ai') return await adminHandler(interaction, client);
-            if (selectedValue === 'setup_tier') return await premiumHandler(interaction, client);
-            if (selectedValue === 'setup_embeds_roles') {
-                const embed = new EmbedBuilder()
-                    .setTitle('🎨 Embeds & Interactive Panels')
-                    .setDescription('Choose what type of panel or announcement you want to build and deploy to your server.')
-                    .setColor('#9b59b6');
+        // 2. Universal Panel 1 & Panel 2 Dropdown Catcher
+        if (customId.includes('admin_menu_select') || customId.includes('setup_')) {
+            const target = selectedValue || customId;
+            console.log(`[ROUTER] Routing Panel Selection -> Target: "${target}"`);
+
+            if (target.includes('autoevents')) return await autoEventsHandler(interaction, client);
+            if (target.includes('automod')) return await autoModHandler(interaction, client);
+            if (target.includes('buddypass')) return await buddyPassHandler(interaction, client);
+            if (target.includes('clans')) return await clanHandler(interaction, client);
+            if (target.includes('bounties')) return await bountyHandler(interaction, client);
+            if (target.includes('binds')) return await bindHandler(interaction, client);
+            if (target.includes('tier')) return await premiumHandler(interaction, client);
+            if (target.includes('embeds_roles')) {
+                const embed = new EmbedBuilder().setTitle('🎨 Embeds & Panels').setDescription('Select panel type:').setColor('#9b59b6');
                 const row = new ActionRowBuilder().addComponents(
                     new StringSelectMenuBuilder().setCustomId('unified_embed_select').setPlaceholder('Select panel type...')
                     .addOptions([
-                        { label: 'Create New Embed', value: 'setup_postembed', description: 'Create and send a new announcement', emoji: '📢' },
-                        { label: 'Edit Existing Embed', value: 'edit_postembed', description: 'Edit an embed already in chat', emoji: '✏️' },
-                        { label: 'Create Reaction Panel', value: 'create_reaction_panel', description: 'Send a new role claimer', emoji: '🎭' },
-                        { label: 'Create Verification Panel', value: 'create_verification_panel', description: 'Send a new verify button', emoji: '🔐' },
-                        { label: 'Attach Roles to Message', value: 'attach_reaction_panel', description: 'Add buttons to an existing message', emoji: '📎' }
+                        { label: 'Create New Embed', value: 'setup_postembed', description: 'Create announcement', emoji: '📢' },
+                        { label: 'Edit Existing Embed', value: 'edit_postembed', description: 'Edit embed', emoji: '✏️' }
                     ])
                 );
-                return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+                return safeEdit({ embeds: [embed], components: [row] });
             }
-            if (selectedValue === 'setup_giveaways') return await giveawayHandler(interaction, client);
-            if (selectedValue === 'setup_suggestions') return await suggestionHandler(interaction, client);
-            if (selectedValue === 'setup_hometp') return await homeTpHandler(interaction, client);
-            if (selectedValue === 'setup_skipnight') return await skipNightHandler(interaction, client);
-            if (selectedValue === 'setup_shop') return await shopHandler(interaction, client);
-            if (selectedValue === 'setup_economy') return await economyHandler(interaction, client);
-            if (selectedValue === 'setup_tickets') return await ticketHandler(interaction, client);
-            if (selectedValue === 'setup_logging') return await loggingHandler(interaction, client);
-            if (selectedValue === 'setup_multiserver') return await adminHandler(interaction, client);
-            if (selectedValue === 'admin_tools') return await adminHandler(interaction, client);
-            if (selectedValue === 'setup_wipe') return await wipeHandler(interaction, client);
-            if (selectedValue === 'setup_custom_zones') return await customZoneHandler(interaction, client);
-            if (selectedValue === 'setup_server_roles') return await adminHandler(interaction, client);
-            if (selectedValue === 'setup_crosschat') return await adminHandler(interaction, client);
-
-            return await adminHandler(interaction, client);
+            if (target.includes('suggestions')) return await suggestionHandler(interaction, client);
+            if (target.includes('hometp')) return await homeTpHandler(interaction, client);
+            if (target.includes('skipnight')) return await skipNightHandler(interaction, client);
+            if (target.includes('shop')) return await shopHandler(interaction, client);
+            if (target.includes('economy')) return await economyHandler(interaction, client);
+            if (target.includes('tickets')) return await ticketHandler(interaction, client);
+            if (target.includes('logging')) return await loggingHandler(interaction, client);
+            if (target.includes('wipe')) return await wipeHandler(interaction, client);
+            if (target.includes('custom_zones')) return await customZoneHandler(interaction, client);
+            if (target.includes('buddy_games')) return await buddyGamesHandler(interaction, client);
         }
 
-        if (customId === 'buddy_games_hub_select') {
-            if (selectedValue === 'hub_goto_gungame') {
-                Object.defineProperty(interaction, 'customId', { value: 'admin_menu_select', writable: true, configurable: true });
-                Object.defineProperty(interaction, 'values', { value: ['setup_gungame'], writable: true, configurable: true });
-                return await gunGameHandler(interaction, client);
-            }
-            if (selectedValue === 'hub_goto_br') {
-                Object.defineProperty(interaction, 'customId', { value: 'admin_menu_select', writable: true, configurable: true });
-                Object.defineProperty(interaction, 'values', { value: ['setup_battleroyale'], writable: true, configurable: true });
-                return await battleRoyaleHandler(interaction, client);
-            }
-            return await buddyGamesHandler(interaction, client);
-        }
-
-        // --- COMMANDS ---
-        if (interaction.isChatInputCommand()) {
-            const command = client.commands.get(interaction.commandName);
-            if (!command) return;
-            return await command.execute(interaction);
-        }
-
-        // --- MODAL SUBMISSIONS ---
-        if (interaction.isModalSubmit()) {
-            if (customId.startsWith('modal_gg_')) return await gunGameHandler(interaction, client);
-            if (customId.startsWith('modal_br_') || customId.startsWith('modal_br_prize_exec_')) return await battleRoyaleHandler(interaction, client);
-            if (customId === 'modal_hometp_settings') return await homeTpHandler(interaction, client);
-            if (customId === 'modal_skipnight_percentage') return await skipNightHandler(interaction, client); 
-            if (customId.startsWith('modal_givekit_exec_')) return await adminHandler(interaction, client);
-            if (customId === 'modal_shop_multiplier' || customId === 'modal_shop_custom' || customId.startsWith('modal_buy_qty_')) return await shopHandler(interaction, client);
-            if (customId === 'modal_wipe_full' || customId.startsWith('modal_wipe_sel_') || customId === 'modal_wipe_cooldowns') return await wipeHandler(interaction, client);
-            if (customId === 'modal_link_account_global' || customId.startsWith('modal_link_account_')) return await adminHandler(interaction, client);
-            if (customId.startsWith('modal_sug_') || customId === 'modal_player_submit_suggestion' || customId.startsWith('modal_sug_decline_reason_')) return await suggestionHandler(interaction, client);
-            if (customId === 'modal_verify_email' || customId === 'modal_transfer_license') return await premiumHandler(interaction, client);
-            if (customId === 'modal_orp_config') return await orpHandler(interaction, client);
-            if (customId === 'modal_setup_economy' || customId.startsWith('modal_econ_') || customId === 'modal_hub_deposit' || customId === 'modal_hub_withdraw' || customId.startsWith('modal_admin_give_exec_') || customId.startsWith('modal_admin_take_exec_')) {
-                return await economyHandler(interaction, client);
-            }
-            if (customId === 'modal_ae_settings' || customId.startsWith('modal_ae_')) return await autoEventsHandler(interaction, client);
-            if (customId === 'modal_casino_config' || customId.startsWith('modal_play_')) return await casinoHandler(interaction, client);
-            if (customId.startsWith('modal_emb_') || customId === 'modal_admin_embed' || customId.startsWith('modal_rr_') || customId.startsWith('modal_edit_embed_prompt' ) || customId.startsWith('modal_attach_rr_prompt')) return await postEmbedHandler(interaction, client);
-            if (customId.startsWith('modal_am_') || customId === 'modal_automod_config') return await autoModHandler(interaction, client);
-            if (customId.startsWith('modal_cz_')) return await customZoneHandler(interaction, client);
-            if (customId.startsWith('modal_clan_') || customId.startsWith('clan_modal_')) return await clanHandler(interaction, client);
-            if (customId.startsWith('modal_tk_')) return await ticketHandler(interaction, client);
-            if (customId.startsWith('modal_ga_')) return await giveawayHandler(interaction, client);
-            
-            return await adminHandler(interaction, client);
-        }
-
-        // --- ROLE / CHANNEL SELECT MENUS ---
-        if (interaction.isRoleSelectMenu()) {
-            if (customId === 'hometp_select_role') return await homeTpHandler(interaction, client);
-            if (customId === 'select_config_admin_role') {
-                const roleId = interaction.values[0];
-                await GuildConfig.upsert({ guildId: interaction.guild.id, adminRoleId: roleId });
-                return interaction.reply({ content: `✅ Bot **Admin Role** successfully set to <@&${roleId}>!`, flags: 64 });
-            }
-            if (customId === 'select_config_mod_role') {
-                const roleId = interaction.values[0];
-                await GuildConfig.upsert({ guildId: interaction.guild.id, modRoleId: roleId });
-                return interaction.reply({ content: `✅ Bot **Moderator Role** successfully set to <@&${roleId}>!`, flags: 64 });
-            }
-        }
-
-        if (interaction.isChannelSelectMenu() && customId === 'select_tk_category') {
-            return await ticketHandler(interaction, client);
-        }
-
-        // --- BUTTONS & MISC COMPONENT ROUTING ---
-        if (customId === 'bot_settings_toggle_select') return await adminHandler(interaction, client);
-        if (customId === 'btn_toggle_skipnight' || customId === 'btn_set_skipnight_percentage') return await skipNightHandler(interaction, client);
-        if (customId.startsWith('btn_orp_')) return await orpHandler(interaction, client);
-        if (customId === 'hometp_btn_settings' || customId === 'admin_menu_back') return await homeTpHandler(interaction, client);
-        if (customId === 'admin_menu_back') {
-            if (adminHandler && adminHandler.renderMainPanel) return await adminHandler.renderMainPanel(interaction);
-        }  
-        if (customId === 'hub_hometp_info') {
-            return interaction.reply({ content: `🏠 **Home Teleport Hub Guide:**\n• Use the in-game quick-chat wheel and select **"Can I have a key"** to anchor your home respawn location.\n• Use the quick-chat wheel and select **"Retreat"** to teleport straight back home!`, flags: 64 });
-        }
-        if (customId === 'hub_pvp_areas') {
-            const { PveZone } = require('../database/db');
-            const activePvpZones = await PveZone.findAll({ where: { guildId: interaction.guild.id, isEnabled: true, pvp: true } });
-            let pvpText = '### ⚔️ Live Active PvP Areas & Monuments\n\n`All areas are currently Safe PvE (No active PvP zones).`';
-            if (activePvpZones && activePvpZones.length > 0) {
-                pvpText = '### ⚔️ Live Active PvP Areas & Monuments\n\n' + activePvpZones.map(z => `• 🔴 **${z.name || 'Custom Zone'}** — Radius: \`${z.radius || 50}m\``).join('\n');
-            }
-            return interaction.reply({ content: pvpText, flags: 64 });
-        }
-        if (customId === 'hub_leaderboards' || customId === 'hub_lb_select' || customId.startsWith('lb_refresh_')) return await leaderboardHandler(interaction, client);
-        if (customId === 'hub_link_account' || customId.includes('admin_kit')) return await adminHandler(interaction, client);
+        // 3. Module specific prefix routing
+        if (customId.startsWith('ae_') || customId.includes('autoevent')) return await autoEventsHandler(interaction, client);
+        if (customId.startsWith('am_') || customId.includes('automod')) return await autoModHandler(interaction, client);
+        if (customId.startsWith('hometp_') || customId.includes('hometp')) return await homeTpHandler(interaction, client);
+        if (customId.includes('skipnight')) return await skipNightHandler(interaction, client);
         if (customId.includes('shop')) return await shopHandler(interaction, client);
-        if (customId.includes('clan')) return await clanHandler(interaction, client);
-        if (customId.includes('econ') || customId.includes('bank') || customId.includes('admin_give') || customId.includes('admin_take')) return await economyHandler(interaction, client);
+        if (customId.includes('ticket') || customId.startsWith('tk_')) return await ticketHandler(interaction, client);
+        if (customId.includes('sug_')) return await suggestionHandler(interaction, client);
+        if (customId.includes('wipe')) return await wipeHandler(interaction, client);
+        if (customId.includes('emb_') || customId === 'unified_embed_select') return await postEmbedHandler(interaction, client);
         if (customId.includes('casino') || customId.startsWith('g_')) return await casinoHandler(interaction, client);
-        if (customId.includes('buddypass')) return await buddyPassHandler(interaction, client);
-        if (customId.includes('ticket') || customId.startsWith('btn_tk_') || customId.startsWith('tk_')) return await ticketHandler(interaction, client);
-        if (customId.includes('sug_') || customId === 'btn_player_open_suggestion') return await suggestionHandler(interaction, client);
-        if (customId.startsWith('btn_wipe_') || customId === 'select_wipe_custom') return await wipeHandler(interaction, client);
-        if (customId === 'unified_embed_select' || customId.startsWith('btn_emb_') || customId.startsWith('select_emb_') || customId.startsWith('rr_')) return await postEmbedHandler(interaction, client);
-        if (customId.includes('tier') || customId.includes('stripe') || customId.includes('verify')) return await premiumHandler(interaction, client);
-        if (customId.startsWith('btn_log_') || customId.startsWith('select_log_chan_')) return await loggingHandler(interaction, client);
-        if (customId.startsWith('am_') || customId.startsWith('btn_am_')) return await autoModHandler(interaction, client);
-        if (customId.startsWith('cz_') || customId.startsWith('btn_cz_') || customId.includes('pve')) return await customZoneHandler(interaction, client);
-        if (customId.startsWith('ae_')) return await autoEventsHandler(interaction, client);
-        if (customId.includes('ga_') || customId.includes('giveaway')) return await giveawayHandler(interaction, client);
-        if (customId.includes('bounty')) return await bountyHandler(interaction, client);
-        if (customId.startsWith('bind_') || customId.includes('bind')) return await bindHandler(interaction, client);
         if (customId.includes('kit')) return await kitHandler(interaction, client);
 
+        // Fallback to admin handler
         return await adminHandler(interaction, client);
+
     } catch (error) {
         console.error('[INTERACTION ERROR]', error);
-        if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-            await interaction.reply({ content: `❌ Error: ${error.message}`, flags: 64 }).catch(() => {});
-        } else if (interaction.deferred) {
+        if (interaction.isRepliable()) {
             await interaction.editReply({ content: `❌ Error: ${error.message}` }).catch(() => {});
         }
     }
