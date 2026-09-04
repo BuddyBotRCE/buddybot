@@ -104,7 +104,7 @@ const CHAT_OPTIONS_MAP = {
 };
 
 async function processD11Router(guildId, rawUsername, rawContent, msgLower, client, homeTpPosQueue, sendRconCommand) {
-    if (!rawUsername || !rawContent) return false;
+    if (!rawContent) return false;
 
     const isQuickChat = rawContent.includes('d11_quick_chat_');
 
