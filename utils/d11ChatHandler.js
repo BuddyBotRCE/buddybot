@@ -1,5 +1,5 @@
 const { processHomeTpChat } = require('./chatHomeTp');
-const { processCustomBindChat } = require('./chatCustomBinds');
+const { processCustomBindChat } = require('./utils/chatCustomBinds');
 const { processSkipNightChat } = require('./chatSkipNight');
 const { UserEconomy, CustomBind, BindCooldown } = require('../database/db'); 
 
