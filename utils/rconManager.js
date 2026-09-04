@@ -93,28 +93,40 @@ async function connectRcon(guildId, client, targetServerId = null) {
                 }
             }
         }, eventEmitterCallback);
-
+  
         ws.on('message', async (data) => {
             try {
-                // --- SPY DEBUG LOG ---
-                console.log(`[RCON RAW PACKET] ${data.toString()}`);
-                // ---------------------
-
                 const parsed = JSON.parse(data);
                 if (!parsed) return;
                 
-                const msg = parsed.Message || '';
+                // Extract message from any possible RCON json structure
+                const msg = parsed.Message || parsed.message || data.toString() || '';
                 const msgLower = msg.toLowerCase();
 
-                // Flexible chat parser supporting standard chat tags or raw broadcasted D11 lines
+                // Debug log to confirm when quick-chat or text comes through
+                if (msgLower.includes('d11_quick_chat_') || msgLower.includes('[chat')) {
+                    console.log(`[CHAT DETECTED] ${msg}`);
+                }
+
+                let rawUsername = '';
+                let rawContent = msg;
+
+                // Flexible extraction for chat and D11 quick-chats
                 if (msg.includes(':')) {
                     const parts = msg.split(':');
                     if (parts.length >= 2) {
                         rawUsername = parts[0].replace(/\[.*?\]/g, '').trim();
                         rawContent = parts.slice(1).join(':').trim().toLowerCase();
                     }
-                } else if (msg.includes('d11_quick_chat_')) {
-                    rawContent = msg.trim().toLowerCase();
+                } 
+                
+                // Fallforce capture if the string contains a d11 quick chat token anywhere
+                if (msgLower.includes('d11_quick_chat_')) {
+                    rawContent = msgLower.trim();
+                    // If the username wasn't caught by the colon split, extract it or default safely
+                    if (!rawUsername && parsed.Identifier) {
+                        rawUsername = "Player"; // Will be matched by active handlers
+                    }
                 }
 
                 const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
