@@ -88,36 +88,52 @@ async function connectRcon(guildId, client, targetServerId = null) {
             } catch (err) {}
         };
 
+        // --- SAFE PARSER PATCH 1: Event Register ---
         registerEventParser({
             on: (event, cb) => {
                 if (event === 'message') {
                     ws.on('message', (raw) => {
                         try {
-                            const parsed = JSON.parse(raw);
-                            if (parsed && parsed.Message) cb({ message: parsed.Message });
+                            const rawStr = raw.toString();
+                            let msg = '';
+                            try {
+                                const sanitized = rawStr.replace(/,\s*}/g, '}');
+                                const parsed = JSON.parse(sanitized);
+                                msg = parsed.Message || parsed.message || rawStr;
+                            } catch (e) {
+                                msg = rawStr;
+                            }
+                            if (msg) cb({ message: msg });
                         } catch (e) {}
                     });
                 }
             }
         }, eventEmitterCallback);
 
+        // --- SAFE PARSER PATCH 2: Main WebSocket Listener ---
         ws.on('message', async (data) => {
             try {
-                const parsed = JSON.parse(data);
-                if (!parsed) return;
+                const rawStr = data.toString();
+                let msg = '';
                 
-                const msg = parsed.Message || '';
-                const msgLower = msg.toLowerCase();
+                try {
+                    const sanitized = rawStr.replace(/,\s*}/g, '}');
+                    const parsed = JSON.parse(sanitized);
+                    msg = parsed.Message || parsed.message || rawStr;
+                } catch (e) {
+                    msg = rawStr; 
+                }
 
+                if (!msg) return;
+                
+                const msgLower = msg.toLowerCase();
                 let rawUsername = '';
                 let rawContent = msg;
-
                 let cleanMsg = msg;
-                if (cleanMsg.includes('[chat server]')) {
-                    cleanMsg = cleanMsg.replace('[chat server]', '').trim();
-                } else if (cleanMsg.includes('[chat local]')) {
-                    cleanMsg = cleanMsg.replace('[chat local]', '').trim();
-                }
+
+                // Safely strip GPortal tags regardless of case
+                cleanMsg = cleanMsg.replace(/\[CHAT SERVER\]/i, '').trim();
+                cleanMsg = cleanMsg.replace(/\[CHAT LOCAL\]/i, '').trim();
 
                 if (cleanMsg.includes(':')) {
                     const parts = cleanMsg.split(':');
@@ -125,9 +141,14 @@ async function connectRcon(guildId, client, targetServerId = null) {
                         rawUsername = parts[0].trim();
                         rawContent = parts.slice(1).join(':').trim().toLowerCase();
                     }
-                } else if (cleanMsg.includes('d11_quick_chat_')) {
+                } else if (cleanMsg.toLowerCase().includes('d11_quick_chat_')) {
                     rawContent = cleanMsg.trim().toLowerCase();
                     rawUsername = "Cheggwin86";
+                }
+
+                // Debug log to confirm the parser caught it successfully
+                if (rawContent.includes('d11_quick_chat_')) {
+                    console.log(`[SAFE PARSER] Caught Quick-Chat: ${rawContent} from ${rawUsername}`);
                 }
 
                 const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
