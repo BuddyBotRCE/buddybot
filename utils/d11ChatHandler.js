@@ -1,6 +1,12 @@
 const { processHomeTpChat } = require('./chatHomeTp');
 const { processCustomBindChat } = require('./chatCustomBinds');
 const { processSkipNightChat } = require('./chatSkipNight');
+const { UserEconomy, CustomBind, BindCooldown } = require('../database/db'); // Required for dynamic checks
+
+// Anti-Spam / Double-Trigger Cache
+const debounceCache = new Map();
+// Dynamic Recycler Position Queue
+const pendingRecyclers = new Map();
 
 const CHAT_CATEGORIES = [
     { label: 'Combat', value: 'cat_combat', emoji: '⚔️', description: 'Under attack, move out, etc.' },
@@ -104,9 +110,98 @@ const CHAT_OPTIONS_MAP = {
 };
 
 async function processD11Router(guildId, rawUsername, rawContent, msgLower, client, homeTpPosQueue, sendRconCommand) {
-    if (!rawUsername || !rawContent) return false;
+    if (!rawUsername && !rawContent.includes('(')) return false;
+
+    // --- 1. DOUBLE-TRIGGER BLOCKER (DEBOUNCE) ---
+    // If GPortal sends a duplicate message within 1.5 seconds, ignore it to prevent double economy charging.
+    const debounceKey = `${guildId}_${rawUsername}_${rawContent}`;
+    const now = Date.now();
+    if (rawUsername) {
+        if (debounceCache.has(debounceKey) && now - debounceCache.get(debounceKey) < 1500) {
+            return true; // Completely ignore duplicate
+        }
+        debounceCache.set(debounceKey, now);
+        setTimeout(() => debounceCache.delete(debounceKey), 2000); // Clean memory after 2s
+    }
+
+    // --- 2. DYNAMIC RECYCLER POSITION INTERCEPTOR ---
+    // This catches the invisible coordinates returned by the game when we send `printpos`
+    const nakedCoordMatch = rawContent.match(/\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)/);
+    if (nakedCoordMatch) {
+        for (const [key, data] of pendingRecyclers.entries()) {
+            if (data.guildId === guildId && now - data.timestamp < 10000) {
+                // Lower Y-axis by 0.5 to place exactly on the ground
+                const posX = parseFloat(nakedCoordMatch[1]).toFixed(2);
+                const posY = (parseFloat(nakedCoordMatch[2]) - 0.5).toFixed(2);
+                const posZ = parseFloat(nakedCoordMatch[3]).toFixed(2);
+
+                await sendRconCommand(guildId, `spawn recycler_static (${posX},${posY},${posZ})`);
+                await sendRconCommand(guildId, `say "♻️ ${data.username}'s Personal Recycler has been deployed!"`);
+                
+                pendingRecyclers.delete(key);
+                return true; 
+            }
+        }
+    }
 
     const isQuickChat = rawContent.includes('d11_quick_chat_');
+
+    // --- 3. DYNAMIC "REPAIR THIS" RECYCLER ROUTER ---
+    // If the player uses "Repair This", we handle it right here instead of processing it statically.
+    if (isQuickChat && rawContent.includes('d11_quick_chat_orders_slot_2')) {
+        const bind = await CustomBind.findOne({ where: { guildId, targetValue: 'd11_quick_chat_orders_slot_2' } });
+        
+        if (bind) {
+            const user = await UserEconomy.findOne({ where: { guildId, inGameName: rawUsername } });
+            if (!user) {
+                await sendRconCommand(guildId, `say "❌ ${rawUsername}, link your Discord using /playerpanel to spawn a recycler!"`);
+                return true;
+            }
+
+            // A. Role Check
+            if (bind.roleId && client) {
+                try {
+                    const guild = client.guilds.cache.get(guildId);
+                    const member = await guild.members.fetch(user.userId);
+                    if (!member.roles.cache.has(bind.roleId)) {
+                        await sendRconCommand(guildId, `say "❌ ${rawUsername}, you lack the required VIP role to spawn a recycler!"`);
+                        return true;
+                    }
+                } catch (e) {
+                    return true;
+                }
+            }
+
+            // B. Cooldown Check
+            const cd = await BindCooldown.findOne({ where: { bindId: bind.id, userId: user.userId } });
+            if (cd && cd.expiresAt > new Date()) {
+                const diff = Math.ceil((cd.expiresAt - new Date()) / 1000);
+                await sendRconCommand(guildId, `say "⏳ ${rawUsername}, you must wait ${diff}s to spawn another recycler."`);
+                return true;
+            }
+
+            // C. Economy Check
+            if (bind.cost > 0) {
+                if ((user.wallet || 0) < bind.cost) {
+                    await sendRconCommand(guildId, `say "💸 ${rawUsername}, you need ${bind.cost} Scrap for a recycler (You have ${user.wallet || 0})."`);
+                    return true;
+                }
+                await user.update({ wallet: user.wallet - bind.cost });
+            }
+
+            // D. Apply New Cooldown
+            if (bind.cooldown > 0) {
+                const expiresAt = new Date(Date.now() + bind.cooldown * 1000);
+                await BindCooldown.upsert({ bindId: bind.id, userId: user.userId, expiresAt });
+            }
+
+            // E. Queue Scanner & Trigger Location Capture
+            pendingRecyclers.set(`${guildId}_${rawUsername}`, { guildId, username: rawUsername, timestamp: Date.now() });
+            await sendRconCommand(guildId, `printpos "${rawUsername}"`);
+            
+            return true; // Stop routing! We fully handled the dynamic spawn.
+        }
+    }
 
     const isSkipNight = (isQuickChat && rawContent.includes('d11_quick_chat_orders_slot_3')) || rawContent === '!skipnight' || rawContent === '/skipnight';
     if (isSkipNight) {

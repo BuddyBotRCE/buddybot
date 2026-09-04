@@ -1,116 +1,217 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, RoleSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder } = require('discord.js');
-const { HomeTeleportConfig, GameServer } = require('../database/db');
-const adminHandler = require('./adminHandler');
+const { processHomeTpChat } = require('./chatHomeTp');
+const { processCustomBindChat } = require('./chatCustomBinds');
+const { processSkipNightChat } = require('./chatSkipNight');
+const { UserEconomy, CustomBind, BindCooldown } = require('../database/db'); 
 
-const homeTpSessions = new Map();
+const debounceCache = new Map();
+const pendingRecyclers = new Map();
 
-module.exports = async (interaction, client) => {
-    try {
-        const customId = interaction.customId || '';
-        const guildId = interaction.guild.id;
-        const selectedValue = interaction.isStringSelectMenu() ? interaction.values[0] : '';
+const CHAT_CATEGORIES = [
+    { label: 'Combat', value: 'cat_combat', emoji: '⚔️', description: 'Under attack, move out, etc.' },
+    { label: 'Building', value: 'cat_building', emoji: '🧱', description: 'Walls, beds, door codes, upkeep' },
+    { label: 'Activities', value: 'cat_activities', emoji: '⛏️', description: 'Going for wood, stone, scrap, etc.' },
+    { label: 'Questions', value: 'cat_questions', emoji: '❓', description: 'Are you friendly, team up, trade' },
+    { label: 'Responses', value: 'cat_responses', emoji: '✅', description: 'Yes, no, ok, thank you' },
+    { label: 'Orders', value: 'cat_orders', emoji: '👉', description: 'Follow me, repair, come in' },
+    { label: 'Location', value: 'cat_location', emoji: '🧭', description: 'North, south, east, west' },
+    { label: 'I Need', value: 'cat_need', emoji: '💎', description: 'I need scrap, fuel, food, wood' },
+    { label: 'I Have', value: 'cat_have', emoji: '🎒', description: 'I have scrap, bow, pickaxe' }
+];
 
-        if (!homeTpSessions.has(guildId)) homeTpSessions.set(guildId, { serverId: null });
-        const session = homeTpSessions.get(guildId);
+const CHAT_OPTIONS_MAP = {
+    cat_combat: [
+        { label: 'We\'re Under Attack', value: 'd11_quick_chat_combat_slot_0', emoji: '⚔️' }, 
+        { label: 'Move Out', value: 'd11_quick_chat_combat_slot_2', emoji: '🚀' }, 
+        { label: 'Don\'t Shoot', value: 'd11_quick_chat_combat_slot_3', emoji: '🛑' }, 
+        { label: 'Be Careful - Better Armed', value: 'd11_quick_chat_combat_slot_4', emoji: '⚠️' }, 
+        { label: 'I\'m Out of Ammo', value: 'd11_quick_chat_combat_slot_5', emoji: '🔴' }, 
+        { label: 'I\'m Hurt', value: 'd11_quick_chat_combat_slot_6', emoji: '🩸' }
+    ],
+    cat_building: [
+        { label: 'Upgrade Walls', value: 'd11_quick_chat_building_slot_0', emoji: '🧱' }, 
+        { label: 'We Need Beds', value: 'd11_quick_chat_building_slot_1', emoji: '🛏️' }, 
+        { label: 'I Need Building Auth', value: 'd11_quick_chat_building_slot_2', emoji: '🔑' }, 
+        { label: 'What\'s the Door Code?', value: 'd11_quick_chat_building_slot_3', emoji: '🔢' }, 
+        { label: 'We Need a Better Door', value: 'd11_quick_chat_building_slot_5', emoji: '🚪' }, 
+        { label: 'Upkeep Running Low', value: 'd11_quick_chat_building_slot_6', emoji: '⏳' }, 
+        { label: 'Which Chest is Free Game?', value: 'd11_quick_chat_building_slot_7', emoji: '📦' }
+    ],
+    cat_activities: [
+        { label: 'Going for Stone', value: 'd11_quick_chat_activities_slot_0', emoji: '🪨' }, 
+        { label: 'Going for Wood', value: 'd11_quick_chat_activities_slot_1', emoji: '🪵' }, 
+        { label: 'Going for Metal', value: 'd11_quick_chat_activities_slot_2', emoji: '⛏️' }, 
+        { label: 'Going for Food', value: 'd11_quick_chat_activities_slot_3', emoji: '🍖' }, 
+        { label: 'Going for Water', value: 'd11_quick_chat_activities_slot_4', emoji: '💧' }, 
+        { label: 'Going for Scrap', value: 'd11_quick_chat_activities_slot_5', emoji: '⚙️' }, 
+        { label: 'Going for Metal Frags', value: 'd11_quick_chat_activities_slot_6', emoji: '🔩' }, 
+        { label: 'Going for Medicine', value: 'd11_quick_chat_activities_slot_7', emoji: '💉' }
+    ],
+    cat_questions: [
+        { label: 'Are You Friendly?', value: 'd11_quick_chat_questions_slot_0', emoji: '🤝' }, 
+        { label: 'Can I Build Around Here?', value: 'd11_quick_chat_questions_slot_1', emoji: '🏗️' }, 
+        { label: 'Do You Want to Team Up?', value: 'd11_quick_chat_questions_slot_2', emoji: '👥' }, 
+        { label: 'Do You Need Anything?', value: 'd11_quick_chat_questions_slot_3', emoji: '❓' }, 
+        { label: 'Could You Help Me?', value: 'd11_quick_chat_questions_slot_4', emoji: '🆘' }, 
+        { label: 'Want to Trade?', value: 'd11_quick_chat_questions_slot_5', emoji: '🤝' }, 
+        { label: 'Who\'s There?', value: 'd11_quick_chat_questions_slot_6', emoji: '👀' }, 
+        { label: 'Can I Enter?', value: 'd11_quick_chat_questions_slot_7', emoji: '🚪' }
+    ],
+    cat_responses: [
+        { label: 'Yes', value: 'd11_quick_chat_responses_slot_0', emoji: '✅' }, 
+        { label: 'No', value: 'd11_quick_chat_responses_slot_1', emoji: '❌' }, 
+        { label: 'OK', value: 'd11_quick_chat_responses_slot_2', emoji: '👌' }, 
+        { label: 'Thank You', value: 'd11_quick_chat_responses_slot_3', emoji: '🙏' }, 
+        { label: 'No Problem', value: 'd11_quick_chat_responses_slot_4', emoji: '😎' }, 
+        { label: 'Hello', value: 'd11_quick_chat_responses_slot_5', emoji: '👋' }, 
+        { label: 'Goodbye', value: 'd11_quick_chat_responses_slot_6', emoji: '🚶' }, 
+        { label: 'I\'m Sorry', value: 'd11_quick_chat_responses_slot_7', emoji: '🙇' }
+    ],
+    cat_orders: [
+        { label: 'Follow Me', value: 'd11_quick_chat_orders_slot_0', emoji: '👉' }, 
+        { label: 'Go Away', value: 'd11_quick_chat_orders_slot_1', emoji: '🚷' }, 
+        { label: 'Repair This', value: 'd11_quick_chat_orders_slot_2', emoji: '🔨' }, 
+        { label: 'Come In', value: 'd11_quick_chat_orders_slot_4', emoji: '📥' }, 
+        { label: 'Let\'s Go', value: 'd11_quick_chat_orders_slot_5', emoji: '🏃‍♂️' }, 
+        { label: 'Here, Take This', value: 'd11_quick_chat_orders_slot_6', emoji: '🎁' }, 
+        { label: 'Hurry Up', value: 'd11_quick_chat_orders_slot_7', emoji: '⚡' }
+    ],
+    cat_location: [
+        { label: 'North', value: 'd11_quick_chat_location_slot_0', emoji: '⬆️' }, 
+        { label: 'North East', value: 'd11_quick_chat_location_slot_1', emoji: '↗️' }, 
+        { label: 'East', value: 'd11_quick_chat_location_slot_2', emoji: '➡️' }, 
+        { label: 'South East', value: 'd11_quick_chat_location_slot_3', emoji: '↘️' }, 
+        { label: 'South', value: 'd11_quick_chat_location_slot_4', emoji: '⬇️' }, 
+        { label: 'South West', value: 'd11_quick_chat_location_slot_5', emoji: '↙️' }, 
+        { label: 'West', value: 'd11_quick_chat_location_slot_6', emoji: '⬅️' }, 
+        { label: 'North West', value: 'd11_quick_chat_location_slot_7', emoji: '↖️' }
+    ],
+    cat_need: [
+        { label: 'I Need Scrap', value: 'd11_quick_chat_need_slot_0', emoji: '⚙️' }, 
+        { label: 'I Need Low Grade Fuel', value: 'd11_quick_chat_need_slot_1', emoji: '⛽' }, 
+        { label: 'I Need Food', value: 'd11_quick_chat_need_slot_2', emoji: '🍖' }, 
+        { label: 'I Need Water', value: 'd11_quick_chat_need_slot_3', emoji: '💧' }, 
+        { label: 'I Need Wood', value: 'd11_quick_chat_need_slot_4', emoji: '🪵' }, 
+        { label: 'I Need Stones', value: 'd11_quick_chat_need_slot_5', emoji: '🪨' }, 
+        { label: 'I Need Metal Fragments', value: 'd11_quick_chat_need_slot_6', emoji: '🔩' }, 
+        { label: 'I Need High Quality Metal', value: 'd11_quick_chat_need_slot_7', emoji: '🛡️' }
+    ],
+    cat_have: [
+        { label: 'I Have Scrap', value: 'd11_quick_chat_have_slot_0', emoji: '⚙️' }, 
+        { label: 'I Have Low Grade Fuel', value: 'd11_quick_chat_have_slot_1', emoji: '⛽' }, 
+        { label: 'I Have Food', value: 'd11_quick_chat_have_slot_2', emoji: '🍖' }, 
+        { label: 'I Have Water', value: 'd11_quick_chat_have_slot_3', emoji: '💧' }, 
+        { label: 'I Have Hunting Bow', value: 'd11_quick_chat_have_slot_4', emoji: '🏹' }, 
+        { label: 'I Have Pickaxe', value: 'd11_quick_chat_have_slot_5', emoji: '⛏️' }, 
+        { label: 'I Have Hatchet', value: 'd11_quick_chat_have_slot_6', emoji: '🪓' }, 
+        { label: 'I Have High Quality Metal', value: 'd11_quick_chat_have_slot_7', emoji: '🛡️' }
+    ]
+};
 
-        async function renderHomeTpPanel(messageOverride = '') {
-            const [config] = await HomeTeleportConfig.findOrCreate({ where: { guildId }, defaults: { cooldownMinutes: 30 } });
-            const roleDisplay = config.requiredRoleId ? `<@&${config.requiredRoleId}>` : '`None (Open to all players)`';
-            const servers = await GameServer.findAll({ where: { guildId } });
+async function processD11Router(guildId, rawUsername, rawContent, msgLower, client, homeTpPosQueue, sendRconCommand) {
+    if (!rawUsername && !rawContent.includes('(')) return false;
 
-            let serverDisplay = '`Default / Main Server`';
-            if (session.serverId) {
-                const targetServer = servers.find(s => s.id == session.serverId);
-                if (targetServer) serverDisplay = `**${targetServer.serverName}**`;
+    // --- 1. DOUBLE-TRIGGER BLOCKER (DEBOUNCE) ---
+    const debounceKey = `${guildId}_${rawUsername}_${rawContent}`;
+    const now = Date.now();
+    if (rawUsername) {
+        if (debounceCache.has(debounceKey) && now - debounceCache.get(debounceKey) < 1500) {
+            return true; 
+        }
+        debounceCache.set(debounceKey, now);
+        setTimeout(() => debounceCache.delete(debounceKey), 2000); 
+    }
+
+    // --- 2. DYNAMIC RECYCLER POSITION CATCHER ---
+    const nakedCoordMatch = rawContent.match(/\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)/);
+    if (nakedCoordMatch) {
+        for (const [key, data] of pendingRecyclers.entries()) {
+            if (data.guildId === guildId && now - data.timestamp < 10000) {
+                const posX = parseFloat(nakedCoordMatch[1]).toFixed(2);
+                const posY = (parseFloat(nakedCoordMatch[2]) - 0.5).toFixed(2);
+                const posZ = parseFloat(nakedCoordMatch[3]).toFixed(2);
+
+                await sendRconCommand(guildId, `spawn recycler_static (${posX},${posY},${posZ})`);
+                await sendRconCommand(guildId, `say "♻️ ${data.username}'s Personal Recycler has been deployed!"`);
+                
+                pendingRecyclers.delete(key);
+                return true; 
             }
-
-            const embed = new EmbedBuilder()
-                .setTitle('🏠 Home Teleport Manager')
-                .setDescription(
-                    (messageOverride ? `**${messageOverride}**\n\n` : '') +
-                    `Configure your emote wheel retreat teleport system.\n\n` +
-                    `• **Target Server:** ${serverDisplay}\n` +
-                    `• **Required Role:** ${roleDisplay}\n` +
-                    `• **Cooldown:** ${config.cooldownMinutes} minutes\n` +
-                    `• **Set Home Emote:** \`Can I have a key\` (Triggers suicide to log respawn bed coords)\n` +
-                    `• **Teleport Emote:** \`Retreat\` (Teleports home)`
-                )
-                .setColor('#e67e22');
-
-            let components = [];
-
-            if (servers.length > 0) {
-                const serverOptions = [{ label: 'Default / Main Server', value: 'hometp_server_default', emoji: '🌐' }, ...servers.map(s => ({ label: s.serverName, value: `hometp_server_${s.id}`, emoji: '🖥️' }))];
-                components.push(new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder().setCustomId('hometp_menu_server_select').setPlaceholder('🖥️ Select target server...').addOptions(serverOptions)
-                ));
-            }
-
-            const row1 = new ActionRowBuilder().addComponents(
-                new RoleSelectMenuBuilder().setCustomId('hometp_select_role').setPlaceholder('Select required role...').setMinValues(1).setMaxValues(1)
-            );
-            
-            const row2 = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('hometp_btn_settings').setLabel('Set Cooldown Minutes').setStyle(ButtonStyle.Primary).setEmoji('⚙️'),
-                new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
-            );
-
-            components.push(row1, row2);
-
-            return { embeds: [embed], components };
-        }
-
-        if (customId === 'admin_menu_select' && selectedValue === 'setup_hometp') {
-            const panelData = await renderHomeTpPanel();
-            return interaction.reply({ ...panelData, flags: 64 });
-        }
-
-        if (interaction.isStringSelectMenu() && customId === 'hometp_menu_server_select') {
-            session.serverId = selectedValue === 'hometp_server_default' ? null : selectedValue.replace('hometp_server_', '');
-            const panelData = await renderHomeTpPanel('🖥️ Target server updated!');
-            return interaction.update(panelData);
-        }
-
-        if (interaction.isRoleSelectMenu() && customId === 'hometp_select_role') {
-            const roleId = interaction.values[0];
-            await HomeTeleportConfig.upsert({ guildId, requiredRoleId: roleId });
-            
-            const panelData = await renderHomeTpPanel(`✅ Required role successfully updated to <@&${roleId}>!`);
-            return interaction.update(panelData);
-        }
-
-        if (interaction.isButton() && customId === 'hometp_btn_settings') {
-            const config = await HomeTeleportConfig.findOne({ where: { guildId } });
-            const modal = new ModalBuilder().setCustomId('modal_hometp_settings').setTitle('Home Teleport Cooldown');
-            
-            modal.addComponents(
-                new ActionRowBuilder().addComponents(
-                    new TextInputBuilder().setCustomId('tp_cooldown').setLabel('Cooldown (Minutes)').setStyle(TextInputStyle.Short).setValue(`${config?.cooldownMinutes || 30}`).setRequired(true)
-                )
-            );
-            
-            return await interaction.showModal(modal);
-        }
-
-        if (interaction.isModalSubmit() && customId === 'modal_hometp_settings') {
-            const cooldownMinutes = parseInt(interaction.fields.getTextInputValue('tp_cooldown')) || 30;
-            await HomeTeleportConfig.upsert({ guildId, cooldownMinutes });
-
-            const panelData = await renderHomeTpPanel(`✅ Home Teleport cooldown updated to **${cooldownMinutes} minutes**!`);
-            return interaction.update(panelData);
-        }
-
-        if (interaction.isButton() && customId === 'admin_menu_back') {
-            if (adminHandler && adminHandler.renderMainPanel) {
-                return await adminHandler.renderMainPanel(interaction);
-            }
-            return interaction.update({ content: '🔙 Returned to main dashboard.', components: [], embeds: [] });
-        }
-
-    } catch (err) {
-        console.error('[HOME TP HANDLER ERROR]', err);
-        if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-            await interaction.reply({ content: '❌ An error occurred processing the home teleport settings.', flags: 64 }).catch(() => {});
         }
     }
-};
+
+    const isQuickChat = rawContent.includes('d11_quick_chat_');
+
+    // --- 3. DYNAMIC "REPAIR THIS" RECYCLER ---
+    if (isQuickChat && rawContent.includes('d11_quick_chat_orders_slot_2')) {
+        const bind = await CustomBind.findOne({ where: { guildId, targetValue: 'd11_quick_chat_orders_slot_2' } });
+        
+        if (bind) {
+            const user = await UserEconomy.findOne({ where: { guildId, inGameName: rawUsername } });
+            if (!user) {
+                await sendRconCommand(guildId, `say "❌ ${rawUsername}, link your Discord using /playerpanel to spawn a recycler!"`);
+                return true;
+            }
+
+            if (bind.roleId && client) {
+                try {
+                    const guild = client.guilds.cache.get(guildId);
+                    const member = await guild.members.fetch(user.userId);
+                    if (!member.roles.cache.has(bind.roleId)) {
+                        await sendRconCommand(guildId, `say "❌ ${rawUsername}, you lack the required VIP role to spawn a recycler!"`);
+                        return true;
+                    }
+                } catch (e) { return true; }
+            }
+
+            const cd = await BindCooldown.findOne({ where: { bindId: bind.id, userId: user.userId } });
+            if (cd && cd.expiresAt > new Date()) {
+                const diff = Math.ceil((cd.expiresAt - new Date()) / 1000);
+                await sendRconCommand(guildId, `say "⏳ ${rawUsername}, you must wait ${diff}s to spawn another recycler."`);
+                return true;
+            }
+
+            if (bind.cost > 0) {
+                if ((user.wallet || 0) < bind.cost) {
+                    await sendRconCommand(guildId, `say "💸 ${rawUsername}, you need ${bind.cost} Scrap for a recycler."`);
+                    return true;
+                }
+                await user.update({ wallet: user.wallet - bind.cost });
+            }
+
+            if (bind.cooldown > 0) {
+                const expiresAt = new Date(Date.now() + bind.cooldown * 1000);
+                await BindCooldown.upsert({ bindId: bind.id, userId: user.userId, expiresAt });
+            }
+
+            pendingRecyclers.set(`${guildId}_${rawUsername}`, { guildId, username: rawUsername, timestamp: Date.now() });
+            await sendRconCommand(guildId, `printpos "${rawUsername}"`);
+            
+            return true; 
+        }
+    }
+
+    // --- 4. SKIP NIGHT ---
+    const isSkipNight = (isQuickChat && rawContent.includes('d11_quick_chat_orders_slot_3')) || rawContent === '!skipnight' || rawContent === '/skipnight';
+    if (isSkipNight) {
+        return await processSkipNightChat(guildId, rawUsername, client, sendRconCommand);
+    }
+
+    // --- 5. HOME TELEPORT TRIGGERS ---
+    // Update: d11_quick_chat_building_slot_4 ("Can I have a key?") is now SET HOME
+    // Update: d11_quick_chat_combat_slot_1 ("Retreat") is now TELEPORT HOME
+    const isSetHome = (isQuickChat && rawContent.includes('d11_quick_chat_building_slot_4')) || rawContent === '!sethome' || rawContent === '/sethome';
+    const isRetreat = (isQuickChat && rawContent.includes('d11_quick_chat_combat_slot_1')) || rawContent === '!home' || rawContent === '/home';
+
+    if (isSetHome || isRetreat) {
+        if (isSetHome) {
+            // When setting home, we kill the player so they spawn on their bag, and the rconManager's "Spawn Scanner" catches their coordinates!
+            await sendRconCommand(guildId, `kill "${rawUsername}"`);
+        }
+        return await processHomeTpChat(guildId, rawUsername, isSetHome, isRetreat, client, homeTpPosQueue, sendRconCommand);
+    }
+
+    // --- 6. GENERAL CUSTOM BINDS ---
+    return await processCustomBindChat(guildId, rawUsername, rawContent, msgLower, client, sendRconCommand);
+}
+
+module.exports = { CHAT_CATEGORIES, CHAT_OPTIONS_MAP, processD11Router };

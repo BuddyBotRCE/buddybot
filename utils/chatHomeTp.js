@@ -28,14 +28,14 @@ async function processHomeTpChat(guildId, rawUsername, isSetHome, isRetreat, cli
 
     // A. SET HOME TRIGGER (Emote: Can I have a key)
     if (isSetHome) {
-        await sendRconCommand(guildId, `kill "${matchedPlayer.inGameName}"`, client);
+        // We do NOT send printpos here. We just kill them and wait for them to spawn on their bag.
+        // The rconManager will automatically catch their "spawned at" log when they wake up!
         await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, home set command received! Respawn at your bag to anchor coordinates."`, client);
         
         if (homeTpPosQueue.has(matchedPlayer.userId)) clearTimeout(homeTpPosQueue.get(matchedPlayer.userId).timeoutTimer);
-        const timeoutTimer = setTimeout(() => homeTpPosQueue.delete(matchedPlayer.userId), 30000);
+        const timeoutTimer = setTimeout(() => homeTpPosQueue.delete(matchedPlayer.userId), 30000); // Gives them 30 seconds to respawn
         homeTpPosQueue.set(matchedPlayer.userId, { userId: matchedPlayer.userId, inGameName: matchedPlayer.inGameName, timeoutTimer });
         
-        await sendRconCommand(guildId, `printpos "${matchedPlayer.inGameName}"`, client);
         return true;
     }
 
@@ -52,14 +52,15 @@ async function processHomeTpChat(guildId, rawUsername, isSetHome, isRetreat, cli
 
         const homeLoc = await HomeTeleportLocation.findOne({ where: { guildId, userId: matchedPlayer.userId } });
         if (!homeLoc) {
-            await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, you have not set a home yet! Use the quick-chat wheel first."`, client);
+            await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, you have not set a home yet! Use the 'Can I have a key' quick-chat first."`, client);
             return true;
         }
 
         const expiryTime = new Date(now.getTime() + hometpConfig.cooldownMinutes * 60000);
         await cd.update({ expiresAt: expiryTime });
 
-        await sendRconCommand(guildId, `teleportpos "${matchedPlayer.inGameName}" ${homeLoc.posX} ${homeLoc.posY} ${homeLoc.posZ}`, client);
+        // Added the global. prefix for Rust Console Edition reliability
+        await sendRconCommand(guildId, `global.teleportpos "${matchedPlayer.inGameName}" ${homeLoc.posX} ${homeLoc.posY} ${homeLoc.posZ}`, client);
         await sendRconCommand(guildId, `say "[Teleport] ${matchedPlayer.inGameName} successfully retreated home!"`, client);
         return true;
     }
