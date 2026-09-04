@@ -143,6 +143,10 @@ async function connectRcon(guildId, client, targetServerId = null) {
                     }
                 } else if (cleanMsg.toLowerCase().includes('d11_quick_chat_')) {
                     rawContent = cleanMsg.trim().toLowerCase();
+                    // Instead of a hardcoded name, check the database for the most recent active player, 
+                    // or pass a wildcard tag so chatCustomBinds can match it safely.
+                    const recentPlayer = await UserEconomy.findOne({ where: { guildId: guildId }, order: [['updatedAt', 'DESC']] });
+                    rawUsername = recentPlayer ? recentPlayer.inGameName : '';
                 }
 
                 // Debug log to confirm the parser caught it successfully
