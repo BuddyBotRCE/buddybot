@@ -1,10 +1,6 @@
 const { processHomeTpChat } = require('./chatHomeTp');
 const { processCustomBindChat } = require('./chatCustomBinds');
 const { processSkipNightChat } = require('./chatSkipNight');
-const { UserEconomy, CustomBind, BindCooldown } = require('../database/db'); 
-
-const debounceCache = new Map();
-const pendingRecyclers = new Map();
 
 const CHAT_CATEGORIES = [
     { label: 'Combat', value: 'cat_combat', emoji: '⚔️', description: 'Under attack, move out, etc.' },
@@ -108,95 +104,22 @@ const CHAT_OPTIONS_MAP = {
 };
 
 async function processD11Router(guildId, rawUsername, rawContent, msgLower, client, homeTpPosQueue, sendRconCommand) {
-    if (!rawUsername && !rawContent.includes('(')) return false;
-
-    // --- 1. DYNAMIC RECYCLER POSITION CATCHER ---
-    const nakedCoordMatch = rawContent.match(/\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)/);
-    if (nakedCoordMatch) {
-        for (const [key, data] of pendingRecyclers.entries()) {
-            if (data.guildId === guildId && Date.now() - data.timestamp < 10000) {
-                const posX = parseFloat(nakedCoordMatch[1]).toFixed(2);
-                const posY = (parseFloat(nakedCoordMatch[2]) - 0.5).toFixed(2);
-                const posZ = parseFloat(nakedCoordMatch[3]).toFixed(2);
-
-                await sendRconCommand(guildId, `spawn recycler_static (${posX},${posY},${posZ})`);
-                await sendRconCommand(guildId, `say "♻️ ${data.username}'s Personal Recycler has been deployed!"`);
-                
-                pendingRecyclers.delete(key);
-                return true; 
-            }
-        }
-    }
+    if (!rawUsername || !rawContent) return false;
 
     const isQuickChat = rawContent.includes('d11_quick_chat_');
 
-    // --- 2. DYNAMIC "REPAIR THIS" RECYCLER ---
-    if (isQuickChat && rawContent.includes('d11_quick_chat_orders_slot_2')) {
-        const bind = await CustomBind.findOne({ where: { guildId, targetValue: 'd11_quick_chat_orders_slot_2' } });
-        
-        if (bind) {
-            const user = await UserEconomy.findOne({ where: { guildId, inGameName: rawUsername } });
-            if (!user) {
-                await sendRconCommand(guildId, `say "❌ ${rawUsername}, link your Discord using /playerpanel to spawn a recycler!"`);
-                return true;
-            }
-
-            if (bind.roleId && client) {
-                try {
-                    const guild = client.guilds.cache.get(guildId);
-                    const member = await guild.members.fetch(user.userId);
-                    if (!member.roles.cache.has(bind.roleId)) {
-                        await sendRconCommand(guildId, `say "❌ ${rawUsername}, you lack the required VIP role to spawn a recycler!"`);
-                        return true;
-                    }
-                } catch (e) { return true; }
-            }
-
-            const cd = await BindCooldown.findOne({ where: { bindId: bind.id, userId: user.userId } });
-            if (cd && cd.expiresAt > new Date()) {
-                const diff = Math.ceil((cd.expiresAt - new Date()) / 1000);
-                await sendRconCommand(guildId, `say "⏳ ${rawUsername}, you must wait ${diff}s to spawn another recycler."`);
-                return true;
-            }
-
-            if (bind.cost > 0) {
-                if ((user.wallet || 0) < bind.cost) {
-                    await sendRconCommand(guildId, `say "💸 ${rawUsername}, you need ${bind.cost} Scrap for a recycler."`);
-                    return true;
-                }
-                await user.update({ wallet: user.wallet - bind.cost });
-            }
-
-            if (bind.cooldown > 0) {
-                const expiresAt = new Date(Date.now() + bind.cooldown * 1000);
-                await BindCooldown.upsert({ bindId: bind.id, userId: user.userId, expiresAt });
-            }
-
-            pendingRecyclers.set(`${guildId}_${rawUsername}`, { guildId, username: rawUsername, timestamp: Date.now() });
-            await sendRconCommand(guildId, `printpos "${rawUsername}"`);
-            
-            return true; 
-        }
-    }
-
-    // --- 3. SKIP NIGHT ---
     const isSkipNight = (isQuickChat && rawContent.includes('d11_quick_chat_orders_slot_3')) || rawContent === '!skipnight' || rawContent === '/skipnight';
     if (isSkipNight) {
         return await processSkipNightChat(guildId, rawUsername, client, sendRconCommand);
     }
 
-    // --- 4. HOME TELEPORT TRIGGERS ---
     const isSetHome = (isQuickChat && rawContent.includes('d11_quick_chat_building_slot_4')) || rawContent === '!sethome' || rawContent === '/sethome';
     const isRetreat = (isQuickChat && rawContent.includes('d11_quick_chat_combat_slot_1')) || rawContent === '!home' || rawContent === '/home';
 
     if (isSetHome || isRetreat) {
-        if (isSetHome) {
-            await sendRconCommand(guildId, `kill "${rawUsername}"`);
-        }
         return await processHomeTpChat(guildId, rawUsername, isSetHome, isRetreat, client, homeTpPosQueue, sendRconCommand);
     }
 
-    // --- 5. RESTORED: GENERAL CUSTOM BINDS (TELEPORTS & KITS) ---
     return await processCustomBindChat(guildId, rawUsername, rawContent, msgLower, client, sendRconCommand);
 }
 
