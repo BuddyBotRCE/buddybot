@@ -143,7 +143,6 @@ async function connectRcon(guildId, client, targetServerId = null) {
                     }
                 } else if (cleanMsg.toLowerCase().includes('d11_quick_chat_')) {
                     rawContent = cleanMsg.trim().toLowerCase();
-                    rawUsername = "Cheggwin86";
                 }
 
                 // Debug log to confirm the parser caught it successfully
