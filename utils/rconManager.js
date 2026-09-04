@@ -119,12 +119,15 @@ async function connectRcon(guildId, client, targetServerId = null) {
                 let rawUsername = '';
                 let rawContent = msg;
 
-                if (msg.includes('[chat local]')) {
+                // Flexible chat parser supporting standard chat tags or raw broadcasted D11 lines
+                if (msg.includes(':')) {
                     const parts = msg.split(':');
                     if (parts.length >= 2) {
-                        rawUsername = parts[0].replace('[chat local]', '').trim();
+                        rawUsername = parts[0].replace(/\[.*?\]/g, '').trim();
                         rawContent = parts.slice(1).join(':').trim().toLowerCase();
                     }
+                } else if (msg.includes('d11_quick_chat_')) {
+                    rawContent = msg.trim().toLowerCase();
                 }
 
                 const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
@@ -161,7 +164,6 @@ async function connectRcon(guildId, client, targetServerId = null) {
                                 try {
                                     const bind = await CustomBind.findByPk(setupData.targetId);
                                     if (bind) {
-                                       // Updated to use space-separated teleportpos syntax
                                        let command = bind.actionType === 'teleport' ? `teleportpos ${posX} ${posY} ${posZ} "${setupData.inGameName}"` : `spawn recycler_static (${posX},${posY},${posZ})`; 
                                         await bind.update({ command });
                                     }
