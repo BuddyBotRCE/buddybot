@@ -389,11 +389,12 @@ const bindHandler = async (interaction, client) => {
                 const loweredY = (cY - 0.5).toFixed(2);
                 
                 let newCommand = '';
-                if (bind.actionType === 'teleport') {
-                    newCommand = `teleportpos ${cX} ${loweredY} ${cZ} "{player}"`;
-                } else if (bind.actionType === 'recycler') {
-                    newCommand = `spawn recycler_static (${cX},${loweredY},${cZ})`;
-                }
+if (bind.actionType === 'teleport') {
+    // Official Rust Console Edition format: teleportpos (X,Y,Z) "{player}"
+    newCommand = `teleportpos (${cX},${loweredY},${cZ}) "{player}"`;
+} else if (bind.actionType === 'recycler') {
+    newCommand = `spawn recycler_static (${cX},${loweredY},${cZ})`;
+}
                 
                 await CustomBind.update({ command: newCommand }, { where: { id: session.selectedBindId } });
                 session.view = 'bind';
