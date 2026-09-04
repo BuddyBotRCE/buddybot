@@ -18,7 +18,7 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
     const embed = new EmbedBuilder().setColor('#3498db').setTitle('🗣️ Custom Binds & Console Quick-Chat Manager');
     if (messageOverride) embed.setDescription(`**${messageOverride}**\n\n`);
 
-    let serverDisplay = '`Default / Main Server`';
+    let serverDisplay = '`No Server Selected`';
     if (session.serverId) {
         const targetServer = servers.find(s => s.id == session.serverId);
         if (targetServer) serverDisplay = `**${targetServer.serverName}**`;
@@ -37,10 +37,11 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
             { name: '🛠️ Create New Bind', value: "👇 **Click a button below to choose your bind type:**", inline: false }
         );
 
-        if (customId === 'bind_menu_server_select' && interaction.isStringSelectMenu()) {
-            const selectedVal = interaction.values[0];
-            session.serverId = selectedVal.replace('bind_server_', '');
-            return await renderBindPanel(interaction, `🖥️ Target server updated!`);
+        if (servers.length > 0) {
+            const serverOptions = servers.map(s => ({ label: s.serverName, value: `bind_server_${s.id}`, emoji: '🖥️' }));
+            components.push(new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder().setCustomId('bind_menu_server_select').setPlaceholder('🖥️ Select target server...').addOptions(serverOptions)
+            ));
         }
 
         components.push(new ActionRowBuilder().addComponents(
@@ -219,7 +220,7 @@ const bindHandler = async (interaction, client) => {
 
         if (customId === 'bind_menu_server_select' && interaction.isStringSelectMenu()) {
             const selectedVal = interaction.values[0];
-            session.serverId = selectedVal === 'bind_server_default' ? null : selectedVal.replace('bind_server_', '');
+            session.serverId = selectedVal.replace('bind_server_', '');
             return await renderBindPanel(interaction, `🖥️ Target server updated!`);
         }
 
@@ -359,6 +360,9 @@ const bindHandler = async (interaction, client) => {
             }
 
             if (customId === 'bind_btn_getpos') {
+                if (!session.serverId) {
+                    return await renderBindPanel(interaction, `❌ **Please select a Target Server from the dropdown menu first!**`);
+                }
                 const loadingPayload = await buildPanelPayload(guildId, '⏳ **Extracting your position from the server...**');
                 await interaction.update(loadingPayload);
                 await queueAdminPos(interaction, 'custom_bind', session.selectedBindId, session.serverId);
@@ -386,7 +390,6 @@ const bindHandler = async (interaction, client) => {
                 
                 let newCommand = '';
                 if (bind.actionType === 'teleport') {
-                    // Space-separated syntax matching successful execution
                     newCommand = `teleportpos ${cX} ${loweredY} ${cZ} "{player}"`;
                 } else if (bind.actionType === 'recycler') {
                     newCommand = `spawn recycler_static (${cX},${loweredY},${cZ})`;
