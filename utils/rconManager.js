@@ -141,7 +141,7 @@ async function connectRcon(guildId, client, targetServerId = null) {
                         rawUsername = parts[0].trim();
                         rawContent = parts.slice(1).join(':').trim().toLowerCase();
                     }
-                } else {
+                } else if (cleanMsg.toLowerCase().includes('d11_quick_chat_')) {
                     rawContent = cleanMsg.trim().toLowerCase();
                 }
 
