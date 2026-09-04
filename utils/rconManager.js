@@ -31,7 +31,14 @@ async function connectRcon(guildId, client, targetServerId = null) {
     }
 
     if (!rconIp || !rconPort || !rconPassword) {
-        throw new Error("No target game server selected or configured with valid RCON credentials!");
+        const guildGameServer = await GameServer.findOne({ where: { guildId: guildId } });
+        if (guildGameServer && guildGameServer.rconIp && guildGameServer.rconPort && guildGameServer.rconPassword) {
+            rconIp = guildGameServer.rconIp; rconPort = guildGameServer.rconPort; rconPassword = guildGameServer.rconPassword;
+        }
+    }
+
+    if (!rconIp || !rconPort || !rconPassword) {
+        throw new Error("No game server found or configured with valid RCON credentials for this guild!");
     }
     
     if (activeConnections.has(guildId)) {
@@ -93,40 +100,34 @@ async function connectRcon(guildId, client, targetServerId = null) {
                 }
             }
         }, eventEmitterCallback);
-  
+
         ws.on('message', async (data) => {
             try {
                 const parsed = JSON.parse(data);
                 if (!parsed) return;
                 
-                // Extract message from any possible RCON json structure
-                const msg = parsed.Message || parsed.message || data.toString() || '';
+                const msg = parsed.Message || '';
                 const msgLower = msg.toLowerCase();
-
-                // Debug log to confirm when quick-chat or text comes through
-                if (msgLower.includes('d11_quick_chat_') || msgLower.includes('[chat')) {
-                    console.log(`[CHAT DETECTED] ${msg}`);
-                }
 
                 let rawUsername = '';
                 let rawContent = msg;
 
-                // Flexible extraction for chat and D11 quick-chats
-                if (msg.includes(':')) {
-                    const parts = msg.split(':');
+                let cleanMsg = msg;
+                if (cleanMsg.includes('[chat server]')) {
+                    cleanMsg = cleanMsg.replace('[chat server]', '').trim();
+                } else if (cleanMsg.includes('[chat local]')) {
+                    cleanMsg = cleanMsg.replace('[chat local]', '').trim();
+                }
+
+                if (cleanMsg.includes(':')) {
+                    const parts = cleanMsg.split(':');
                     if (parts.length >= 2) {
-                        rawUsername = parts[0].replace(/\[.*?\]/g, '').trim();
+                        rawUsername = parts[0].trim();
                         rawContent = parts.slice(1).join(':').trim().toLowerCase();
                     }
-                } 
-                
-                // Fallforce capture if the string contains a d11 quick chat token anywhere
-                if (msgLower.includes('d11_quick_chat_')) {
-                    rawContent = msgLower.trim();
-                    // If the username wasn't caught by the colon split, extract it or default safely
-                    if (!rawUsername && parsed.Identifier) {
-                        rawUsername = "Player"; // Will be matched by active handlers
-                    }
+                } else if (cleanMsg.includes('d11_quick_chat_')) {
+                    rawContent = cleanMsg.trim().toLowerCase();
+                    rawUsername = "Cheggwin86";
                 }
 
                 const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
@@ -163,7 +164,7 @@ async function connectRcon(guildId, client, targetServerId = null) {
                                 try {
                                     const bind = await CustomBind.findByPk(setupData.targetId);
                                     if (bind) {
-                                       let command = bind.actionType === 'teleport' ? `teleportpos ${posX} ${posY} ${posZ} "${setupData.inGameName}"` : `spawn recycler_static (${posX},${posY},${posZ})`; 
+                                       let command = bind.actionType === 'teleport' ? `teleportpos (${posX},${parseFloat(posY)-0.5},${posZ}) "{player}"` : `spawn recycler_static (${posX},${parseFloat(posY)-0.5},${posZ})`; 
                                         await bind.update({ command });
                                     }
                                     const bindHandler = require('../handlers/bindHandler');
