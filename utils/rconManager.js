@@ -96,14 +96,15 @@ async function connectRcon(guildId, client, targetServerId = null) {
 
         ws.on('message', async (data) => {
             try {
+                // --- SPY DEBUG LOG ---
+                console.log(`[RCON RAW PACKET] ${data.toString()}`);
+                // ---------------------
+
                 const parsed = JSON.parse(data);
                 if (!parsed) return;
                 
                 const msg = parsed.Message || '';
                 const msgLower = msg.toLowerCase();
-
-                let rawUsername = '';
-                let rawContent = msg;
 
                 // Flexible chat parser supporting standard chat tags or raw broadcasted D11 lines
                 if (msg.includes(':')) {
