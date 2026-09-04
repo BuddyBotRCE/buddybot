@@ -144,7 +144,7 @@ client.once('ready', async () => {
             if (!global.autoEventExecMap) global.autoEventExecMap = new Map();
 
             for (const ev of enabledEvents) {
-                const intervalMs = (ev.interval || 60) * 60 * 1000; // Convert minutes to milliseconds
+                const intervalMs = (ev.interval || 60) * 60 * 1000;
                 const lastRun = global.autoEventExecMap.get(ev.id) || 0;
 
                 if (now - lastRun >= intervalMs) {
@@ -157,7 +157,8 @@ client.once('ready', async () => {
                     if (!prefabInfo) continue;
 
                     const servers = await GameServer.findAll({ where: { guildId: ev.guildId } });
-                    const targetServerId = servers.length > 0 ? servers[0].id : null;
+                    if (servers.length === 0) continue;
+                    const targetServer = servers[0]; // Uses first configured server for guild events
 
                     let firedCount = 0;
                     for (let i = 0; i < (ev.amount || 1); i++) {
@@ -167,7 +168,7 @@ client.once('ready', async () => {
                                     ev.guildId, 
                                     `spawn ${prefabInfo.prefab} "${loc.posX},${loc.posY},${loc.posZ}"`, 
                                     client, 
-                                    targetServerId
+                                    targetServer.id
                                 );
                                 firedCount++;
                             } catch (rconErr) {
@@ -205,7 +206,6 @@ client.once('ready', async () => {
                 try { entries = JSON.parse(giveaway.entries || '[]'); } catch (e) {}
                 const endTimeUnix = Math.floor(new Date(giveaway.endTime).getTime() / 1000);
 
-                // Check if the giveaway has expired
                 if (new Date(giveaway.endTime) <= now) {
                     await giveaway.update({ isActive: false });
 
@@ -265,7 +265,7 @@ client.once('ready', async () => {
     // --- LIVE RCON STATUS MONITOR LOOP ---
     setInterval(async () => {
         try {
-            const { GuildConfig } = require('./database/db');
+            const { GuildConfig, GameServer } = require('./database/db');
             const { sendRconCommand } = require('./utils/rconManager');
             const { Op } = require('sequelize');
             
@@ -277,9 +277,14 @@ client.once('ready', async () => {
                 const channel = guild.channels.cache.get(config.statusChannelId);
                 if (!channel) continue;
 
+                // Find server associated with guild
+                const servers = await GameServer.findAll({ where: { guildId: config.guildId } });
+                if (servers.length === 0) continue;
+                const targetServer = servers[0];
+
                 let isOnline = false;
                 try {
-                    await sendRconCommand(config.guildId, 'server.population');
+                    await sendRconCommand(config.guildId, 'server.population', client, targetServer.id);
                     isOnline = true;
                 } catch (e) {
                     isOnline = false;
@@ -287,7 +292,7 @@ client.once('ready', async () => {
 
                 const statusEmbed = new EmbedBuilder()
                     .setTitle(`🌐 GPortal Server Status — ${guild.name}`)
-                    .setDescription(`• **Connection Status:** ${isOnline ? '🟢 ONLINE & HEALTHY' : '🔴 OFFLINE / RESTARTING'}\n• **RCON IP:** \`${config.rconIp || 'Not Set'}:${config.rconPort || 'N/A'}\``)
+                    .setDescription(`• **Connection Status:** ${isOnline ? '🟢 ONLINE & HEALTHY' : '🔴 OFFLINE / RESTARTING'}\n• **Server Name:** \`${targetServer.serverName}\``)
                     .setColor(isOnline ? '#2ecc71' : '#e74c3c')
                     .setTimestamp();
 
