@@ -31,21 +31,7 @@ async function connectRcon(guildId, client, targetServerId = null) {
     }
 
     if (!rconIp || !rconPort || !rconPassword) {
-        const firstGameServer = await GameServer.findOne({ where: { guildId: guildId } });
-        if (firstGameServer && firstGameServer.rconIp && firstGameServer.rconPort && firstGameServer.rconPassword) {
-            rconIp = firstGameServer.rconIp; rconPort = firstGameServer.rconPort; rconPassword = firstGameServer.rconPassword;
-        }
-    }
-
-    if (!rconIp || !rconPort || !rconPassword) {
-        const config = await GuildConfig.findOne({ where: { guildId: guildId } });
-        if (config && config.rconIp && config.rconPort && config.rconPassword) {
-            rconIp = config.rconIp; rconPort = config.rconPort; rconPassword = config.rconPassword;
-        }
-    }
-
-    if (!rconIp || !rconPort || !rconPassword) {
-        throw new Error("Missing RCON credentials for this server!");
+        throw new Error("No target game server selected or configured with valid RCON credentials!");
     }
     
     if (activeConnections.has(guildId)) {

@@ -37,11 +37,10 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
             { name: '🛠️ Create New Bind', value: "👇 **Click a button below to choose your bind type:**", inline: false }
         );
 
-        if (servers.length > 0) {
-            const serverOptions = [{ label: 'Default / Main Server', value: 'bind_server_default', emoji: '🌐' }, ...servers.map(s => ({ label: s.serverName, value: `bind_server_${s.id}`, emoji: '🖥️' }))];
-            components.push(new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder().setCustomId('bind_menu_server_select').setPlaceholder('🖥️ Select target server...').addOptions(serverOptions)
-            ));
+        if (customId === 'bind_menu_server_select' && interaction.isStringSelectMenu()) {
+            const selectedVal = interaction.values[0];
+            session.serverId = selectedVal.replace('bind_server_', '');
+            return await renderBindPanel(interaction, `🖥️ Target server updated!`);
         }
 
         components.push(new ActionRowBuilder().addComponents(
