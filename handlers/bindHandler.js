@@ -387,7 +387,7 @@ const bindHandler = async (interaction, client) => {
                 
                 let newCommand = '';
                 if (bind.actionType === 'teleport') {
-                    // Updated space-separated syntax to prevent server reconnection/re-login kick
+                    // Space-separated syntax matching successful execution
                     newCommand = `teleportpos ${cX} ${loweredY} ${cZ} "{player}"`;
                 } else if (bind.actionType === 'recycler') {
                     newCommand = `spawn recycler_static (${cX},${loweredY},${cZ})`;

@@ -161,8 +161,9 @@ async function connectRcon(guildId, client, targetServerId = null) {
                                 try {
                                     const bind = await CustomBind.findByPk(setupData.targetId);
                                     if (bind) {
-                                       // Updated to use teleportpos syntax
-                                     let command = bind.actionType === 'teleport' ? `teleportpos (${posX},${posY},${posZ}) "${setupData.inGameName}"` : `spawn recycler_static (${posX},${posY},${posZ})`; 
+                                       // Updated to use space-separated teleportpos syntax
+                                       let command = bind.actionType === 'teleport' ? `teleportpos ${posX} ${posY} ${posZ} "${setupData.inGameName}"` : `spawn recycler_static (${posX},${posY},${posZ})`; 
+                                        await bind.update({ command });
                                     }
                                     const bindHandler = require('../handlers/bindHandler');
                                     if (bindHandler && bindHandler.refreshPanelViaInteraction) {
@@ -319,7 +320,7 @@ async function queueAdminPos(interaction, type = 'custom_bind', targetId = null,
         }
     }, 8000);
 
-_adminPosQueue.set(adminId, { guildId, adminId, type, timeoutTimer, inGameName, targetId, interaction, serverId });
+    adminPosQueue.set(adminId, { guildId, adminId, type, timeoutTimer, inGameName, targetId, interaction, serverId });
     
     try {
         await sendRconCommand(guildId, `printpos "${inGameName}"`, client, serverId);
