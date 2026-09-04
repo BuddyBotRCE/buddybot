@@ -268,7 +268,6 @@ const bindHandler = async (interaction, client) => {
         if (interaction.isModalSubmit()) {
             if (customId === 'modal_bind_name') {
                 try {
-                    // Immediately acknowledge the modal so Discord never throws "Something went wrong"
                     if (!interaction.deferred && !interaction.replied) {
                         await interaction.deferReply({ flags: 64 }).catch(() => {});
                     }
@@ -278,7 +277,6 @@ const bindHandler = async (interaction, client) => {
                     if (session.selectedBindId) {
                         await CustomBind.update({ name }, { where: { id: session.selectedBindId } });
                     } else {
-                        // Fallback: grab the most recently modified bind for this guild if session ID dropped
                         const latestBind = await CustomBind.findOne({ where: { guildId }, order: [['updatedAt', 'DESC']] });
                         if (latestBind) {
                             session.selectedBindId = latestBind.id;
@@ -309,8 +307,6 @@ const bindHandler = async (interaction, client) => {
                 return await interaction.editReply(payload);
             }
         }
-            
-            
 
         if (interaction.isButton()) {
 
@@ -390,12 +386,12 @@ const bindHandler = async (interaction, client) => {
                 const loweredY = (cY - 0.5).toFixed(2);
                 
                 let newCommand = '';
-if (bind.actionType === 'teleport') {
-    // Exact verified working syntax: teleportpos (X,Y,Z) "player"
-    newCommand = `teleportpos (${cX},${loweredY},${cZ}) "{player}"`;
-} else if (bind.actionType === 'recycler') {
-    newCommand = `spawn recycler_static (${cX},${loweredY},${cZ})`;
-}
+                if (bind.actionType === 'teleport') {
+                    // Uses your verified working syntax: teleportpos (X,Y,Z) "player"
+                    newCommand = `teleportpos (${cX},${loweredY},${cZ}) "{player}"`;
+                } else if (bind.actionType === 'recycler') {
+                    newCommand = `spawn recycler_static (${cX},${loweredY},${cZ})`;
+                }
                 
                 await CustomBind.update({ command: newCommand }, { where: { id: session.selectedBindId } });
                 session.view = 'bind';
