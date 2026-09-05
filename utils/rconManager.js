@@ -112,9 +112,10 @@ async function connectRcon(guildId, client, targetServerId = null) {
 
         // --- SAFE PARSER PATCH 2: Main WebSocket Listener ---
         ws.on('message', async (data) => {
-            console.log(`[RAW WEBSOCKET PACKET]:`, data.toString()); // <--- ADD THIS LINE
+            console.log(`[RAW WEBSOCKET PACKET]:`, data.toString());
             try {
                 const rawStr = data.toString();
+                let msg = '';
                 
                 try {
                     const sanitized = rawStr.replace(/,\s*}/g, '}');
@@ -143,6 +144,17 @@ async function connectRcon(guildId, client, targetServerId = null) {
                     }
                 } else if (cleanMsg.toLowerCase().includes('d11_quick_chat_')) {
                     rawContent = cleanMsg.trim().toLowerCase();
+                    
+                    const registeredPlayers = await UserEconomy.findAll({ where: { guildId: guildId } });
+                    for (const player of registeredPlayers) {
+                        if (player.inGameName && rawStr.toLowerCase().includes(player.inGameName.toLowerCase())) {
+                            rawUsername = player.inGameName;
+                            break;
+                        }
+                    }
+                    if (!rawUsername && registeredPlayers.length > 0) {
+                        rawUsername = registeredPlayers[0].inGameName;
+                    }
                 }
 
                 // Debug log to confirm the parser caught it successfully
