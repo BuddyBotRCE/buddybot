@@ -107,6 +107,10 @@ const CHAT_OPTIONS_MAP = {
 async function processD11Router(guildId, rawUsername, rawContent, msgLower, client, homeTpPosQueue, sendRconCommand) {
     if (!rawContent) return false;
 
+    // 1. EVALUATE CUSTOM TELEPORTS FIRST (Absolute Priority)
+    const handledTeleport = await processTeleportAction(guildId, rawUsername, rawContent, msgLower, client, sendRconCommand);
+    if (handledTeleport) return true;
+
     const isQuickChat = rawContent.includes('d11_quick_chat_');
 
     const isSkipNight = (isQuickChat && rawContent.includes('d11_quick_chat_orders_slot_3')) || rawContent === '!skipnight' || rawContent === '/skipnight';
@@ -121,11 +125,7 @@ async function processD11Router(guildId, rawUsername, rawContent, msgLower, clie
         return await processHomeTpChat(guildId, rawUsername, isSetHome, isRetreat, client, homeTpPosQueue, sendRconCommand);
     }
 
-    // Explicitly check the dedicated teleport handler first for custom quick-chats
-    const handledTeleport = await processTeleportAction(guildId, rawUsername, rawContent, msgLower, client, sendRconCommand);
-    if (handledTeleport) return true;
-
-    // Fall back to general custom bind chat (kits, recyclers, etc.)
+    // 2. FALL BACK TO OTHER CUSTOM BINDS (Kits, Recyclers, etc.)
     return await processCustomBindChat(guildId, rawUsername, rawContent, msgLower, client, sendRconCommand);
 }
 
