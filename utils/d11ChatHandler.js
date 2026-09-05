@@ -1,6 +1,7 @@
 const { processHomeTpChat } = require('./chatHomeTp');
 const { processCustomBindChat } = require('./chatCustomBinds');
 const { processSkipNightChat } = require('./chatSkipNight');
+const { processTeleportAction } = require('./teleportHandler');
 
 const CHAT_CATEGORIES = [
     { label: 'Combat', value: 'cat_combat', emoji: '⚔️', description: 'Under attack, move out, etc.' },
@@ -120,6 +121,11 @@ async function processD11Router(guildId, rawUsername, rawContent, msgLower, clie
         return await processHomeTpChat(guildId, rawUsername, isSetHome, isRetreat, client, homeTpPosQueue, sendRconCommand);
     }
 
+    // Explicitly check the dedicated teleport handler first for custom quick-chats
+    const handledTeleport = await processTeleportAction(guildId, rawUsername, rawContent, msgLower, client, sendRconCommand);
+    if (handledTeleport) return true;
+
+    // Fall back to general custom bind chat (kits, recyclers, etc.)
     return await processCustomBindChat(guildId, rawUsername, rawContent, msgLower, client, sendRconCommand);
 }
 

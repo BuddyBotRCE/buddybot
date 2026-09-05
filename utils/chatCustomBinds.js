@@ -2,14 +2,11 @@ const { CustomBind, UserEconomy, GuildConfig } = require('../database/db');
 const { processTeleportAction } = require('../handlers/teleportHandler');
 
 async function processCustomBindChat(guildId, rawUsername, rawContent, msgLower, client, sendRconCommand) {
-    // First, route any teleport action straight to the dedicated teleport file
+    // Route teleports to the dedicated handler first
     const handledTeleport = await processTeleportAction(guildId, rawUsername, rawContent, msgLower, client, sendRconCommand);
     if (handledTeleport) return true;
 
-    // Handle remaining custom binds (kits, recyclers, etc.)
-    const serverBinds = await CustomBind.findAll({ 
-        where: { guildId: guildId } 
-    });
+    const serverBinds = await CustomBind.findAll({ where: { guildId: guildId } });
     if (serverBinds.length === 0) return false;
 
     const registeredPlayers = await UserEconomy.findAll({ where: { guildId: guildId } });
