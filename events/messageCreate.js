@@ -11,16 +11,13 @@ module.exports = async (message, client) => {
     // ==========================================
     // 🤖 BUDDYBOT AI & PREMADE MENTION LISTENER
     // ==========================================
-    // 1. Explicitly ignore @everyone and @here pings
     if (message.mentions.everyone) return;
 
-    // 2. Check if BuddyBot itself is directly mentioned
     const isMentioned = message.mentions.has(client.user);
     if (isMentioned) {
         try {
             const config = await GuildConfig.findOne({ where: { guildId: message.guild.id } });
             
-            // If AI is disabled or config is missing, skip the AI block
             if (config && config.aiEnabled !== false) {
                 const cleanContent = message.content
                     .replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '')
@@ -81,7 +78,7 @@ module.exports = async (message, client) => {
 
                 const aiReply = data.choices?.[0]?.message?.content || 'I received your message, but could not generate a response.';
                 await message.reply(aiReply);
-                return; // Stop further execution so AI messages don't get auto-modded
+                return;
             }
         } catch (aiErr) {
             console.error('[AI CHAT ERROR]', aiErr);
@@ -91,7 +88,6 @@ module.exports = async (message, client) => {
     // ==========================================
     // 🛡️ AUTO-MODERATION SYSTEM
     // ==========================================
-    // Ignore server admins and moderators so they don't get auto-modded
     if (message.member && message.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) return;
 
     try {

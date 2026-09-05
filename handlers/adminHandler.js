@@ -1,678 +1,378 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelSelectMenuBuilder, UserSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType } = require('discord.js');
-const { GuildConfig, GameServer, UserEconomy } = require('../database/db');
-const { connectRcon, sendRconCommand } = require('../utils/rconManager');
-const { RUST_CATEGORIES } = require('../utils/rustCatalog');
-const wipeHandler = require('./wipeHandler'); 
-const WebSocket = require('ws');
-const { activeConnections } = require('../utils/rconManager');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionsBitField, AttachmentBuilder, ChannelSelectMenuBuilder, RoleSelectMenuBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { GuildConfig, TicketCategory, GameServer } = require('../database/db');
+const adminHandler = require('./adminHandler');
 
-const giveKitSessions = new Map();
-const adminActionSessions = new Map(); 
-
-// --- ⚙️ MASTER SWITCHBOARD DEFINITION ⚙️ ---
-const MODULES_LIST = [
-    { id: 'economyEnabled', name: 'Economy System', emoji: '💰' },
-    { id: 'shopEnabled', name: 'Shop & Store', emoji: '🛒' },
-    { id: 'ticketsEnabled', name: 'Ticket System', emoji: '🎫' },
-    { id: 'giveawaysEnabled', name: 'Giveaways', emoji: '🎉' },
-    { id: 'suggestionsEnabled', name: 'Suggestions', emoji: '💡' },
-    { id: 'casinoEnabled', name: 'Minigames Casino', emoji: '🎰' },
-    { id: 'buddypassEnabled', name: 'BuddyPass', emoji: '⭐' },
-    { id: 'clansEnabled', name: 'Clan System', emoji: '🛡️' },
-    { id: 'bountiesEnabled', name: 'Bounties', emoji: '🎯' },
-    { id: 'customZonesEnabled', name: 'Custom Zones', emoji: '🗺️' },
-    { id: 'autoEventsEnabled', name: 'Auto-Events', emoji: '🚁' },
-    { id: 'autoModEnabled', name: 'Auto-Mod', emoji: '🛡️' },
-    { id: 'orpEnabled', name: 'ORP Manager', emoji: '🛡️' },
-    { id: 'aiEnabled', name: 'AI Assistant', emoji: '🤖' },
-    { id: 'homeTpEnabled', name: 'Home Teleport', emoji: '🏠' },
-    { id: 'skipNightEnabled', name: 'Skip Night', emoji: '🌙' }
-];
-
-async function renderBotSettings(interaction, guildId, action = 'reply') {
-    const [config] = await GuildConfig.findOrCreate({ where: { guildId } });
-
-    let description = '**Current Module Status:**\n*Use the dropdown below to select which modules you want active. Any module left unselected will be disabled!*\n\n';
+// --- HELPER: RENDER ADMIN MENU ---
+async function renderAdminMenu(interaction, guildId, action = 'reply') {
+    const config = await GuildConfig.findOrCreate({ where: { guildId } });
+    const cfg = config[0];
     
-    MODULES_LIST.forEach(m => {
-        const isEnabled = config[m.id] !== false; // Defaults to true if null/undefined
-        description += `${m.emoji} **${m.name}:** ${isEnabled ? '🟢 ON' : '🔴 OFF'}\n`;
-    });
+    const catDisplay = cfg.ticketCategoryId ? `<#${cfg.ticketCategoryId}>` : '`Not Set`';
+    const logDisplay = cfg.ticketTranscriptChannelId ? `<#${cfg.ticketTranscriptChannelId}>` : '`Not Set`';
+    const roleDisplay = cfg.ticketAdminRoleId ? `<@&${cfg.ticketAdminRoleId}>` : '`Not Set`';
+    const vipRoleDisplay = cfg.ticketVipRoleId ? `<@&${cfg.ticketVipRoleId}>` : '`Not Set`';
+    const isTicketAiOn = cfg.ticketAiEnabled !== false;
 
     const embed = new EmbedBuilder()
-        .setTitle('⚙️ Global Bot Settings & Toggles')
-        .setDescription(description)
-        .setColor('#2ecc71');
-
-    const selectMenu = new StringSelectMenuBuilder()
-        .setCustomId('bot_settings_toggle_select')
-        .setPlaceholder('Check the boxes to ENABLE modules...')
-        .setMinValues(0)
-        .setMaxValues(MODULES_LIST.length)
-        .addOptions(MODULES_LIST.map(m => ({
-            label: m.name,
-            value: m.id,
-            emoji: m.emoji,
-            default: config[m.id] !== false // Visually checks the box if enabled
-        })));
-
-    const row1 = new ActionRowBuilder().addComponents(selectMenu);
-    const row2 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
-    );
-
-    const payload = { content: null, embeds: [embed], components: [row1, row2], flags: 64 };
-    
-    if (action === 'reply') {
-        if (interaction.deferred || interaction.replied) await interaction.followUp(payload);
-        else await interaction.reply(payload);
-    } else {
-        await interaction.update(payload).catch(() => interaction.editReply(payload));
-    }
-}
-
-async function renderMainPanel(interaction) {
-    const embed = new EmbedBuilder()
-        .setTitle('🛠️ Admin Panel & Dashboard')
-        .setDescription('Configure your server modules, automated systems, shops, and community tools using the categories below.\n\n• **Dropdown 1:** Basic Systems & Upgrades\n• **Dropdown 2:** ⭐ Premium & Advanced Modules')
-        .setColor('#2b2d31');
+        .setTitle('🎫 Ticket System Manager')
+        .setDescription(`Configure support tickets for your players.\n\n**Current Setup:**\n📂 **Category:** ${catDisplay}\n📄 **Transcripts:** ${logDisplay}\n👮 **Support Role:** ${roleDisplay}\n⭐ **VIP Priority Role:** ${vipRoleDisplay}\n🤖 **AI Ticket Assistant:** ${isTicketAiOn ? '🟢 ON' : '🔴 OFF'}`)
+        .setColor('#3498db');
 
     const row1 = new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder().setCustomId('admin_menu_select').setPlaceholder('⚙️ Basic Systems & Upgrades...')
-            .addOptions([
-                { label: '⭐ Buy / Upgrade to Premium', value: 'setup_tier', description: 'Unlock all advanced modules and features', emoji: '⭐' },
-                { label: 'Bot Settings (Toggles)', value: 'setup_bot_settings', description: 'Enable or disable bot features', emoji: '⚙️' },
-                { label: 'RCON & Servers', value: 'setup_multiserver', emoji: '🌐' },
-                { label: 'Live Admin Tools', value: 'admin_tools', emoji: '🧰' },
-                { label: 'Shop & Store Manager', value: 'setup_shop', emoji: '🛒' },
-                { label: 'Economy Manager', value: 'setup_economy', emoji: '💰' },
-                { label: 'Minigames Casino', value: 'setup_minigames', emoji: '🎰' },
-                { label: 'Ticket System', value: 'setup_tickets', emoji: '🎫' },
-                { label: 'Cross-Chat', value: 'setup_crosschat', emoji: '💬' },
-                { label: 'Admin & Mod Roles', value: 'setup_server_roles', description: 'Set bot admin/mod roles', emoji: '👑' },
-                { label: 'Logging System', value: 'setup_logging', emoji: '📊' },
-                { label: 'Custom Zones Builder', value: 'setup_custom_zones', description: 'Create and manage map zones', emoji: '🗺️' },
-                { label: 'Server Wipe Panel', value: 'setup_wipe', emoji: '☢️' }
-            ])
+        new ButtonBuilder().setCustomId('btn_tk_setcat').setLabel('Set Category').setStyle(ButtonStyle.Primary).setEmoji('📂'),
+        new ButtonBuilder().setCustomId('btn_tk_setlog').setLabel('Set Transcript Log').setStyle(ButtonStyle.Primary).setEmoji('📄'),
+        new ButtonBuilder().setCustomId('btn_tk_setrole').setLabel('Set Support Role').setStyle(ButtonStyle.Primary).setEmoji('👮'),
+        new ButtonBuilder().setCustomId('btn_tk_setvip').setLabel('Set Priority VIP Role').setStyle(ButtonStyle.Success).setEmoji('⭐')
     );
 
     const row2 = new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder().setCustomId('admin_menu_select_2').setPlaceholder('⭐ Premium & Advanced Features...')
-            .addOptions([
-                { label: 'Auto-Events (Premium)', value: 'setup_autoevents', emoji: '🚁' },
-                { label: 'Auto-Moderation Suite', value: 'setup_automod', emoji: '🛡️' },
-                { label: 'BuddyPass Manager', value: 'setup_buddypass', emoji: '⭐' },
-                { label: 'Clan System Manager', value: 'setup_clans', emoji: '🛡️' },
-                { label: 'Bounties System', value: 'setup_bounties', emoji: '🎯' },
-                { label: 'Custom Binds', value: 'setup_binds', emoji: '🗣️' },
-                { label: 'AI Integration Setup', value: 'setup_ai', emoji: '🤖' },
-                { label: 'Premium Status & License', value: 'setup_tier', emoji: '⭐' },
-                { label: 'Embeds & Reaction Roles', value: 'setup_embeds_roles', description: 'Announcements, Verifications, & Roles', emoji: '🎨' },
-                { label: 'Giveaways Manager', value: 'setup_giveaways', emoji: '🎉' },
-                { label: 'Suggestions System', value: 'setup_suggestions', emoji: '💡' },
-                { label: 'Home Teleport System', value: 'setup_hometp', description: 'Configure emote retreat teleports', emoji: '🏠' },
-                { label: 'Skip Night Settings', value: 'setup_skipnight', emoji: '🌙' },
-            ])
+        new ButtonBuilder().setCustomId('toggle_ticket_ai').setLabel(`AI Assistant: ${isTicketAiOn ? 'ON 🟢' : 'OFF 🔴'}`).setStyle(isTicketAiOn ? ButtonStyle.Success : ButtonStyle.Secondary).setEmoji('🤖'),
+        new ButtonBuilder().setCustomId('tk_manage_cats').setLabel('Manage Categories').setStyle(ButtonStyle.Success).setEmoji('📑'),
+        new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
     );
 
-    if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-        return await interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
-    }
-    return await interaction.update({ embeds: [embed], components: [row1, row2], content: null }).catch(() => {});
+    const payload = { content: '', embeds: [embed], components: [row1, row2], flags: 64 };
+    if (action === 'reply') await interaction.reply(payload);
+    else await interaction.update(payload);
 }
 
-async function fetchRceLiveKits(guildId, serverId = null) {
-    return new Promise((resolve) => {
-        const ws = activeConnections.get(guildId);
-        if (!ws || ws.readyState !== WebSocket.OPEN) return resolve(['Test1']);
+// --- HELPER: RENDER CATEGORY MANAGER ---
+async function renderCategoryManager(interaction, guildId, action = 'update') {
+    const cats = await TicketCategory.findAll({ where: { guildId } });
 
-        let kitsFound = [];
-        const listener = (data) => {
-            try {
-                const parsed = JSON.parse(data);
-                if (!parsed || !parsed.Message) return;
-                const msg = parsed.Message;
-                const rawTokens = msg.split(/["'\r\n\s,\/\[\]{}]+/);
-                for (let token of rawTokens) {
-                    let cleanName = token.replace(/[*#\-]/g, '').trim();
-                    const lower = cleanName.toLowerCase();
-                    const ignoreList = ['list', 'available', 'kits', 'command', 'servervar', 'kit', 'givetoplayer', 'true', 'false', 'null', 'adminwizard', 'players', 'player', 'server', 'oxide', 'plugin', 'version', 'success', 'error', 'info', 'id', 'name', 'items', 'item', 'webrcon', 'connected', 'disconnected'];
-                    if (cleanName && cleanName.length >= 2 && cleanName.length < 35 && !ignoreList.includes(lower)) {
-                        if (!kitsFound.includes(cleanName)) kitsFound.push(cleanName);
-                    }
-                }
-            } catch (e) {}
-        };
-
-        ws.on('message', listener);
-        ws.send(JSON.stringify({ Identifier: 9999, Message: "kit list", Name: "AdminWizard" }));
-
-        setTimeout(() => {
-            ws.off('message', listener);
-            if (kitsFound.length === 0) kitsFound = ['Test1'];
-            resolve(kitsFound);
-        }, 3000);
-    });
-}
-
-async function resolveTargetServer(guildId, sessionId, userId) {
-    const session = adminActionSessions.get(userId);
-    if (session && session.serverId) {
-        const server = await GameServer.findByPk(session.serverId);
-        if (server) return { guildId: guildId, serverName: server.serverName, serverId: server.id };
-    }
-    return { guildId: guildId, serverName: 'Primary RCON', serverId: null };
-}
-
-async function renderGiveKitPanel(interaction, session, messageOverride = '') {
-    const targetUser = session.targetUserId ? await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: session.targetUserId } }) : null;
-    const ignDisplay = targetUser?.inGameName ? `**${targetUser.inGameName}** (<@${session.targetUserId}>)` : '`Not Selected`';
-    const kitDisplay = session.kitName ? `**${session.kitName}**` : '`Not Selected`';
-    
-    let serverDisplay = '`Default / Main Server`';
-    if (session.serverId) {
-        const targetServer = await GameServer.findByPk(session.serverId);
-        if (targetServer) serverDisplay = `**${targetServer.serverName}**`;
-    }
+    let catList = cats.length > 0
+        ? cats.map((c, i) => `**${i + 1}. ${c.name}**\n*${c.description}*`).join('\n\n')
+        : '*No custom categories created yet. Players will see default options (General, Report, Priority).*';
 
     const embed = new EmbedBuilder()
-        .setTitle('📦 Live Admin: Give Kit Wizard')
-        .setDescription(messageOverride ? `**${messageOverride}**\n\nConfigure your selections below and click Send.` : 'Configure your selections below and click Send.')
-        .setColor('#3498db')
-        .addFields({ name: '🖥️ Target Server', value: serverDisplay, inline: false }, { name: '👤 Target Player', value: ignDisplay, inline: true }, { name: '📦 Selected Kit', value: kitDisplay, inline: true });
+        .setTitle('📑 Ticket Categories')
+        .setDescription(`Create custom dropdown options for players when they open a ticket.\n\n${catList}`)
+        .setColor('#f1c40f');
 
-    const row1 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('ak_panel_server').setLabel('Select Server').setStyle(ButtonStyle.Primary).setEmoji('🖥️'), new ButtonBuilder().setCustomId('ak_panel_player').setLabel('Select Player').setStyle(ButtonStyle.Primary).setEmoji('👤'), new ButtonBuilder().setCustomId('ak_panel_kit').setLabel('Select Kit').setStyle(ButtonStyle.Secondary).setEmoji('📦'));
-    const isReady = session.targetUserId && session.kitName;
-    const row2 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('ak_panel_send').setLabel('🚀 Send Kit to Player').setStyle(ButtonStyle.Success).setDisabled(!isReady), new ButtonBuilder().setCustomId('ak_panel_cancel').setLabel('Cancel').setStyle(ButtonStyle.Danger));
-    const row3 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙'));
+    const components = [];
 
-    const payload = { embeds: [embed], components: [row1, row2, row3], flags: 64 };
-    if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) return await interaction.reply(payload);
-    return await interaction.update(payload).catch(() => interaction.editReply(payload));
+    if (cats.length > 0) {
+        const delMenu = new StringSelectMenuBuilder()
+            .setCustomId('tk_del_cat')
+            .setPlaceholder('🗑️ Select a category to delete...')
+            .addOptions(cats.slice(0, 25).map(c => ({ label: c.name.substring(0, 100), value: c.id.toString() })));
+        components.push(new ActionRowBuilder().addComponents(delMenu));
+    }
+
+    components.push(new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('tk_add_cat').setLabel('Add Category').setStyle(ButtonStyle.Primary).setEmoji('➕'),
+        new ButtonBuilder().setCustomId('tk_back_main').setLabel('Back to Ticket Setup').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+    ));
+
+    const payload = { content: '', embeds: [embed], components, flags: 64 };
+    if (action === 'reply') await interaction.reply(payload);
+    else await interaction.update(payload);
 }
 
-const adminHandler = async (interaction, client) => {
-    const customId = interaction.customId || '';
-    const selectedValue = interaction.isStringSelectMenu() && interaction.values ? interaction.values[0] : '';
-    const userId = interaction.user.id;
+module.exports = async (interaction, client) => {
+    try {
+        const customId = interaction.customId || '';
+        const guildId = interaction.guild.id;
 
-    if (customId === 'admin_menu_back') {
-        return await renderMainPanel(interaction);
-    }
-
-    if (customId === 'admin_menu_select' && selectedValue === 'setup_bot_settings') {
-        return await renderBotSettings(interaction, interaction.guild.id, 'reply');
-    }
-
-    if (customId === 'select_multiserver_remove_target') {
-        try {
-            const serverId = selectedValue.replace('remove_server_', '');
-            const server = await GameServer.findByPk(serverId);
-            if (server) {
-                const serverName = server.serverName;
-                await server.destroy();
-                return await interaction.reply({ content: `✅ Successfully removed game server **${serverName}** from the database.`, flags: 64 });
+        if (customId === 'admin_menu_back') {
+            if (adminHandler && adminHandler.renderMainPanel) {
+                return await adminHandler.renderMainPanel(interaction);
             }
-            return await interaction.reply({ content: `❌ Server not found or already deleted.`, flags: 64 });
-        } catch (err) { return await interaction.reply({ content: `❌ Database error while removing server.`, flags: 64 }).catch(() => {}); }
-    }
-
-    if (selectedValue === 'setup_wipe' || customId.startsWith('btn_wipe_') || customId === 'select_wipe_custom' || customId.startsWith('modal_wipe_')) return await wipeHandler(interaction, client);
-
-    if (customId === 'admin_menu_select') {
-        await interaction.channel.messages.fetch({ limit: 10 }).then(messages => {
-            const prompts = messages.filter(m => m.content.includes('Grabbing coordinates') || m.content.includes('Stand at your desired'));
-            for (const [_, msg] of prompts) { msg.delete().catch(() => {}); }
-        });
-
-        const backRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
-        );
-
-        if (selectedValue === 'setup_logging') {
-            const embed = new EmbedBuilder().setTitle('📊 Server Logging Manager').setDescription('Route different types of logs to specific channels.').setColor('#3498db');
-            const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('log_action_select').setPlaceholder('Select a log channel to configure...').addOptions([{ label: 'Set Admin Logs Channel', value: 'log_admin', emoji: '🛡️' }, { label: 'Set Game Feeds Channel', value: 'log_game', emoji: '🎮' }, { label: 'Set Discord Logs Channel', value: 'log_discord', emoji: '💬' }]));
-            return interaction.reply({ embeds: [embed], components: [row, backRow], flags: 64 });
+            return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] });
         }
 
-        if (selectedValue === 'setup_multiserver') {
-            const servers = await GameServer.findAll({ where: { guildId: interaction.guild.id } });
-            const serverList = servers.length ? servers.map(s => `• **${s.serverName}** (\`${s.rconIp}:${s.rconPort}\`)`).join('\n') : 'No game servers configured yet.';
-            const embed = new EmbedBuilder().setTitle('🌐 RCON Connect & Server Manager').setDescription(`**Configured Servers:**\n${serverList}`).setColor('#3498db');
-            const row1 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_multiserver_add').setLabel('Add Game Server').setStyle(ButtonStyle.Success).setEmoji('➕'), new ButtonBuilder().setCustomId('btn_multiserver_remove').setLabel('Remove Game Server').setStyle(ButtonStyle.Danger).setEmoji('🗑️').setDisabled(servers.length === 0), new ButtonBuilder().setCustomId('rcon_quick_connect').setLabel('Connect RCON').setStyle(ButtonStyle.Primary).setEmoji('🔌'));
-            return interaction.reply({ embeds: [embed], components: [row1, backRow], flags: 64 });
+        if (customId === 'admin_menu_select' && interaction.isStringSelectMenu() && interaction.values[0] === 'setup_tickets') {
+            return await renderAdminMenu(interaction, guildId, 'reply');
         }
 
-        if (selectedValue === 'setup_ai') {
-            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-            const isEnabled = config?.aiEnabled !== false;
-            let premadeCount = 0; try { premadeCount = JSON.parse(config?.aiPremadeResponses || '[]').length; } catch(e){}
+        if (customId === 'tk_manage_cats') return await renderCategoryManager(interaction, guildId, 'update');
+        if (customId === 'tk_back_main') return await renderAdminMenu(interaction, guildId, 'update');
 
-            const embed = new EmbedBuilder()
-                .setTitle('🤖 AI Integration & Premade Responses')
-                .setDescription(`Configure your server AI assistant, toggle state, and custom canned answers.\n\n• **Status:** ${isEnabled ? '🟢 ACTIVE' : '🔴 DISABLED'}\n• **Provider:** \`${config?.aiProvider || 'openai'}\`\n• **Model:** \`${config?.aiModel || 'gpt-4o-mini'}\`\n• **API Key:** ${config?.aiApiKey ? '🟢 Configured' : '🔴 Not Set'}\n• **Premade Answers:** \`${premadeCount} configured\``)
-                .setColor('#9b59b6');
-
-            const row1 = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('select_ai_provider').setPlaceholder('Choose AI Platform / Provider...').addOptions([{ label: 'OpenAI', value: 'openai', emoji: '🟢' }, { label: 'Anthropic', value: 'anthropic', emoji: '🟠' }, { label: 'Google Gemini', value: 'gemini', emoji: '🔵' }, { label: 'DeepSeek', value: 'deepseek', emoji: '🟣' }, { label: 'Groq', value: 'groq', emoji: '⚡' }, { label: 'OpenRouter', value: 'openrouter', emoji: '🌐' }, { label: 'Custom / Ollama', value: 'custom', emoji: '💻' }]));
-            const row2 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_ai_toggle').setLabel(isEnabled ? 'Disable AI' : 'Enable AI').setStyle(isEnabled ? ButtonStyle.Danger : ButtonStyle.Success).setEmoji(isEnabled ? '🔴' : '🟢'), new ButtonBuilder().setCustomId('btn_ai_set_key').setLabel('API Key & Model').setStyle(ButtonStyle.Primary).setEmoji('🔑'), new ButtonBuilder().setCustomId('btn_ai_premade').setLabel('Premade Responses').setStyle(ButtonStyle.Secondary).setEmoji('📝'));
-            return interaction.reply({ embeds: [embed], components: [row1, row2, backRow], flags: 64 });
-        }
-        
-        if (selectedValue === 'setup_rcon') {
-            const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_rcon_setup').setLabel('Set Credentials').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('rcon_quick_connect').setLabel('Connect RCON').setStyle(ButtonStyle.Success));
-            return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🌐 RCON Setup').setColor('#3498db')], components: [row, backRow], flags: 64 });
-        }
-        
-        if (selectedValue === 'admin_tools') {
-            const servers = await GameServer.findAll({ where: { guildId: interaction.guild.id } });
-            const serverSelectOptions = servers.length > 0 ? servers.map(s => ({ label: s.serverName, value: `admin_server_target_${s.id}`, emoji: '🖥️' })) : null;
-
-            const row1 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_admin_item').setLabel('Give Any Item').setStyle(ButtonStyle.Success).setEmoji('🎁'), new ButtonBuilder().setCustomId('btn_admin_kit').setLabel('Give Kit').setStyle(ButtonStyle.Success).setEmoji('📦'), new ButtonBuilder().setCustomId('btn_admin_vip').setLabel('Add VIP').setStyle(ButtonStyle.Primary).setEmoji('⭐'), new ButtonBuilder().setCustomId('btn_admin_mod').setLabel('Add Moderator').setStyle(ButtonStyle.Secondary).setEmoji('🛡️'));
-            const row2 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_admin_say').setLabel('Server Say').setStyle(ButtonStyle.Primary).setEmoji('📢'), new ButtonBuilder().setCustomId('btn_admin_rcon').setLabel('Custom RCON Cmd').setStyle(ButtonStyle.Danger).setEmoji('⚡'));
-
-            const components = [row1, row2, backRow];
-            if (serverSelectOptions) components.unshift(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('admin_global_server_select').setPlaceholder('🖥️ Select target server for tools below (Optional)...').addOptions([{ label: 'Default / Main Server', value: 'admin_server_target_default', emoji: '🌐' }, ...serverSelectOptions])));
-            return interaction.reply({ content: '🧰 **Live Admin Tools:** Choose a target server (optional) and an administrative action below:', components, flags: 64 });
-        }
-        
-        if (selectedValue === 'setup_crosschat') return interaction.reply({ content: '💬 Select a text channel:', components: [new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_crosschat_channel').setPlaceholder('Select channel...').addChannelTypes(ChannelType.GuildText)), backRow], flags: 64 });
-    }
-
-    if (interaction.isChannelSelectMenu()) {
-        if (customId === 'select_crosschat_channel') { await GuildConfig.upsert({ guildId: interaction.guild.id, crossChatChannelId: interaction.values[0] }); return interaction.update({ content: `✅ Cross-Chat linked!`, components: [] }); }
-        if (customId === 'select_killfeed_channel') { await GuildConfig.upsert({ guildId: interaction.guild.id, killfeedChannelId: interaction.values[0] }); return interaction.update({ content: `✅ Killfeed channel successfully linked!`, components: [] }); }
-        if (customId === 'select_log_admin_channel') { await GuildConfig.upsert({ guildId: interaction.guild.id, logAdminChannelId: interaction.values[0] }); return interaction.update({ content: `✅ Admin Logs channel linked!`, components: [] }); }
-        if (customId === 'select_log_game_channel') { await GuildConfig.upsert({ guildId: interaction.guild.id, logGameChannelId: interaction.values[0] }); return interaction.update({ content: `✅ Game Feeds channel linked!`, components: [] }); }
-        if (customId === 'select_log_discord_channel') { await GuildConfig.upsert({ guildId: interaction.guild.id, logDiscordChannelId: interaction.values[0] }); return interaction.update({ content: `✅ Discord Logs channel linked!`, components: [] }); }
-    }
-
-    if (interaction.isStringSelectMenu()) {
-        if (customId === 'bot_settings_toggle_select') {
-            const selectedModules = interaction.values || [];
-            const updateData = {};
-            
-            MODULES_LIST.forEach(m => {
-                updateData[m.id] = selectedModules.includes(m.id);
-            });
-
-            await GuildConfig.upsert({ guildId: interaction.guild.id, ...updateData });
-            
-            return await renderBotSettings(interaction, interaction.guild.id, 'update');
+        if (customId === 'toggle_ticket_ai') {
+            const config = await GuildConfig.findOne({ where: { guildId } });
+            const newState = config?.ticketAiEnabled === false ? true : false;
+            await GuildConfig.update({ ticketAiEnabled: newState }, { where: { guildId } });
+            return await renderAdminMenu(interaction, guildId, 'update');
         }
 
-        if (customId === 'admin_global_server_select') {
-            const sId = selectedValue.replace('admin_server_target_', '');
-            if (sId === 'default') { adminActionSessions.delete(userId); return interaction.update({ content: '🌐 Target server reset to **Default / Main Server**.', components: interaction.message.components }); } 
-            else { adminActionSessions.set(userId, { serverId: sId }); const targetServer = await GameServer.findByPk(sId); return interaction.update({ content: `🖥️ Target server successfully set to **${targetServer ? targetServer.serverName : 'Selected Server'}** for your next admin action.`, components: interaction.message.components }); }
-        }
+        if (interaction.isButton()) {
+            if (customId === 'btn_tk_setcat') {
+                const embed = new EmbedBuilder().setTitle('📂 Select Ticket Category').setDescription('Please select the Discord category where new support tickets will be spawned.').setColor('#3498db');
+                const menu = new ChannelSelectMenuBuilder().setCustomId('tk_sel_cat').setPlaceholder('Select target category...').addChannelTypes(ChannelType.GuildCategory);
+                return interaction.reply({ embeds: [embed], components: [new ActionRowBuilder().addComponents(menu)], flags: 64 });
+            }
 
-        if (customId === 'ak_panel_server_select') {
-            if (!giveKitSessions.has(userId)) giveKitSessions.set(userId, { targetUserId: null, kitName: null, serverId: null });
-            const session = giveKitSessions.get(userId); session.serverId = selectedValue;
-            const targetServer = await GameServer.findByPk(selectedValue);
-            return await renderGiveKitPanel(interaction, session, `🖥️ Target server set to **${targetServer ? targetServer.serverName : 'Selected Server'}**!`);
-        }
+            if (customId === 'btn_tk_setlog') {
+                const embed = new EmbedBuilder().setTitle('📄 Select Transcript Log').setDescription('Please select the text channel where closed ticket transcripts will be sent.').setColor('#3498db');
+                const menu = new ChannelSelectMenuBuilder().setCustomId('tk_sel_log').setPlaceholder('Select transcript channel...').addChannelTypes(ChannelType.GuildText);
+                return interaction.reply({ embeds: [embed], components: [new ActionRowBuilder().addComponents(menu)], flags: 64 });
+            }
 
-        if (customId === 'ak_panel_kit_select') {
-            if (!giveKitSessions.has(userId)) giveKitSessions.set(userId, { targetUserId: null, kitName: null, serverId: null });
-            const session = giveKitSessions.get(userId); session.kitName = selectedValue;
-            return await renderGiveKitPanel(interaction, session, `📦 Selected kit: **${selectedValue}**`);
-        }
+            if (customId === 'btn_tk_setrole') {
+                const embed = new EmbedBuilder().setTitle('👮 Select Support Role').setDescription('Please select the role that will be pinged and given access to new tickets.').setColor('#3498db');
+                const menu = new RoleSelectMenuBuilder().setCustomId('tk_sel_role').setPlaceholder('Select support staff role...');
+                return interaction.reply({ embeds: [embed], components: [new ActionRowBuilder().addComponents(menu)], flags: 64 });
+            }
 
-        if (customId === 'admin_say_color_select') {
-            const selectedColor = selectedValue.replace('#', '');
-            const modal = new ModalBuilder().setCustomId(`modal_admin_say_${selectedColor}`).setTitle('Server Broadcast Message');
-            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('say_msg').setLabel("Type your message").setStyle(TextInputStyle.Paragraph).setRequired(true)));
-            return interaction.showModal(modal);
-        }
-        
-        if (customId === 'select_link_server_target') {
-            const serverId = selectedValue.replace('link_server_', '');
-            const server = await GameServer.findByPk(serverId);
-            const modal = new ModalBuilder().setCustomId(`modal_link_account_${serverId}`).setTitle(`Link Account (${server ? server.serverName : 'Server'})`);
-            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ign').setLabel("Your exact in-game Rust name").setStyle(TextInputStyle.Short).setRequired(true)));
-            return interaction.showModal(modal);
-        }
+            if (customId === 'btn_tk_setvip') {
+                const embed = new EmbedBuilder().setTitle('⭐ Select Priority VIP Role').setDescription('Players with this role will automatically have their tickets flagged as HIGH PRIORITY (Red embed & special tag).').setColor('#e74c3c');
+                const menu = new RoleSelectMenuBuilder().setCustomId('tk_sel_vip').setPlaceholder('Select Priority/VIP role...');
+                return interaction.reply({ embeds: [embed], components: [new ActionRowBuilder().addComponents(menu)], flags: 64 });
+            }
 
-        if (customId === 'admin_item_category_select') {
-            const parts = selectedValue.replace('admin_item_cat_', '').split('_');
-            const targetUserId = parts[0]; const catKey = parts.slice(1).join('_');
-            const categoryData = RUST_CATEGORIES[catKey];
-            if (!categoryData || !categoryData.items || categoryData.items.length === 0) return interaction.reply({ content: `❌ Invalid item category.`, flags: 64 });
-            const itemOptions = categoryData.items.slice(0, 25).map(item => ({ label: item.name, description: `Shortname: ${item.shortname}`, value: `admin_give_final_${targetUserId}_${item.shortname}` }));
-            const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('admin_item_final_select').setPlaceholder(`Step 3: Choose item from ${categoryData.label}...`).addOptions(itemOptions));
-            return interaction.update({ content: `🎁 **Admin Item Wizard:** Choose the exact item from **${categoryData.label}**:`, components: [row] });
-        }
-        
-        if (customId === 'admin_item_final_select') {
-            const cleanVal = selectedValue.replace('admin_give_final_', '');
-            const firstUnderscore = cleanVal.indexOf('_');
-            const targetUserId = cleanVal.substring(0, firstUnderscore);
-            const shortname = cleanVal.substring(firstUnderscore + 1);
-            const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
-            
-            const exactModalId = `modal_admin_give_item_exec_${targetUserId}_${shortname}`;
-            const modal = new ModalBuilder().setCustomId(exactModalId).setTitle(`Give ${shortname.substring(0,10)} to ${targetUser ? targetUser.inGameName.substring(0, 10) : 'Player'}`);
-            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel("Enter Amount to Send").setStyle(TextInputStyle.Short).setValue('1').setRequired(true)));
-            return interaction.showModal(modal);
-        }
-        
-        if (customId === 'select_ai_provider') {
-            let defaultUrl = 'https://api.openai.com/v1'; 
-            let defaultModel = 'gpt-4o-mini';
-
-            if (selectedValue === 'anthropic') { defaultUrl = 'https://api.anthropic.com/v1'; defaultModel = 'claude-3-7-sonnet'; }
-            else if (selectedValue === 'gemini') { defaultUrl = 'https://generativelanguage.googleapis.com/v1beta/openai/'; defaultModel = 'gemini-2.5-flash'; }
-            else if (selectedValue === 'deepseek') { defaultUrl = 'https://api.deepseek.com/v1'; defaultModel = 'deepseek-chat'; }
-            else if (selectedValue === 'groq') { defaultUrl = 'https://api.groq.com/openai/v1'; defaultModel = 'llama-3.3-70b-versatile'; }
-            else if (selectedValue === 'openrouter') { defaultUrl = 'https://openrouter.ai/api/v1'; defaultModel = 'anthropic/claude-3.7-sonnet'; }
-            else if (selectedValue === 'custom') { defaultUrl = 'http://localhost:11434/v1'; defaultModel = 'llama3'; }
-
-            let [config] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
-            await config.update({ aiProvider: selectedValue, aiBaseUrl: defaultUrl, aiModel: defaultModel });
-
-            const row2 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_ai_set_key').setLabel('Enter API Key & Model').setStyle(ButtonStyle.Primary).setEmoji('🔑'));
-            return interaction.update({ content: `✅ AI Platform set to **${selectedValue.toUpperCase()}** (Default model: \`${defaultModel}\`)!\nNow click **Enter API Key & Model** to save your credentials.`, embeds: [], components: [row2] });
-        }
-    }
-
-    if (interaction.isUserSelectMenu()) {
-        if (customId === 'ak_panel_player_select') {
-            if (!giveKitSessions.has(userId)) giveKitSessions.set(userId, { targetUserId: null, kitName: null, serverId: null });
-            const session = giveKitSessions.get(userId);
-            session.targetUserId = interaction.values[0];
-            return await renderGiveKitPanel(interaction, session, '✅ Target player selected!');
-        }
-
-        if (customId === 'admin_item_select_player') {
-            const targetUserId = interaction.values[0];
-            const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
-            if (!targetUser || !targetUser.inGameName) return interaction.reply({ content: `❌ This user has not linked their Rust account yet!`, flags: 64 });
-            const catOptions = Object.keys(RUST_CATEGORIES).map(catKey => ({ label: RUST_CATEGORIES[catKey].label, value: `admin_item_cat_${targetUserId}_${catKey}`, emoji: RUST_CATEGORIES[catKey].emoji }));
-            const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('admin_item_category_select').setPlaceholder('Step 2: Select item category...').addOptions(catOptions));
-            return interaction.update({ content: `🎁 **Admin Item Wizard:** Target player set to **${targetUser.inGameName}**. Now select an item category:`, components: [row] });
-        }
-    }
-
-    if (interaction.isButton()) {
-        if (customId === 'btn_admin_kit') {
-            giveKitSessions.set(userId, { targetUserId: null, kitName: null, serverId: null });
-            return await renderGiveKitPanel(interaction, giveKitSessions.get(userId));
-        }
-        if (customId === 'btn_multiserver_remove') {
-            const servers = await GameServer.findAll({ where: { guildId: interaction.guild.id } });
-            if (!servers || servers.length === 0) return interaction.reply({ content: '❌ No game servers to remove.', flags: 64 });
-            const options = servers.map(s => ({ label: s.serverName, value: `remove_server_${s.id}`, description: `${s.rconIp}:${s.rconPort}`, emoji: '🗑️' }));
-            const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('select_multiserver_remove_target').setPlaceholder('Select which server to remove...').addOptions(options));
-            return interaction.reply({ content: '🗑️ **Server Removal:** Select the game server you wish to delete from the database:', components: [row], flags: 64 });
-        }
-
-        if (customId === 'ak_panel_server') {
-            const servers = await GameServer.findAll({ where: { guildId: interaction.guild.id } });
-            if (!servers || servers.length === 0) return interaction.reply({ content: '❌ No game servers configured! Add one first using the Server Manager.', flags: 64 });
-            const serverOptions = servers.map(s => ({ label: s.serverName, value: s.id.toString(), emoji: '🖥️' }));
-            const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('ak_panel_server_select').setPlaceholder('Select target game server...').addOptions(serverOptions));
-            return interaction.update({ content: '🖥️ **Select Target Game Server:**', components: [row], embeds: [] });
-        }
-
-        if (customId === 'ak_panel_player') {
-            const row = new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId('ak_panel_player_select').setPlaceholder('Select the player to receive the kit...'));
-            return interaction.update({ content: '👤 **Select Target Player:**', components: [row], embeds: [] });
-        }
-
-        if (customId === 'ak_panel_kit') {
-            const session = giveKitSessions.get(userId) || {};
-            const loadingPayload = { content: '⏳ Fetching live kits from server...', components: [], embeds: [], flags: 64 };
-            await interaction.update(loadingPayload);
-            let liveKits = await fetchRceLiveKits(interaction.guild.id, session.serverId);
-            const kitOptions = liveKits.slice(0, 25).map(k => ({ label: k.substring(0, 100), value: k, emoji: '📦' }));
-            const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('ak_panel_kit_select').setPlaceholder('Select a kit from your RCE server...').addOptions(kitOptions));
-            return interaction.editReply({ content: '📦 **Select Kit from RCE Server:**', components: [row], embeds: [] });
-        }
-
-        if (customId === 'ak_panel_send') {
-            const session = giveKitSessions.get(userId);
-            if (!session || !session.targetUserId || !session.kitName) return interaction.reply({ content: '❌ Please select both a player and a kit first.', flags: 64 });
-
-            const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: session.targetUserId } });
-            if (!targetUser || !targetUser.inGameName) return interaction.reply({ content: '❌ Target user has not linked their in-game Rust name!', flags: 64 });
-
-            try {
-                const targetServer = await resolveTargetServer(interaction.guild.id, session.serverId, userId);
-                await sendRconCommand(interaction.guild.id, `kit givetoplayer "${session.kitName}" "${targetUser.inGameName}"`, client, targetServer.serverId);
-                
-                giveKitSessions.delete(userId);
-                return interaction.update({ content: `✅ Successfully gave kit **${session.kitName}** to **${targetUser.inGameName}** (<@${session.targetUserId}>) on **${targetServer.serverName}**!`, components: [], embeds: [] });
-            } catch (e) { return interaction.reply({ content: `❌ RCON Error: \`${e.message}\``, flags: 64 }); }
-        }
-
-        if (customId === 'ak_panel_cancel') { giveKitSessions.delete(userId); return interaction.update({ content: '❌ Give kit action cancelled.', components: [], embeds: [] }); }
-
-        if (customId === 'btn_admin_vip') {
-            const modal = new ModalBuilder().setCustomId('modal_admin_vip_exec').setTitle('Grant VIP Status');
-            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ign').setLabel("Exact In-Game Name / SteamID").setStyle(TextInputStyle.Short).setRequired(true)));
-            return interaction.showModal(modal);
-        }
-        if (customId === 'btn_admin_mod') {
-            const modal = new ModalBuilder().setCustomId('modal_admin_mod_exec').setTitle('Grant Server Moderator');
-            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ign').setLabel("Exact In-Game Name / SteamID").setStyle(TextInputStyle.Short).setRequired(true)));
-            return interaction.showModal(modal);
-        }
-        if (customId === 'btn_admin_say') {
-            const colorOptions = [
-                { label: 'Red (Hostile / Alert)', value: 'e74c3c', emoji: '🔴' },
-                { label: 'Green (Safe / Success)', value: '2ecc71', emoji: '🟢' },
-                { label: 'Blue (Neutral / Info)', value: '3498db', emoji: '🔵' },
-                { label: 'Yellow (Warning)', value: 'f1c40f', emoji: '🟡' },
-                { label: 'Orange (Event)', value: 'e67e22', emoji: '🟠' },
-                { label: 'Purple (Admin Special)', value: '9b59b6', emoji: '🟣' },
-                { label: 'White (Standard)', value: 'ffffff', emoji: '⚪' }
-            ];
-
-            const row = new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder()
-                    .setCustomId('admin_say_color_select')
-                    .setPlaceholder('🎨 Select text color for server broadcast...')
-                    .addOptions(colorOptions)
-            );
-
-            return interaction.reply({ 
-                content: '📢 **Server Say Broadcast:** First, select the color you want your broadcast text to display in-game:', 
-                components: [row], 
-                flags: 64 
-            });
-        }
-        if (customId === 'btn_rcon_setup') {
-            const modal = new ModalBuilder().setCustomId('modal_setup_rcon').setTitle('Configure RCON Credentials');
-            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_ip').setLabel("Server IP").setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_port').setLabel("Port").setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_pass').setLabel("Password").setStyle(TextInputStyle.Short).setRequired(true)));
-            return interaction.showModal(modal);
-        }
-        if (customId === 'btn_multiserver_add') {
-            const modal = new ModalBuilder().setCustomId('modal_multiserver_add').setTitle('Add Game Server');
-            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('server_name').setLabel("Server Name (e.g. Main 2X)").setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_ip').setLabel("RCON IP Address").setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_port').setLabel("RCON Port").setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_pass').setLabel("RCON Password").setStyle(TextInputStyle.Short).setRequired(true)));
-            return interaction.showModal(modal);
-        }
-        if (customId === 'btn_automod_toggle') {
-            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-            const newState = !(config?.autoModEnabled || false);
-            await GuildConfig.upsert({ guildId: interaction.guild.id, autoModEnabled: newState });
-            return interaction.reply({ content: `✅ Auto-Moderation has been turned **${newState ? 'ON 🟢' : 'OFF 🔴'}**!`, flags: 64 });
-        }
-        if (customId === 'btn_automod_settings') {
-            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-            const modal = new ModalBuilder().setCustomId('modal_automod_config').setTitle('Configure Auto-Mod Parameters');
-            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('action').setLabel("Punishment ('warn', 'timeout', 'ban')").setStyle(TextInputStyle.Short).setValue(config?.autoModAction || 'timeout').setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('caps').setLabel("Max Caps % Allowed (e.g. 70)").setStyle(TextInputStyle.Short).setValue(`${config?.autoModCapsLimit || 70}`).setRequired(true)));
-            return interaction.showModal(modal);
-        }
-        if (customId === 'btn_admin_item') {
-            const row = new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId('admin_item_select_player').setPlaceholder('Step 1: Select the player to give items to...'));
-            return interaction.reply({ content: '🎁 **Admin Item Wizard:** Choose the target player below:', components: [row], flags: 64 });
-        }
-        if (customId === 'btn_admin_rcon') {
-            const modal = new ModalBuilder().setCustomId('modal_admin_rcon').setTitle('Send RCON');
-            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rcon_command').setLabel("Command").setStyle(TextInputStyle.Paragraph).setRequired(true)));
-            return interaction.showModal(modal);
-        }
-        if (customId === 'rcon_quick_connect') {
-            await interaction.reply({ content: '⏳ Connecting...', flags: 64 });
-            try { const status = await connectRcon(interaction.guild.id, client); await interaction.editReply({ content: `✅ ${status}` }); } catch (e) { await interaction.editReply({ content: `❌ ${e.message}` }); }
-            return;
-        }
-        if (customId === 'hub_link_account') {
-            const servers = await GameServer.findAll({ where: { guildId: interaction.guild.id } });
-            if (!servers || servers.length === 0) {
-                const modal = new ModalBuilder().setCustomId('modal_link_account_global').setTitle('Link Rust Account');
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ign').setLabel("Your exact in-game Rust name").setStyle(TextInputStyle.Short).setRequired(true)));
+            if (customId === 'tk_add_cat') {
+                const modal = new ModalBuilder().setCustomId('modal_tk_addcat').setTitle('Create Ticket Category');
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cat_name').setLabel("Category Name (e.g. Bug Report 🐛)").setStyle(TextInputStyle.Short).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cat_desc').setLabel("Brief Description").setStyle(TextInputStyle.Short).setRequired(true))
+                );
                 return interaction.showModal(modal);
             }
-            const options = servers.map(s => ({ label: s.serverName, value: `link_server_${s.id}`, emoji: '🖥️' }));
-            const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('select_link_server_target').setPlaceholder('Select which server to link your account to...').addOptions(options));
-            return interaction.reply({ content: '🔗 **Account Linking:** Please select the specific server you want to link your gamertag to:', components: [row], flags: 64 });
         }
 
-        if (customId === 'btn_ai_set_key') {
-            const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
-            const modal = new ModalBuilder().setCustomId('modal_ai_credentials').setTitle('Configure AI Credentials');
-            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ai_key').setLabel("API Key").setStyle(TextInputStyle.Short).setValue(config?.aiApiKey || '').setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ai_model').setLabel("Model Name (e.g. gpt-4o-mini)").setStyle(TextInputStyle.Short).setValue(config?.aiModel || 'gpt-4o-mini').setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ai_url').setLabel("Base API URL").setStyle(TextInputStyle.Short).setValue(config?.aiBaseUrl || 'https://api.openai.com/v1').setRequired(true)));
-            return interaction.showModal(modal);
-        }
-        if (customId === 'btn_ai_toggle') {
-            let [config] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
-            const newState = config.aiEnabled === false ? true : false;
-            await config.update({ aiEnabled: newState });
-            return interaction.reply({ content: `✅ AI assistant has been turned **${newState ? 'ON 🟢' : 'OFF 🔴'}**!`, flags: 64 });
-        }
-        if (customId === 'btn_ai_premade') {
-            const modal = new ModalBuilder().setCustomId('modal_ai_add_premade').setTitle('Add Premade AI Response');
-            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('trigger_word').setLabel('Trigger Keyword/Phrase (e.g. wipe)').setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('response_text').setLabel('Bot Response').setStyle(TextInputStyle.Paragraph).setRequired(true)));
-            return interaction.showModal(modal);
-        }
-    }
-
-    if (interaction.isModalSubmit()) {
-        if (customId === 'ak_modal_kit_input') {
-            if (!giveKitSessions.has(userId)) giveKitSessions.set(userId, { targetUserId: null, kitName: null, serverId: null });
-            const session = giveKitSessions.get(userId);
-            session.kitName = interaction.fields.getTextInputValue('kit_name').trim();
-            return await renderGiveKitPanel(interaction, session, `📦 Kit name "**${session.kitName}**" saved to session!`);
-        }
-
-        if (customId.startsWith('modal_admin_say_')) {
-            const hexColor = '#' + customId.replace('modal_admin_say_', '');
-            const msg = interaction.fields.getTextInputValue('say_msg').replace(/"/g, "'"); 
-            try {
-                const targetServer = await resolveTargetServer(interaction.guild.id, null, userId);
-                await sendRconCommand(targetServer.guildId, `say "<color=${hexColor}>${msg}</color>"`, client, targetServer.serverId);
-                return interaction.reply({ content: `📢 **Broadcast sent successfully to ${targetServer.serverName}!**`, flags: 64 });
-            } catch(e) {
-                return interaction.reply({ content: `❌ Error sending broadcast: \`${e.message}\``, flags: 64 });
+        if (interaction.isChannelSelectMenu()) {
+            if (customId === 'tk_sel_cat') {
+                await GuildConfig.update({ ticketCategoryId: interaction.values[0] }, { where: { guildId } });
+                return interaction.update({ content: `✅ Ticket category successfully set to <#${interaction.values[0]}>!`, embeds: [], components: [] });
+            }
+            if (customId === 'tk_sel_log') {
+                await GuildConfig.update({ ticketTranscriptChannelId: interaction.values[0] }, { where: { guildId } });
+                return interaction.update({ content: `✅ Transcripts will now be sent to <#${interaction.values[0]}>!`, embeds: [], components: [] });
             }
         }
 
-        if (customId === 'modal_admin_vip_exec') {
-            const target = interaction.fields.getTextInputValue('ign').trim();
-            try {
-                const targetServer = await resolveTargetServer(interaction.guild.id, null, userId);
-                await sendRconCommand(targetServer.guildId, `ownerid ${target} "VIP Status"`, client, targetServer.serverId);
-                return interaction.reply({ content: `✅ Successfully granted VIP status to **${target}** on **${targetServer.serverName}**!`, flags: 64 });
-            } catch (e) { return interaction.reply({ content: `❌ RCON Error executing VIP command: \`${e.message}\``, flags: 64 }); }
+        if (interaction.isRoleSelectMenu()) {
+            if (customId === 'tk_sel_role') {
+                await GuildConfig.update({ ticketAdminRoleId: interaction.values[0] }, { where: { guildId } });
+                return interaction.update({ content: `✅ Support role set! <@&${interaction.values[0]}> will now have access to tickets.`, embeds: [], components: [] });
+            }
+            if (customId === 'tk_sel_vip') {
+                await GuildConfig.update({ ticketVipRoleId: interaction.values[0] }, { where: { guildId } });
+                return interaction.update({ content: `✅ Priority VIP role set! Players with <@&${interaction.values[0]}> will open high-priority tickets.`, embeds: [], components: [] });
+            }
         }
-        if (customId === 'modal_admin_mod_exec') {
-            const target = interaction.fields.getTextInputValue('ign').trim();
-            try {
-                const targetServer = await resolveTargetServer(interaction.guild.id, null, userId);
-                await sendRconCommand(targetServer.guildId, `moderatorid ${target} "Server Moderator"`, client, targetServer.serverId);
-                return interaction.reply({ content: `✅ Successfully granted Moderator rights to **${target}** on **${targetServer.serverName}**!`, flags: 64 });
-            } catch (e) { return interaction.reply({ content: `❌ RCON Error executing Moderator command: \`${e.message}\``, flags: 64 }); }
-        }
-        if (customId === 'modal_automod_config') {
-            const action = interaction.fields.getTextInputValue('action').trim().toLowerCase();
-            const caps = parseInt(interaction.fields.getTextInputValue('caps')) || 70;
-            if (!['warn', 'timeout', 'ban'].includes(action)) return interaction.reply({ content: '❌ Action must be either `warn`, `timeout`, or `ban`.', flags: 64 });
-            await GuildConfig.upsert({ guildId: interaction.guild.id, autoModAction: action, autoModCapsLimit: caps });
-            return interaction.reply({ content: `✅ Auto-Mod settings updated!\n• Punishment: \`${action}\`\n• Caps Limit: \`${caps}%\``, flags: 64 });
-        }
-        if (customId === 'modal_ai_add_premade') {
-            const trigger = interaction.fields.getTextInputValue('trigger_word').trim();
-            const responseText = interaction.fields.getTextInputValue('response_text').trim();
-            let [config] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
-            let list = []; try { list = JSON.parse(config.aiPremadeResponses || '[]'); } catch(e){}
-            list.push({ trigger, response: responseText });
-            await config.update({ aiPremadeResponses: JSON.stringify(list) });
-            return interaction.reply({ content: `✅ Successfully added premade response for trigger: **"${trigger}"**!`, flags: 64 });
-        }
-        if (customId === 'modal_ai_credentials') {
-            const apiKey = interaction.fields.getTextInputValue('ai_key');
-            const model = interaction.fields.getTextInputValue('ai_model');
-            const baseUrl = interaction.fields.getTextInputValue('ai_url');
-            let [config] = await GuildConfig.findOrCreate({ where: { guildId: interaction.guild.id } });
-            await config.update({ aiApiKey: apiKey.trim(), aiModel: model.trim(), aiBaseUrl: baseUrl.trim() });
-            return interaction.reply({ content: `✅ **AI Assistant Configured!**\n• Model: \`${model}\`\n• Base URL: \`${baseUrl}\`\nMembers can now mention <@${client.user.id}> to ask questions!`, flags: 64 });
-        }
-        if (customId === 'modal_link_account_global' || customId.startsWith('modal_link_account_')) {
-            const ign = interaction.fields.getTextInputValue('ign').trim();
-            const serverId = customId === 'modal_link_account_global' ? null : customId.replace('modal_link_account_', '');
-            let userRecord = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: interaction.user.id } });
-            if (userRecord) await userRecord.update({ inGameName: ign });
-            else await UserEconomy.create({ guildId: interaction.guild.id, userId: interaction.user.id, inGameName: ign, wallet: 0, bank: 0, xp: 0, level: 1 });
-            const serverInfo = serverId ? ` to this server` : '';
-            return interaction.reply({ content: `✅ Successfully linked your Discord account to **${ign}**${serverInfo}!\nYou can now use the shop, kits, and teleports.`, flags: 64 });
-        }
-        
-        if (customId.startsWith('modal_admin_give_item_exec_')) {
-            try {
-                const targetServer = await resolveTargetServer(interaction.guild.id, null, userId);
-                const cleanId = customId.replace('modal_admin_give_item_exec_', '');
-                const firstUnderscore = cleanId.indexOf('_');
-                const targetUserId = cleanId.substring(0, firstUnderscore);
-                const shortname = cleanId.substring(firstUnderscore + 1);
-                const amount = interaction.fields.getTextInputValue('amount') || '1';
 
-                const targetUser = await UserEconomy.findOne({ where: { guildId: interaction.guild.id, userId: targetUserId } });
-                
-                if (!targetUser || !targetUser.inGameName) {
-                    return interaction.reply({ content: `❌ This player has not linked their Rust account!`, flags: 64 });
+        if (interaction.isStringSelectMenu() && customId === 'tk_del_cat') {
+            await TicketCategory.destroy({ where: { id: interaction.values[0], guildId } });
+            return await renderCategoryManager(interaction, guildId, 'update');
+        }
+
+        if (interaction.isModalSubmit() && customId === 'modal_tk_addcat') {
+            const name = interaction.fields.getTextInputValue('cat_name').trim();
+            const description = interaction.fields.getTextInputValue('cat_desc').trim();
+            await TicketCategory.create({ guildId, name, description });
+            return await renderCategoryManager(interaction, guildId, 'update');
+        }
+
+        if (customId === 'ticket_create') {
+            const servers = await GameServer.findAll({ where: { guildId } });
+            
+            let serverOptions = [
+                { label: '🌐 General / Discord Issue', value: 'scope_discord', description: 'Discord, website, or store problem', emoji: '💬' }
+            ];
+
+            if (servers.length > 0) {
+                servers.forEach(s => {
+                    serverOptions.push({ label: `🖥️ Server: ${s.serverName}`, value: `scope_server_${s.id}`, description: `In-game issue on ${s.serverName}`, emoji: '🖥️' });
+                });
+            }
+
+            const menu = new StringSelectMenuBuilder()
+                .setCustomId('tk_sel_scope')
+                .setPlaceholder('Select what your ticket is regarding...')
+                .addOptions(serverOptions);
+
+            return interaction.reply({ content: '🎫 **Support Ticket Setup (Step 1/2):**\nIs your issue related to a specific game server or a general Discord/community problem?', components: [new ActionRowBuilder().addComponents(menu)], flags: 64 });
+        }
+
+        if (interaction.isStringSelectMenu() && customId === 'tk_sel_scope') {
+            const scopeValue = interaction.values[0];
+            const cats = await TicketCategory.findAll({ where: { guildId } });
+
+            let options = [];
+            if (cats.length === 0) {
+                options = [
+                    { label: 'General Support', description: 'Standard inquiries and help.', value: 'General Support', emoji: '💬' },
+                    { label: 'Player Report', description: 'Report a rule breaker or cheater.', value: 'Player Report', emoji: '⚠️' }
+                ];
+            } else {
+                options = cats.slice(0, 25).map(c => ({
+                    label: c.name.substring(0, 100),
+                    description: c.description ? c.description.substring(0, 100) : 'Open a ticket for this category.',
+                    value: c.name.substring(0, 100)
+                }));
+            }
+
+            const menu = new StringSelectMenuBuilder()
+                .setCustomId(`tk_sel_player_cat_${scopeValue}`)
+                .setPlaceholder('Select a ticket category...')
+                .addOptions(options);
+
+            return interaction.update({ content: '🎫 **Support Ticket Setup (Step 2/2):**\nWhat specific category best describes your issue?', components: [new ActionRowBuilder().addComponents(menu)] });
+        }
+
+        if (interaction.isStringSelectMenu() && customId.startsWith('tk_sel_player_cat_')) {
+            const scopeValue = customId.replace('tk_sel_player_cat_', '');
+            const selectedCategory = interaction.values[0];
+
+            const config = await GuildConfig.findOne({ where: { guildId } });
+            if (!config || !config.ticketCategoryId) {
+                return interaction.update({ content: '❌ **Ticket System Error:** The support ticket system needs to be set up by an admin first!', components: [] });
+            }
+
+            const category = interaction.guild.channels.cache.get(config.ticketCategoryId);
+            if (!category) {
+                return interaction.update({ content: '❌ **Ticket System Error:** The configured ticket category no longer exists.', components: [] });
+            }
+
+            let serverContextName = 'General / Discord';
+            let targetServerId = null;
+            if (scopeValue.startsWith('scope_server_')) {
+                targetServerId = scopeValue.replace('scope_server_', '');
+                const sObj = await GameServer.findByPk(targetServerId);
+                if (sObj) serverContextName = sObj.serverName;
+            }
+
+            const member = await interaction.guild.members.fetch(interaction.user.id);
+            const hasVipRole = config.ticketVipRoleId && member.roles.cache.has(config.ticketVipRoleId);
+            const isPriorityCat = selectedCategory.toLowerCase().includes('priority');
+            const isPriority = hasVipRole || isPriorityCat;
+            
+            const channelPrefix = isPriority ? 'pri' : 'ticket';
+            const embedColor = isPriority ? '#e74c3c' : '#2ecc71';
+            const icon = isPriority ? '🚨' : '🎫';
+            const priorityTag = isPriority ? '\n\n**⭐ PRIORITY STATUS ACTIVE ⭐**' : '';
+
+            const existingChannel = interaction.guild.channels.cache.find(c => c.name === `${channelPrefix}-${interaction.user.username.toLowerCase()}`);
+            if (existingChannel) {
+                return interaction.update({ content: `❌ You already have an open ticket of this type: ${existingChannel}`, components: [] });
+            }
+
+            let perms = [
+                { id: interaction.guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+                { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] },
+                { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageChannels] }
+            ];
+
+            if (config.ticketAdminRoleId) {
+                perms.push({ id: config.ticketAdminRoleId, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] });
+            }
+
+            const ticketChannel = await interaction.guild.channels.create({
+                name: `${channelPrefix}-${interaction.user.username}`,
+                type: ChannelType.GuildText,
+                parent: category.id,
+                topic: interaction.user.id, 
+                permissionOverwrites: perms
+            });
+
+            const ticketEmbed = new EmbedBuilder()
+                .setTitle(`${icon} ${selectedCategory} — ${interaction.user.tag}`)
+                .setDescription(`Welcome <@${interaction.user.id}>!${priorityTag}\n\n**Target Scope:** \`${serverContextName}\`\n**Category:** ${selectedCategory}\n\nPlease describe your issue or question in as much detail as possible. A staff member will be with you shortly.`)
+                .setColor(embedColor)
+                .setTimestamp();
+
+            const actionRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('tk_claim').setLabel('Claim Ticket').setStyle(ButtonStyle.Success).setEmoji('✋'),
+                new ButtonBuilder().setCustomId('tk_close').setLabel('Close Ticket').setStyle(ButtonStyle.Danger).setEmoji('🔒')
+            );
+
+            const pingMsg = config.ticketAdminRoleId 
+                ? (isPriority ? `🚨 PRIORITY TICKET 🚨 <@&${config.ticketAdminRoleId}> | <@${interaction.user.id}>` : `<@${interaction.user.id}> | <@&${config.ticketAdminRoleId}>`)
+                : `<@${interaction.user.id}>`;
+            
+            await ticketChannel.send({ content: pingMsg, embeds: [ticketEmbed], components: [actionRow] });
+            return interaction.update({ content: `✅ Your ticket has been successfully created! Head over to ${ticketChannel}.`, components: [] });
+        }
+
+        if (customId === 'tk_claim') {
+            const config = await GuildConfig.findOne({ where: { guildId } });
+            const isStaff = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator) || (config?.ticketAdminRoleId && interaction.member.roles.cache.has(config.ticketAdminRoleId));
+            
+            if (!isStaff) {
+                return interaction.reply({ content: '❌ You do not have permission to claim tickets.', flags: 64 });
+            }
+
+            const oldEmbed = interaction.message.embeds[0];
+            const newEmbed = EmbedBuilder.from(oldEmbed)
+                .setColor('#f1c40f')
+                .addFields({ name: '✋ Claimed By', value: `<@${interaction.user.id}> is now handling this ticket.` });
+
+            const actionRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('tk_close').setLabel('Close Ticket').setStyle(ButtonStyle.Danger).setEmoji('🔒')
+            );
+
+            return interaction.update({ embeds: [newEmbed], components: [actionRow] });
+        }
+
+        if (customId === 'tk_close') {
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('tk_confirm_close').setLabel('Yes, Close Ticket').setStyle(ButtonStyle.Danger).setEmoji('✅'),
+                new ButtonBuilder().setCustomId('tk_cancel_close').setLabel('Cancel').setStyle(ButtonStyle.Secondary).setEmoji('❌')
+            );
+            return interaction.reply({ content: '⚠️ **Are you sure you want to close this ticket?** This will generate a transcript and delete the channel.', components: [row] });
+        }
+
+        if (customId === 'tk_cancel_close') {
+            return interaction.message.delete().catch(() => {});
+        }
+
+        if (customId === 'tk_confirm_close') {
+            await interaction.update({ content: '🔒 **Ticket locked.** Generating transcript and closing in 5 seconds...', components: [] });
+            
+            const config = await GuildConfig.findOne({ where: { guildId } });
+            const ticketCreatorId = interaction.channel.topic; 
+            
+            if (ticketCreatorId) {
+                await interaction.channel.permissionOverwrites.edit(ticketCreatorId, { SendMessages: false }).catch(()=>{});
+            }
+
+            let messages = await interaction.channel.messages.fetch({ limit: 100 });
+            messages = Array.from(messages.values()).reverse(); 
+
+            const logContent = messages.map(m => {
+                const time = new Date(m.createdTimestamp).toLocaleString();
+                const attachmentTxt = m.attachments.size > 0 ? ` [Attached ${m.attachments.size} file(s)]` : '';
+                const embedTxt = m.embeds.length > 0 ? ` [Embedded Content]` : '';
+                return `[${time}] ${m.author.tag}: ${m.content}${attachmentTxt}${embedTxt}`;
+            }).join('\n\n');
+
+            const buffer = Buffer.from(`TICKET TRANSCRIPT: ${interaction.channel.name}\nGenerated on: ${new Date().toLocaleString()}\n-------------------------------------------------\n\n${logContent}`, 'utf-8');
+            const attachment = new AttachmentBuilder(buffer, { name: `${interaction.channel.name}-transcript.txt` });
+
+            if (config?.ticketTranscriptChannelId) {
+                const logChannel = interaction.guild.channels.cache.get(config.ticketTranscriptChannelId);
+                if (logChannel) {
+                    const logEmbed = new EmbedBuilder()
+                        .setTitle('📄 Ticket Transcript')
+                        .addFields(
+                            { name: 'Ticket', value: `\`${interaction.channel.name}\``, inline: true },
+                            { name: 'Closed By', value: `<@${interaction.user.id}>`, inline: true }
+                        )
+                        .setColor('#95a5a6');
+                    await logChannel.send({ embeds: [logEmbed], files: [attachment] }).catch(()=>{});
                 }
-
-                await sendRconCommand(targetServer.guildId, `inventory.giveto "${targetUser.inGameName}" ${shortname} ${amount}`, client, targetServer.serverId);
-                return interaction.reply({ content: `✅ Successfully gave **${amount}x ${shortname}** to **${targetUser.inGameName}** on **${targetServer.serverName}**!`, flags: 64 });
-            } catch(e) { 
-                return interaction.reply({ content: `❌ Error sending item: ${e.message}`, flags: 64 }); 
             }
+
+            if (ticketCreatorId) {
+                try {
+                    const user = await client.users.fetch(ticketCreatorId);
+                    await user.send({ 
+                        content: `📦 **Ticket Closed!**\nThank you for reaching out. Here is a copy of your chat transcript for your ticket (\`${interaction.channel.name}\`).`, 
+                        files: [attachment] 
+                    });
+                } catch (e) {}
+            }
+
+            setTimeout(() => {
+                interaction.channel.delete().catch(() => {});
+            }, 5000);
         }
-        
-        if (customId === 'modal_multiserver_add') {
-            const serverName = interaction.fields.getTextInputValue('server_name').trim();
-            const rconIp = interaction.fields.getTextInputValue('rcon_ip').trim();
-            const rconPort = interaction.fields.getTextInputValue('rcon_port').trim();
-            const rconPassword = interaction.fields.getTextInputValue('rcon_pass').trim();
-            await GameServer.create({ guildId: interaction.guild.id, serverName, rconIp, rconPort, rconPassword });
-            return interaction.reply({ content: `✅ Successfully added game server **${serverName}** (\`${rconIp}:${rconPort}\`)!`, flags: 64 });
-        }
-        if (customId === 'modal_setup_rcon') {
-            const ip = interaction.fields.getTextInputValue('rcon_ip').trim();
-            const port = interaction.fields.getTextInputValue('rcon_port').trim();
-            const pass = interaction.fields.getTextInputValue('rcon_pass').trim();
-            await GuildConfig.upsert({ guildId: interaction.guild.id, rconIp: ip, rconPort: port, rconPassword: pass });
-            return interaction.reply({ content: `✅ RCON credentials successfully updated!\n• Server IP: \`${ip}:${port}\`\nClick **Connect RCON** to initialize communication.`, flags: 64 });
-        }
-        if (customId === 'modal_admin_embed') {
-            const channelId = interaction.fields.getTextInputValue('channel_id');
-            const title = interaction.fields.getTextInputValue('title');
-            const description = interaction.fields.getTextInputValue('description');
-            const color = interaction.fields.getTextInputValue('color') || '#2b2d31';
-            const targetChannel = interaction.guild.channels.cache.get(channelId);
-            if (!targetChannel) return interaction.reply({ content: '❌ Invalid Channel ID provided.', flags: 64 });
-            const embed = new EmbedBuilder().setTitle(title).setDescription(description.replace(/\\n/g, '\n')).setColor(color).setTimestamp();
-            await targetChannel.send({ embeds: [embed] });
-            return interaction.reply({ content: `✅ Custom embed successfully posted in <#${targetChannel.id}>!`, flags: 64 });
-        }
-        if (customId === 'modal_admin_rcon') {
-            try {
-                const targetServer = await resolveTargetServer(interaction.guild.id, null, userId);
-                await sendRconCommand(targetServer.guildId, interaction.fields.getTextInputValue('rcon_command'), client, targetServer.serverId);
-                return interaction.reply({ content: `✅ RCON Command executed successfully on **${targetServer.serverName}**!`, flags: 64 });
-            } catch(e) { return interaction.reply({ content: `❌ RCON Error: ${e.message}`, flags: 64 }); }
+
+    } catch (error) {
+        console.error('[TICKET ERROR]', error);
+        if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
+            await interaction.reply({ content: '❌ An error occurred processing your ticket request.', flags: 64 }).catch(() => {});
         }
     }
 };

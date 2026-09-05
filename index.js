@@ -72,7 +72,7 @@ app.listen(PORT, () => console.log(`[SYSTEM] Webhook listener running on port ${
 // --- START DISCORD LOGGERS ---
 require('./utils/discordLogger')(client);
 require('./events/discordAuditLogger')(client);
-
+require('./events/ticketAiListener')(client);
 client.on('messageCreate', async message => require('./events/messageCreate')(message, client));
 
 // Load Slash Commands Recursively
