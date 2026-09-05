@@ -1,5 +1,7 @@
 const { EmbedBuilder, PermissionsBitField } = require('discord.js');
 const { GuildConfig } = require('../database/db');
+// Import your AI generation function/handler here (adjust the path if your AI handler lives elsewhere)
+const { handleAiChat } = require('../handlers/aiHandler'); 
 
 // Memory cache to track spam (messages per user within a time frame)
 const spamTracker = new Map();
@@ -8,7 +10,39 @@ module.exports = async (message, client) => {
     // Ignore bots and empty messages (like embeds/images with no text)
     if (message.author.bot || !message.guild) return;
 
-    // Ignore server admins and moderators so they don't get auto-modded
+    // ==========================================
+    // 🤖 BUDDYBOT AI MENTION LISTENER (@buddybot)
+    // ==========================================
+    // 1. Explicitly ignore @everyone and @here pings
+    if (message.mentions.everyone) return;
+
+    // 2. Check if BuddyBot itself is directly mentioned
+    if (message.mentions.has(client.user)) {
+        try {
+            // Strip out the bot's mention tag from the text so the AI gets a clean prompt
+            const cleanPrompt = message.content
+                .replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '')
+                .trim();
+
+            if (cleanPrompt) {
+                // Show typing indicator while the AI thinks
+                await message.channel.sendTyping();
+                
+                // Call your AI handler logic
+                if (typeof handleAiChat === 'function') {
+                    await handleAiChat(message, cleanPrompt);
+                } else {
+                    // Fallback if your handler export name is different
+                    await message.reply("Hello! I'm BuddyBot. AI chat response is processing.");
+                }
+                return; // Stop further execution for this AI message
+            }
+        } catch (aiError) {
+            console.error('[AI CHAT ERROR]', aiError);
+        }
+    }
+
+    // Ignore server admins and moderators from auto-mod so they don't get auto-modded
     // Added safety check for message.member in case of caching issues
     if (message.member && message.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) return;
 
