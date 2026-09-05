@@ -1,5 +1,5 @@
 const { CustomBind, UserEconomy, GuildConfig } = require('../database/db');
-const { processTeleportAction } = require('./teleportHandler');
+const { processTeleportAction } = require('../handlers/teleportHandler');
 
 async function processCustomBindChat(guildId, rawUsername, rawContent, msgLower, client, sendRconCommand) {
     // First, route any teleport action straight to the dedicated teleport file
