@@ -112,9 +112,9 @@ async function connectRcon(guildId, client, targetServerId = null) {
 
         // --- SAFE PARSER PATCH 2: Main WebSocket Listener ---
         ws.on('message', async (data) => {
+            console.log(`[RAW WEBSOCKET PACKET]:`, data.toString()); // <--- ADD THIS LINE
             try {
                 const rawStr = data.toString();
-                let msg = '';
                 
                 try {
                     const sanitized = rawStr.replace(/,\s*}/g, '}');
