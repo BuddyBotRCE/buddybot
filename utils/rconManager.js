@@ -136,13 +136,15 @@ async function connectRcon(guildId, client, targetServerId = null) {
                 cleanMsg = cleanMsg.replace(/\[CHAT SERVER\]/i, '').trim();
                 cleanMsg = cleanMsg.replace(/\[CHAT LOCAL\]/i, '').trim();
 
+                const isQuickChat = cleanMsg.toLowerCase().includes('d11_quick_chat_');
+
                 if (cleanMsg.includes(':')) {
                     const parts = cleanMsg.split(':');
                     if (parts.length >= 2) {
                         rawUsername = parts[0].trim();
                         rawContent = parts.slice(1).join(':').trim().toLowerCase();
                     }
-                } else if (cleanMsg.toLowerCase().includes('d11_quick_chat_')) {
+                } else if (isQuickChat) {
                     rawContent = cleanMsg.trim().toLowerCase();
                     
                     const registeredPlayers = await UserEconomy.findAll({ where: { guildId: guildId } });
@@ -155,12 +157,13 @@ async function connectRcon(guildId, client, targetServerId = null) {
                     if (!rawUsername && registeredPlayers.length > 0) {
                         rawUsername = registeredPlayers[0].inGameName;
                     }
+                } else {
+                    // Ignore non-chat system clutter, but let quick-chats and standard chat through
+                    return;
                 }
 
                 // Debug log to confirm the parser caught it successfully
-                if (rawContent.includes('d11_quick_chat_')) {
-                    console.log(`[SAFE PARSER] Caught Quick-Chat: ${rawContent} from ${rawUsername}`);
-                }
+                console.log(`[SAFE PARSER] Caught Chat/Quick-Chat: ${rawContent} from ${rawUsername}`);
 
                 const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
 
