@@ -201,8 +201,30 @@ const adminHandler = async (interaction, client) => {
         return await renderBotSettings(interaction, guildId, 'reply');
     }
 
+    // Catch Ticket Setup from Dropdown 1
     if (customId === 'admin_menu_select' && interaction.isStringSelectMenu() && interaction.values[0] === 'setup_tickets') {
         return await renderAdminMenu(interaction, guildId, 'reply');
+    }
+
+    // Catch AI Setup from BOTH Dropdown 1 and Dropdown 2
+    if ((customId === 'admin_menu_select' || customId === 'admin_menu_select_2') && selectedValue === 'setup_ai') {
+        const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
+        const isEnabled = config?.aiEnabled !== false;
+        let premadeCount = 0; try { premadeCount = JSON.parse(config?.aiPremadeResponses || '[]').length; } catch(e){}
+
+        const embed = new EmbedBuilder()
+            .setTitle('🤖 AI Integration & Premade Responses')
+            .setDescription(`Configure your server AI assistant, toggle state, and custom canned answers.\n\n• **Status:** ${isEnabled ? '🟢 ACTIVE' : '🔴 DISABLED'}\n• **Provider:** \`${config?.aiProvider || 'openai'}\`\n• **Model:** \`${config?.aiModel || 'gpt-4o-mini'}\`\n• **API Key:** ${config?.aiApiKey ? '🟢 Configured' : '🔴 Not Set'}\n• **Premade Answers:** \`${premadeCount} configured\``)
+            .setColor('#9b59b6');
+
+        const row1 = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('select_ai_provider').setPlaceholder('Choose AI Platform / Provider...').addOptions([{ label: 'OpenAI', value: 'openai', emoji: '🟢' }, { label: 'Anthropic', value: 'anthropic', emoji: '🟠' }, { label: 'Google Gemini', value: 'gemini', emoji: '🔵' }, { label: 'DeepSeek', value: 'deepseek', emoji: '🟣' }, { label: 'Groq', value: 'groq', emoji: '⚡' }, { label: 'OpenRouter', value: 'openrouter', emoji: '🌐' }, { label: 'Custom / Ollama', value: 'custom', emoji: '💻' }]));
+        const row2 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_ai_toggle').setLabel(isEnabled ? 'Disable AI' : 'Enable AI').setStyle(isEnabled ? ButtonStyle.Danger : ButtonStyle.Success).setEmoji(isEnabled ? '🔴' : '🟢'), new ButtonBuilder().setCustomId('btn_ai_set_key').setLabel('API Key & Model').setStyle(ButtonStyle.Primary).setEmoji('🔑'), new ButtonBuilder().setCustomId('btn_ai_premade').setLabel('Premade Responses').setStyle(ButtonStyle.Secondary).setEmoji('📝'));
+        
+        const backRow = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙'));
+        
+        const payload = { embeds: [embed], components: [row1, row2, backRow], flags: 64 };
+        if (interaction.replied || interaction.deferred) return await interaction.editReply(payload);
+        return await interaction.reply(payload);
     }
 
     if (customId === 'tk_manage_cats') return await renderCategoryManager(interaction, guildId, 'update');
