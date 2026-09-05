@@ -1,66 +1,110 @@
 const { EmbedBuilder, PermissionsBitField } = require('discord.js');
 const { GuildConfig } = require('../database/db');
-// Import your AI generation function/handler here (adjust the path if your AI handler lives elsewhere)
-const { handleAiChat } = require('../handlers/aiHandler'); 
 
 // Memory cache to track spam (messages per user within a time frame)
 const spamTracker = new Map();
 
 module.exports = async (message, client) => {
-    // Ignore bots and empty messages (like embeds/images with no text)
+    // Ignore bots and empty messages
     if (message.author.bot || !message.guild) return;
 
     // ==========================================
-    // 🤖 BUDDYBOT AI MENTION LISTENER (@buddybot)
+    // 🤖 BUDDYBOT AI & PREMADE MENTION LISTENER
     // ==========================================
     // 1. Explicitly ignore @everyone and @here pings
     if (message.mentions.everyone) return;
 
     // 2. Check if BuddyBot itself is directly mentioned
-    if (message.mentions.has(client.user)) {
+    const isMentioned = message.mentions.has(client.user);
+    if (isMentioned) {
         try {
-            // Strip out the bot's mention tag from the text so the AI gets a clean prompt
-            const cleanPrompt = message.content
-                .replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '')
-                .trim();
+            const config = await GuildConfig.findOne({ where: { guildId: message.guild.id } });
+            
+            // If AI is disabled or config is missing, skip the AI block
+            if (config && config.aiEnabled !== false) {
+                const cleanContent = message.content
+                    .replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '')
+                    .trim();
+                const lowerContent = cleanContent.toLowerCase();
 
-            if (cleanPrompt) {
-                // Show typing indicator while the AI thinks
-                await message.channel.sendTyping();
-                
-                // Call your AI handler logic
-                if (typeof handleAiChat === 'function') {
-                    await handleAiChat(message, cleanPrompt);
-                } else {
-                    // Fallback if your handler export name is different
-                    await message.reply("Hello! I'm BuddyBot. AI chat response is processing.");
+                // Check for premade responses first
+                try {
+                    const premadeList = JSON.parse(config.aiPremadeResponses || '[]');
+                    const matchedPreset = premadeList.find(p => lowerContent.includes(p.trigger.toLowerCase()));
+                    if (matchedPreset) {
+                        await message.reply(matchedPreset.response);
+                        return;
+                    }
+                } catch (e) {}
+
+                if (!config.aiApiKey) {
+                    await message.reply('⚠️ The server administrator has not configured an AI API key yet!');
+                    return;
                 }
-                return; // Stop further execution for this AI message
+
+                await message.channel.sendTyping();
+
+                const baseUrl = config.aiBaseUrl || config.aiProviderUrl || 'https://api.openai.com/v1';
+                const modelName = config.aiModel || 'gpt-4o-mini';
+                const endpoint = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
+
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${config.aiApiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: modelName,
+                        messages: [
+                            { role: 'system', content: 'You are BuddyBot, a helpful community assistant and expert for a Rust Console Edition community game server.' },
+                            { role: 'user', content: cleanContent }
+                        ],
+                        temperature: 0.7
+                    })
+                });
+
+                const responseText = await response.text();
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                } catch (e) {
+                    await message.reply(`❌ AI Error: Received non-JSON response from endpoint (Status ${response.status}).`);
+                    return;
+                }
+                
+                if (!response.ok || data.error) {
+                    const errMsg = data.error?.message || responseText || 'Unknown API error';
+                    await message.reply(`❌ AI Error (${response.status}): \`${errMsg}\``);
+                    return;
+                }
+
+                const aiReply = data.choices?.[0]?.message?.content || 'I received your message, but could not generate a response.';
+                await message.reply(aiReply);
+                return; // Stop further execution so AI messages don't get auto-modded
             }
-        } catch (aiError) {
-            console.error('[AI CHAT ERROR]', aiError);
+        } catch (aiErr) {
+            console.error('[AI CHAT ERROR]', aiErr);
         }
     }
 
-    // Ignore server admins and moderators from auto-mod so they don't get auto-modded
-    // Added safety check for message.member in case of caching issues
+    // ==========================================
+    // 🛡️ AUTO-MODERATION SYSTEM
+    // ==========================================
+    // Ignore server admins and moderators so they don't get auto-modded
     if (message.member && message.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) return;
 
     try {
-        // Fetch the guild's auto-mod config
         const config = await GuildConfig.findOne({ where: { guildId: message.guild.id } });
         if (!config) return;
 
         let triggered = false;
 
-        // --- HELPER FUNCTION TO EXECUTE PUNISHMENTS ---
         const executePunishment = async (action, logReason) => {
             triggered = true;
             try {
-                // Always delete the offending message
                 if (message.deletable) await message.delete().catch(() => {});
 
-                // Apply the specific punishment based on the dashboard settings
                 if (action === 'warn') {
                     const warnMsg = await message.channel.send(`⚠️ <@${message.author.id}>, your message was removed! Reason: **${logReason}**`);
                     setTimeout(() => warnMsg.delete().catch(() => {}), 5000);
@@ -89,7 +133,7 @@ module.exports = async (message, client) => {
             }
         };
 
-        // --- 1. ANTI-INVITE SCANNER ---
+        // --- 1. ANTI-INVITE ---
         if (!triggered && config.amInviteEnabled) {
             const inviteRegex = /(discord\.gg\/|discord\.com\/invite\/|discordapp\.com\/invite\/)/gi;
             if (inviteRegex.test(message.content)) {
@@ -97,16 +141,15 @@ module.exports = async (message, client) => {
             }
         }
 
-        // --- 2. ANTI-LINK SCANNER ---
+        // --- 2. ANTI-LINK ---
         if (!triggered && config.amLinkEnabled) {
             const linkRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
-            // Only trigger if they aren't sending harmless tenor/giphy gifs
             if (linkRegex.test(message.content) && !message.content.includes('tenor.com') && !message.content.includes('giphy.com')) {
                 await executePunishment(config.amLinkAction, 'Sending Unauthorized Links');
             }
         }
 
-        // --- 3. BANNED WORDS SCANNER ---
+        // --- 3. BANNED WORDS ---
         if (!triggered && config.amWordsEnabled && config.amWordsList) {
             const wordsList = config.amWordsList.split(',').map(w => w.trim().toLowerCase()).filter(w => w.length > 0);
             const lowerContent = message.content.toLowerCase();
@@ -117,7 +160,7 @@ module.exports = async (message, client) => {
             }
         }
 
-        // --- 4. MASS MENTIONS SCANNER ---
+        // --- 4. MASS MENTIONS ---
         if (!triggered && config.amMentionsEnabled) {
             const mentionCount = message.mentions.users.size + message.mentions.roles.size;
             if (mentionCount > (config.amMentionsLimit || 4)) {
@@ -125,8 +168,8 @@ module.exports = async (message, client) => {
             }
         }
 
-        // --- 5. ANTI-CAPS SCANNER ---
-        if (!triggered && config.amCapsEnabled && message.content.length > 10) { // Ignore short messages like "LOL" or "BRB"
+        // --- 5. ANTI-CAPS ---
+        if (!triggered && config.amCapsEnabled && message.content.length > 10) {
             const capsCount = message.content.replace(/[^A-Z]/g, '').length;
             const lettersCount = message.content.replace(/[^a-zA-Z]/g, '').length;
             
@@ -138,10 +181,10 @@ module.exports = async (message, client) => {
             }
         }
 
-        // --- 6. ANTI-SPAM SCANNER ---
+        // --- 6. ANTI-SPAM ---
         if (!triggered && config.amSpamEnabled) {
             const authorId = message.author.id;
-            const limit = config.amSpamLimit || 5; // e.g., 5 messages
+            const limit = config.amSpamLimit || 5;
             const now = Date.now();
 
             if (!spamTracker.has(authorId)) {
@@ -151,12 +194,10 @@ module.exports = async (message, client) => {
             const timestamps = spamTracker.get(authorId);
             timestamps.push(now);
 
-            // Filter out timestamps older than 5 seconds (5000ms)
             const recentMessages = timestamps.filter(t => now - t < 5000);
-            spamTracker.set(authorId, recentMessages);
+            spamTracker.set(authorId, timestamps);
 
             if (recentMessages.length > limit) {
-                // Clear their cache so it doesn't trigger multiple times instantly for the same spam burst
                 spamTracker.set(authorId, []); 
                 await executePunishment(config.amSpamAction, 'Message Spamming');
             }
