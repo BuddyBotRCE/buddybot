@@ -2,7 +2,7 @@ const WebSocket = require('ws');
 const { GuildConfig, GameServer, UserEconomy, CustomBind, BindCooldown, ActiveBounty, BountyCooldown, HomeTeleportConfig, HomeTeleportCooldown, HomeTeleportLocation } = require('../database/db');
 const { EmbedBuilder } = require('discord.js');
 const { processD11Router } = require('./d11ChatHandler'); // Linked to your D11 router
-const { handleRconLogMessage } = require('./rconPosTracker'); // Our standalone position tracker
+const { handleRconLogMessage, queueAdminPos } = require('./rconPosTracker'); // Our standalone position tracker
 
 const activeConnections = new Map();
 const homeTpPosQueue = new Map(); 
@@ -323,4 +323,4 @@ async function fetchServerKits(guildId) {
 }
 
 // Notice how we removed queueAdminPos and adminPosQueue from the exports below!
-module.exports = { connectRcon, sendRconCommand, triggerCustomEvent, activeConnections, fetchServerKits };
+module.exports = { connectRcon, sendRconCommand, triggerCustomEvent, activeConnections, fetchServerKits, queueAdminPos };
