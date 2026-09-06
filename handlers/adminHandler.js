@@ -26,7 +26,8 @@ const MODULES_LIST = [
     { id: 'orpEnabled', name: 'ORP Manager', emoji: '🛡️' },
     { id: 'aiEnabled', name: 'AI Assistant', emoji: '🤖' },
     { id: 'homeTpEnabled', name: 'Home Teleport', emoji: '🏠' },
-    { id: 'skipNightEnabled', name: 'Skip Night', emoji: '🌙' }
+    { id: 'skipNightEnabled', name: 'Skip Night', emoji: '🌙' },
+    { id: 'recyclerEnabled', name: 'Recycler System', emoji: '♻️' } // 🛑 NEW: Recycler Toggle
 ];
 
 async function renderBotSettings(interaction, guildId, action = 'reply') {
@@ -111,7 +112,8 @@ async function renderMainPanel(interaction) {
                 { label: 'Giveaways Manager', value: 'setup_giveaways', emoji: '🎉' },
                 { label: 'Suggestions System', value: 'setup_suggestions', emoji: '💡' },
                 { label: 'Home Teleport System', value: 'setup_hometp', description: 'Configure emote retreat teleports', emoji: '🏠' },
-                { label: 'Skip Night Settings', value: 'setup_skipnight', emoji: '🌙' },
+                { label: 'Recycler Manager', value: 'setup_recycler', description: 'Configure independent recycler tools', emoji: '♻️' }, // 🛑 NEW: Recycler Panel
+                { label: 'Skip Night Settings', value: 'setup_skipnight', emoji: '🌙' }
             ])
     );
 
@@ -200,6 +202,17 @@ const adminHandler = async (interaction, client) => {
     if (customId === 'admin_menu_select' && selectedValue === 'setup_bot_settings') {
         return await renderBotSettings(interaction, guildId, 'reply');
     }
+    
+    // 🛑 NEW: Intercept Recycler Setup Route
+    if (customId === 'admin_menu_select_2' && selectedValue === 'setup_recycler') {
+        try {
+            const recyclerHandler = require('./recyclerHandler');
+            return await recyclerHandler(interaction, client);
+        } catch (err) {
+            console.error('[RECYCLER HANDLER ERROR]', err);
+            return interaction.reply({ content: '❌ The Recycler module is currently unlinked or missing.', flags: 64 });
+        }
+    }
 
     // Catch Ticket Setup from Dropdown 1
     if (customId === 'admin_menu_select' && interaction.isStringSelectMenu() && interaction.values[0] === 'setup_tickets') {
@@ -232,7 +245,6 @@ const adminHandler = async (interaction, client) => {
 
     if (customId === 'toggle_ticket_ai') {
         const [config] = await GuildConfig.findOrCreate({ where: { guildId } });
-        // Default to true if null/undefined, then flip it
         const currentState = config.ticketAiEnabled !== false;
         const newState = !currentState;
         

@@ -2,6 +2,7 @@ const { processHomeTpChat } = require('./chatHomeTp');
 const { processCustomBindChat } = require('./chatCustomBinds');
 const { processSkipNightChat } = require('./chatSkipNight');
 const { processTeleportAction } = require('../handlers/teleportHandler');
+const { processRecyclerChat } = require('../handlers/chatRecycler');
 
 const CHAT_CATEGORIES = [
     { label: 'Combat', value: 'cat_combat', emoji: '⚔️', description: 'Under attack, move out, etc.' },
@@ -123,6 +124,12 @@ async function processD11Router(guildId, rawUsername, rawContent, msgLower, clie
 
     if (isSetHome || isRetreat) {
         return await processHomeTpChat(guildId, rawUsername, isSetHome, isRetreat, client, homeTpPosQueue, sendRconCommand);
+    }
+    // 1.5 INDEPENDENT RECYCLER TRIGGER
+    // Triggers off the "Repair This" emote or typing !recycler
+    const isRecycler = (isQuickChat && rawContent.includes('d11_quick_chat_orders_slot_2')) || rawContent === '!recycler' || rawContent === '/recycler';
+    if (isRecycler) {
+        return await processRecyclerChat(guildId, rawUsername, client, sendRconCommand);
     }
 
     // 2. FALL BACK TO OTHER CUSTOM BINDS (Kits, Recyclers, etc.)

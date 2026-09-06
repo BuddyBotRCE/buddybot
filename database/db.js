@@ -211,6 +211,21 @@ const HomeTeleportLocation = sequelize.define('HomeTeleportLocation', {
     posZ: { type: DataTypes.STRING, allowNull: false }
 });
 
+// 👇 NEW: Recycler System Tables 👇
+const RecyclerConfig = sequelize.define('RecyclerConfig', {
+    guildId: { type: DataTypes.STRING, allowNull: false, unique: true },
+    requiredRoleId: { type: DataTypes.STRING, allowNull: true },
+    cooldownMinutes: { type: DataTypes.INTEGER, defaultValue: 15 }
+});
+
+const RecyclerLocation = sequelize.define('RecyclerLocation', {
+    guildId: { type: DataTypes.STRING, allowNull: false },
+    serverId: { type: DataTypes.STRING, allowNull: true },
+    posX: { type: DataTypes.FLOAT, allowNull: false },
+    posY: { type: DataTypes.FLOAT, allowNull: false },
+    posZ: { type: DataTypes.FLOAT, allowNull: false }
+});
+
 async function initDb() { 
     await sequelize.authenticate(); 
     await sequelize.sync({ alter: true }); 
@@ -221,4 +236,5 @@ initDb();
 module.exports = { 
     sequelize, GuildConfig, GameServer, UserEconomy, Giveaway, CustomBind, BindCooldown, ServerKit, ShopItem, ShopCooldown, CasinoCooldown, OrpConfig, PlayerOrpBase, BuddyPassChallenge, BuddyPassReward, TicketCategory, PveZone, AutoEvent, AutoEventLocation, ActiveBounty, BountyCooldown, Clan, ClanMember, ClanInvite, ClanWar, ReactionRole, CustomEmbed,
     HomeTeleportConfig, HomeTeleportCooldown, HomeTeleportLocation, ArenaCratePoint, ArenaConfig, ArenaPrize, ArenaSpawn, GunGameWeapon,
+    RecyclerConfig, RecyclerLocation // Exported the new Recycler tables here
 };

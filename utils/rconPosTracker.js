@@ -167,6 +167,20 @@ async function handleRconLogMessage(guildId, msg) {
                     }
                 } catch (error) { console.error('[CUSTOM ZONE RCON SAVE ERROR]', error); }
             }
+            // === D. RECYCLER LOCATION ===
+            else if (setupData.type === 'recycler') {
+                try {
+                    const { RecyclerLocation } = require('../database/db');
+                    await RecyclerLocation.upsert({ guildId: setupData.guildId, posX, posY, posZ });
+                    const recyclerHandler = require('../handlers/recyclerHandler');
+                    if (recyclerHandler && recyclerHandler.refreshPanelViaInteraction) {
+                        await recyclerHandler.refreshPanelViaInteraction(
+                            setupData.interaction,
+                            `✅ **Recycler Position Saved!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``
+                        );
+                    }
+                } catch (error) { console.error('[RECYCLER RCON SAVE ERROR]', error); }
+            }
 
             adminPosQueue.delete(adminId);
             return true; 
