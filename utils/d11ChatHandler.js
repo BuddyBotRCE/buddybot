@@ -2,7 +2,7 @@ const { processHomeTpChat } = require('./chatHomeTp');
 const { processCustomBindChat } = require('./chatCustomBinds');
 const { processSkipNightChat } = require('./chatSkipNight');
 const { processTeleportAction } = require('../handlers/teleportHandler');
-const { processRecyclerChat } = require('../handlers/chatRecycler');
+const { processRecyclerChat } = require('./chatRecycler');
 
 const CHAT_CATEGORIES = [
     { label: 'Combat', value: 'cat_combat', emoji: '⚔️', description: 'Under attack, move out, etc.' },
