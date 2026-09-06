@@ -54,10 +54,11 @@ async function processHomeTpChat(guildId, rawUsername, isSetHome, isRetreat, cli
             }
         }, 120000); 
 
-        // 5. Register them in the queue so rconManager catches their "spawned at" log
+        // 5. Register them in the queue so rconManager catches their spawn
         homeTpPosQueue.set(matchedPlayer.userId, { 
             userId: matchedPlayer.userId, 
             inGameName: matchedPlayer.inGameName, 
+            state: 'waiting_for_spawn', // 🛑 NEW: Tell the scanner to wait for your respawn
             serverId: null,
             timeoutTimer 
         });

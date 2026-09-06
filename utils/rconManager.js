@@ -185,23 +185,29 @@ async function connectRcon(guildId, client, targetServerId = null) {
                 // ==========================================
                 if (homeTpPosQueue.size > 0) {
                     for (const [userId, tpData] of homeTpPosQueue.entries()) {
-                        // Look for their name and a spawn/wake indicator
-                        if (msgLower.includes(tpData.inGameName.toLowerCase()) && (msgLower.includes('spawn') || msgLower.includes('wake') || msgLower.includes('respawn') || msgLower.includes('teleport'))) {
-                            
+                        
+                        // STEP 1: Wait for them to wake up / spawn on the bag
+                        if (tpData.state === 'waiting_for_spawn') {
+                            if (msgLower.includes(tpData.inGameName.toLowerCase()) && (msgLower.includes('spawn') || msgLower.includes('wake') || msgLower.includes('respawn'))) {
+                                // They woke up! Ask the server for their coordinates immediately.
+                                tpData.state = 'waiting_for_pos';
+                                sendRconCommand(guildId, `printpos "${tpData.inGameName}"`, client).catch(()=>{});
+                                continue;
+                            }
+                        }
+
+                        // STEP 2: Catch the naked coordinates the server spits out
+                        if (tpData.state === 'waiting_for_pos') {
                             let posX, posY, posZ;
                             let foundPos = false;
 
-                            // Flexible Regex to match RCE coordinate patterns
                             const nakedCoordMatch = msg.match(/(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)/);
                             if (nakedCoordMatch) {
                                 posX = parseFloat(nakedCoordMatch[1]).toFixed(2);
                                 posY = parseFloat(nakedCoordMatch[2]).toFixed(2);
                                 posZ = parseFloat(nakedCoordMatch[3]).toFixed(2);
                                 foundPos = true;
-                            }
-
-                            // Ultimate Fallback Regex (just grabs the last 3 floats in the string)
-                            if (!foundPos) {
+                            } else {
                                 const matches = msg.match(/-?\d+(\.\d+)?/g);
                                 if (matches && matches.length >= 3) {
                                     const len = matches.length;
@@ -216,7 +222,7 @@ async function connectRcon(guildId, client, targetServerId = null) {
                                 await HomeTeleportLocation.upsert({ guildId, userId, posX, posY, posZ });
                                 if (tpData.timeoutTimer) clearTimeout(tpData.timeoutTimer);
                                 homeTpPosQueue.delete(userId);
-                                await sendRconCommand(guildId, `say "${tpData.inGameName}, your Home location has been successfully anchored!"`, client, tpData.serverId || null);
+                                await sendRconCommand(guildId, `say "✅ ${tpData.inGameName}, your Home location has been successfully anchored!"`, client);
                                 break;
                             }
                         }
