@@ -29,13 +29,17 @@ async function processHomeTpChat(guildId, rawUsername, isSetHome, isRetreat, cli
     // A. SET HOME TRIGGER (Emote: "Can I have a key")
     // ==========================================
     if (isSetHome) {
-        // Just notify and let your working kill/respawn flow happen
-        await sendRconCommand(guildId, `say "⚠️ ${matchedPlayer.inGameName}, respawn at your bed and use your tracking tool to anchor!"`, client);
+        // 1. Kill the player so they are forced to respawn on their bag/bed
+        await sendRconCommand(guildId, `say "⚠️ ${matchedPlayer.inGameName}, killing you to capture your bed spawn..."`, client);
+        await sendRconCommand(guildId, `killplayer "${matchedPlayer.inGameName}"`, client);
         
-        // Directly queue this player in your rconPosTracker to catch their next position output!
+        // 2. Queue them into your rconPosTracker to automatically pull coordinates
         try {
             const { queueHomeTpPos } = require('../utils/rconPosTracker');
-            await queueHomeTpPos(guildId, matchedPlayer.userId, matchedPlayer.inGameName, client);
+            // Wait 3.5 seconds to ensure they have clicked respawn on their bag
+            setTimeout(async () => {
+                await queueHomeTpPos(guildId, matchedPlayer.userId, matchedPlayer.inGameName, client);
+            }, 3500);
         } catch (err) {
             console.error('[HOME TP ERROR]', err);
         }
