@@ -32,37 +32,15 @@ async function processHomeTpChat(guildId, rawUsername, isSetHome, isRetreat, cli
         await sendRconCommand(guildId, `say "⚠️ ${matchedPlayer.inGameName}, killing you to capture your bed spawn..."`, client);
         await sendRconCommand(guildId, `killplayer "${matchedPlayer.inGameName}"`, client);
         
-        if (homeTpPosQueue.has(matchedPlayer.userId)) {
-            clearTimeout(homeTpPosQueue.get(matchedPlayer.userId).timeoutTimer);
-        }
-        
-        // 🛑 BULLETPROOF TIMED CAPTURE:
-        // Instead of guessing when you spawn from chat lines, we wait 3.5 seconds 
-        // (giving you time to click respawn on your bag), then automatically request your coords!
-        const captureTimer = setTimeout(async () => {
+        // Wait 3.5 seconds for you to click respawn on your bag, then fire printpos via your rconPosTracker module!
+        setTimeout(async () => {
             try {
-                console.log(`[HOME TP] Auto-fetching bed coordinates for ${matchedPlayer.inGameName}...`);
-                // Register into the manager's queue temporarily so it catches the incoming printpos response
-                homeTpPosQueue.set(matchedPlayer.userId, {
-                    userId: matchedPlayer.userId,
-                    inGameName: matchedPlayer.inGameName,
-                    state: 'waiting_for_pos',
-                    timeoutTimer: setTimeout(() => homeTpPosQueue.delete(matchedPlayer.userId), 5000)
-                });
-                
-                await sendRconCommand(guildId, `printpos "${matchedPlayer.inGameName}"`, client);
+                const { queueHomeTpPos } = require('../utils/rconPosTracker');
+                await queueHomeTpPos(guildId, matchedPlayer.userId, matchedPlayer.inGameName, client);
             } catch (err) {
-                console.error('[HOME TP ERROR] Failed to auto-fetch bed position:', err);
+                console.error('[HOME TP ERROR] Failed to queue bed coordinates:', err);
             }
-        }, 3500); 
-
-        homeTpPosQueue.set(matchedPlayer.userId, { 
-            userId: matchedPlayer.userId, 
-            inGameName: matchedPlayer.inGameName, 
-            state: 'waiting_for_spawn',
-            serverId: null,
-            timeoutTimer: captureTimer 
-        });
+        }, 3500);
         
         return true;
     }

@@ -1,10 +1,31 @@
 // ============================================================================
 // STANDALONE RCON POSITION TRACKER FOR RUST CONSOLE EDITION
 // ============================================================================
-const { UserEconomy, CustomBind } = require('../database/db');
+const { UserEconomy, CustomBind, HomeTeleportLocation } = require('../database/db');
 
-// Replaces the queue that used to be in rconManager
+// Queues for admins and home teleports
 const adminPosQueue = new Map();
+const homeTpPosQueue = new Map();
+
+async function queueHomeTpPos(guildId, userId, inGameName, client, serverId = null) {
+    if (homeTpPosQueue.has(userId)) clearTimeout(homeTpPosQueue.get(userId).timeoutTimer);
+
+    const timeoutTimer = setTimeout(() => {
+        if (homeTpPosQueue.has(userId)) {
+            homeTpPosQueue.delete(userId);
+        }
+    }, 15000);
+
+    homeTpPosQueue.set(userId, { guildId, userId, inGameName, timeoutTimer, serverId, client });
+
+    try {
+        const { sendRconCommand } = require('./rconManager');
+        await sendRconCommand(guildId, `printpos "${inGameName}"`, client, serverId);
+    } catch (err) {
+        homeTpPosQueue.delete(userId);
+        console.error('[RCON POS TRACKER HOME TP ERROR]', err);
+    }
+}
 
 /**
  * Request coordinates from an in-game admin via RCON
@@ -47,6 +68,36 @@ async function captureAdminPosition(interaction, type = 'custom_bind', targetId 
  * Handle incoming RCON console logs to intercept player coordinates
  */
 async function handleRconLogMessage(guildId, msg) {
+    // 1. === HOME TELEPORT INTERCEPT ===
+    if (homeTpPosQueue.size > 0) {
+        for (const [userId, tpData] of homeTpPosQueue.entries()) {
+            if (tpData.guildId !== guildId) continue;
+
+            let posX, posY, posZ;
+            let foundPos = false;
+
+            const nakedCoordMatch = msg.match(/(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)/);
+            if (nakedCoordMatch) {
+                posX = parseFloat(nakedCoordMatch[1]).toFixed(2);
+                posY = parseFloat(nakedCoordMatch[2]).toFixed(2);
+                posZ = parseFloat(nakedCoordMatch[3]).toFixed(2);
+                foundPos = true;
+            }
+
+            if (foundPos) {
+                if (tpData.timeoutTimer) clearTimeout(tpData.timeoutTimer);
+                homeTpPosQueue.delete(userId);
+
+                const { sendRconCommand } = require('./rconManager');
+
+                await HomeTeleportLocation.upsert({ guildId, userId, posX, posY, posZ });
+                await sendRconCommand(guildId, `say "✅ ${tpData.inGameName}, your Home location has been successfully anchored!"`, tpData.client, tpData.serverId);
+                return true;
+            }
+        }
+    }
+
+    // 2. === ADMIN POSITION INTERCEPT ===
     if (adminPosQueue.size === 0) return false;
 
     const msgLower = msg.toLowerCase();
@@ -70,7 +121,7 @@ async function handleRconLogMessage(guildId, msg) {
             if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
             console.log(`[RCON POS TRACKER] Captured Coordinates for ${setupData.inGameName}: X:${posX}, Y:${posY}, Z:${posZ}`);
 
-            // === 1. CUSTOM BINDS ===
+            // === A. CUSTOM BINDS ===
             if (setupData.type === 'custom_bind') {
                 try {
                     const bind = await CustomBind.findByPk(setupData.targetId);
@@ -84,7 +135,7 @@ async function handleRconLogMessage(guildId, msg) {
                     }
                 } catch (error) { console.error('[CUSTOM BIND POS SAVE ERROR]', error); }
             } 
-            // === 2. AUTO EVENTS ===
+            // === B. AUTO EVENTS ===
             else if (setupData.type === 'auto_event') {
                 try {
                     const autoEventsHandler = require('../handlers/autoEventsHandler');
@@ -100,7 +151,7 @@ async function handleRconLogMessage(guildId, msg) {
                     }
                 } catch (error) { console.error('[AUTO EVENT RCON SAVE ERROR]', error); }
             }
-            // === 3. CUSTOM ZONES ===
+            // === C. CUSTOM ZONES ===
             else if (setupData.type === 'custom_zone') {
                 try {
                     const customZoneHandler = require('../handlers/customZoneHandler');
@@ -124,9 +175,10 @@ async function handleRconLogMessage(guildId, msg) {
     return false;
 }
 
-// Exporting as both names so your UI files don't break if they use queueAdminPos
+// Exporting with queueHomeTpPos included
 module.exports = {
     captureAdminPosition,
     queueAdminPos: captureAdminPosition, 
-    handleRconLogMessage
+    handleRconLogMessage,
+    queueHomeTpPos
 };
