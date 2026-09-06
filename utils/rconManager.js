@@ -185,13 +185,34 @@ async function connectRcon(guildId, client, targetServerId = null) {
                 // ==========================================
                 if (homeTpPosQueue.size > 0) {
                     for (const [userId, tpData] of homeTpPosQueue.entries()) {
-                        if ((rawUsername.toLowerCase() === tpData.inGameName.toLowerCase() || msgLower.includes(tpData.inGameName.toLowerCase())) && (msgLower.includes('spawn') || msgLower.includes('teleport') || msgLower.includes('respawn') || msgLower.includes('printpos'))) {
-                            const nakedCoordMatch = msg.match(/\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)/);
-                            if (nakedCoordMatch) {
-                                const posX = parseFloat(nakedCoordMatch[1]).toFixed(2);
-                                const posY = parseFloat(nakedCoordMatch[2]).toFixed(2);
-                                const posZ = parseFloat(nakedCoordMatch[3]).toFixed(2);
+                        // Look for their name and a spawn/wake indicator
+                        if (msgLower.includes(tpData.inGameName.toLowerCase()) && (msgLower.includes('spawn') || msgLower.includes('wake') || msgLower.includes('respawn') || msgLower.includes('teleport'))) {
+                            
+                            let posX, posY, posZ;
+                            let foundPos = false;
 
+                            // Flexible Regex to match RCE coordinate patterns
+                            const nakedCoordMatch = msg.match(/(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)/);
+                            if (nakedCoordMatch) {
+                                posX = parseFloat(nakedCoordMatch[1]).toFixed(2);
+                                posY = parseFloat(nakedCoordMatch[2]).toFixed(2);
+                                posZ = parseFloat(nakedCoordMatch[3]).toFixed(2);
+                                foundPos = true;
+                            }
+
+                            // Ultimate Fallback Regex (just grabs the last 3 floats in the string)
+                            if (!foundPos) {
+                                const matches = msg.match(/-?\d+(\.\d+)?/g);
+                                if (matches && matches.length >= 3) {
+                                    const len = matches.length;
+                                    posX = parseFloat(matches[len-3]).toFixed(2); 
+                                    posY = parseFloat(matches[len-2]).toFixed(2); 
+                                    posZ = parseFloat(matches[len-1]).toFixed(2);
+                                    foundPos = true;
+                                }
+                            }
+
+                            if (foundPos) {
                                 await HomeTeleportLocation.upsert({ guildId, userId, posX, posY, posZ });
                                 if (tpData.timeoutTimer) clearTimeout(tpData.timeoutTimer);
                                 homeTpPosQueue.delete(userId);
