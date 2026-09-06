@@ -6,9 +6,7 @@ async function processTeleportAction(guildId, rawUsername, rawContent, msgLower,
     });
     
     console.log(`========================================`);
-    console.log(`[TELEPORT DIAGNOSTIC] Incoming rawUsername: "${rawUsername}"`);
-    console.log(`[TELEPORT DIAGNOSTIC] Incoming rawContent: "${rawContent}"`);
-    console.log(`[TELEPORT DIAGNOSTIC] Incoming msgLower: "${msgLower}"`);
+    console.log(`[TELEPORT DIAGNOSTIC] rawUsername: "${rawUsername}" | rawContent: "${rawContent}" | msgLower: "${msgLower}"`);
     console.log(`[TELEPORT DIAGNOSTIC] Found ${serverBinds.length} teleport binds in DB.`);
     
     if (serverBinds.length === 0) return false;
@@ -21,49 +19,53 @@ async function processTeleportAction(guildId, rawUsername, rawContent, msgLower,
         const phrase = bind.targetValue.toLowerCase().trim();
         const content = rawContent.toLowerCase().trim();
         
-        console.log(`[TELEPORT DIAGNOSTIC] Comparing Database Phrase: "${phrase}" against Incoming Content: "${content}"`);
+        console.log(`[TELEPORT CHECK] Comparing Phrase: "${phrase}" against Content: "${content}"`);
 
-        // Strict match or phrase containment check suitable for RCE log streams
+        // Flexible match for RCE quick-chats and command strings
         if (content === phrase || content.includes(phrase) || msgLower.includes(phrase)) {
-            console.log(`[SUCCESS!] MATCH FOUND for Teleport Bind: "${bind.name}"! Executing...`);
+            console.log(`[SUCCESS!] MATCH FOUND for Teleport Bind: "${bind.name}"!`);
             
             let matchedPlayer = null;
             
-            // 1. Try exact username match first
-            for (const player of registeredPlayers) {
-                if (player.inGameName && rawUsername.toLowerCase() === player.inGameName.toLowerCase()) {
-                    matchedPlayer = player;
-                    break;
-                }
-            }
-
-            // 2. Fallback: Search inside message text if rawUsername didn't line up perfectly
-            if (!matchedPlayer) {
+            // 1. Exact username match
+            if (rawUsername) {
                 for (const player of registeredPlayers) {
-                    if (player.inGameName && msgLower.includes(player.inGameName.toLowerCase())) {
+                    if (player.inGameName && rawUsername.toLowerCase() === player.inGameName.toLowerCase()) {
                         matchedPlayer = player;
                         break;
                     }
                 }
             }
 
+            // 2. Fallback search inside the message text
+            if (!matchedPlayer) {
+                for (const player of registeredPlayers) {
+                    if (player.inGameName && (msgLower.includes(player.inGameName.toLowerCase()) || rawContent.includes(player.inGameName.toLowerCase()))) {
+                        matchedPlayer = player;
+                        break;
+                    }
+                }
+            }
+
+            // 3. Ultimate fallback for single-player testing if only 1 registered player exists
+            if (!matchedPlayer && registeredPlayers.length === 1) {
+                matchedPlayer = registeredPlayers[0];
+            }
+
             if (matchedPlayer) {
                 const currency = currentConfig?.economyCurrency || 'Scrap';
                 
-                // Check if player has enough balance for the teleport cost
                 if (bind.cost > 0 && matchedPlayer.wallet < bind.cost) {
-                    console.log(`[TELEPORT DENIED] Player ${matchedPlayer.inGameName} lacks funds (${matchedPlayer.wallet}/${bind.cost} ${currency})`);
+                    console.log(`[TELEPORT DENIED] ${matchedPlayer.inGameName} lacks funds (${matchedPlayer.wallet}/${bind.cost})`);
                     await sendRconCommand(guildId, `say "${matchedPlayer.inGameName}, you need ${bind.cost} ${currency} to use this teleport!"`, client);
                     return true;
                 }
                 
-                // Deduct cost from economy wallet
                 if (bind.cost > 0) {
                     await matchedPlayer.update({ wallet: matchedPlayer.wallet - bind.cost });
                     console.log(`[TELEPORT ECONOMY] Deducted ${bind.cost} ${currency} from ${matchedPlayer.inGameName}`);
                 }
 
-                // Replace placeholder and execute RCON command string
                 const finalCommandString = bind.command.replace(/{player}/gi, matchedPlayer.inGameName);
                 console.log(`[TELEPORT EXECUTED] Running RCON: ${finalCommandString}`);
 
@@ -74,7 +76,7 @@ async function processTeleportAction(guildId, rawUsername, rawContent, msgLower,
                 }
                 return true;
             } else {
-                console.log(`[TELEPORT ERROR] Phrase matched for bind "${bind.name}", but no registered UserEconomy record found for player "${rawUsername}"!`);
+                console.log(`[TELEPORT ERROR] Phrase matched for bind "${bind.name}", but could not map to any registered player!`);
             }
         }
     }

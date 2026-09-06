@@ -2,7 +2,6 @@ const { CustomBind, UserEconomy, GuildConfig } = require('../database/db');
 const { processTeleportAction } = require('../handlers/teleportHandler');
 
 async function processCustomBindChat(guildId, rawUsername, rawContent, msgLower, client, sendRconCommand) {
-    // Route teleports to the dedicated handler first
     const handledTeleport = await processTeleportAction(guildId, rawUsername, rawContent, msgLower, client, sendRconCommand);
     if (handledTeleport) return true;
 
@@ -17,16 +16,28 @@ async function processCustomBindChat(guildId, rawUsername, rawContent, msgLower,
         const phrase = bind.targetValue.toLowerCase().trim();
         const content = rawContent.toLowerCase().trim();
         
-        if (content.includes(phrase) || phrase.includes(content) || msgLower.includes(phrase)) {
+        if (content === phrase || content.includes(phrase) || msgLower.includes(phrase)) {
             let matchedPlayer = null;
-            for (const player of registeredPlayers) {
-                if (player.inGameName && (rawUsername.toLowerCase() === player.inGameName.toLowerCase() || msgLower.includes(player.inGameName.toLowerCase()))) {
-                    matchedPlayer = player;
-                    break;
+            
+            if (rawUsername) {
+                for (const player of registeredPlayers) {
+                    if (player.inGameName && rawUsername.toLowerCase() === player.inGameName.toLowerCase()) {
+                        matchedPlayer = player;
+                        break;
+                    }
                 }
             }
 
-            if (!matchedPlayer && registeredPlayers.length > 0) {
+            if (!matchedPlayer) {
+                for (const player of registeredPlayers) {
+                    if (player.inGameName && (msgLower.includes(player.inGameName.toLowerCase()) || rawContent.includes(player.inGameName.toLowerCase()))) {
+                        matchedPlayer = player;
+                        break;
+                    }
+                }
+            }
+
+            if (!matchedPlayer && registeredPlayers.length === 1) {
                 matchedPlayer = registeredPlayers[0];
             }
 

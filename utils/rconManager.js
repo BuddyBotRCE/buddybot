@@ -175,7 +175,8 @@ async function connectRcon(guildId, client, targetServerId = null) {
                         let posX, posY, posZ;
                         let foundPos = false;
 
-                        const nakedCoordMatch = msg.match(/\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)/);
+                        // Flexible match for any coordinate format (with or without parenthesis)
+                        const nakedCoordMatch = msg.match(/(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)/);
                         if (nakedCoordMatch) {
                             posX = parseFloat(nakedCoordMatch[1]).toFixed(2);
                             posY = parseFloat(nakedCoordMatch[2]).toFixed(2);
@@ -183,11 +184,13 @@ async function connectRcon(guildId, client, targetServerId = null) {
                             foundPos = true;
                         }
 
-                        if (!foundPos && (rawUsername.toLowerCase() === setupData.inGameName.toLowerCase() || msgLower.includes(setupData.inGameName.toLowerCase())) && msgLower.includes('teleport')) {
+                        if (!foundPos) {
                             const matches = msg.match(/-?\d+(\.\d+)?/g);
                             if (matches && matches.length >= 3) {
                                 const len = matches.length;
-                                posX = parseFloat(matches[len-3]).toFixed(2); posY = parseFloat(matches[len-2]).toFixed(2); posZ = parseFloat(matches[len-1]).toFixed(2);
+                                posX = parseFloat(matches[len-3]).toFixed(2); 
+                                posY = parseFloat(matches[len-2]).toFixed(2); 
+                                posZ = parseFloat(matches[len-1]).toFixed(2);
                                 foundPos = true;
                             }
                         }
