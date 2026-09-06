@@ -1,5 +1,5 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { PrisonCell, JailedPlayer } = require('../database/db');
+const { PrisonCell, JailedPlayer, UserEconomy } = require('../database/db');
 const { captureAdminPosition } = require('../utils/rconPosTracker');
 
 async function renderPrisonPanel(interaction, messageOverride = '') {
@@ -66,10 +66,34 @@ module.exports = async (interaction, client) => {
             return await captureAdminPosition(interaction, 'prison_cell', cellNum);
         }
 
+        // STEP 1: Click "Jail Player" -> Fetch registered players and show a dropdown menu
         if (interaction.isButton() && customId === 'prison_btn_jail') {
-            const modal = new ModalBuilder().setCustomId('modal_prison_jail').setTitle('Sentence a Player');
+            const registeredPlayers = await UserEconomy.findAll({ where: { guildId } });
+            const validPlayers = registeredPlayers.filter(p => p.inGameName && p.inGameName.trim() !== '');
+
+            if (validPlayers.length === 0) {
+                return interaction.reply({ content: '❌ **No players found!** Players must link their in-game name via `/playerpanel` first before they can be selected.', flags: 64 });
+            }
+
+            const options = validPlayers.slice(0, 25).map(p => ({
+                label: p.inGameName.substring(0, 100),
+                value: `jail_target_${p.inGameName}`
+            }));
+
+            const menu = new StringSelectMenuBuilder()
+                .setCustomId('prison_select_jail_target')
+                .setPlaceholder('Select player to sentence...')
+                .addOptions(options);
+
+            return interaction.reply({ content: '⛓️ **Prison System:** Select the player you wish to send to jail:', components: [new ActionRowBuilder().addComponents(menu)], flags: 64 });
+        }
+
+        // STEP 2: Player selected from dropdown -> Open modal for Cell, Reason, and Duration
+        if (interaction.isStringSelectMenu() && customId === 'prison_select_jail_target') {
+            const targetName = selectedVal.replace('jail_target_', '');
+
+            const modal = new ModalBuilder().setCustomId(`modal_prison_jail_exec_${targetName}`).setTitle(`Sentence: ${targetName}`);
             modal.addComponents(
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('p_name').setLabel('In-Game Exact Name').setStyle(TextInputStyle.Short).setRequired(true)),
                 new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('p_cell').setLabel('Cell Number (1 - 20)').setStyle(TextInputStyle.Short).setRequired(true)),
                 new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('p_reason').setLabel('Mandatory Reason').setStyle(TextInputStyle.Short).setRequired(true)),
                 new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('p_mins').setLabel('Duration in Mins (Leave blank for Lifers)').setStyle(TextInputStyle.Short).setRequired(false))
@@ -86,28 +110,27 @@ module.exports = async (interaction, client) => {
         }
 
         if (interaction.isModalSubmit()) {
-            if (customId === 'modal_prison_jail') {
-                const name = interaction.fields.getTextInputValue('p_name').trim();
+            if (customId.startsWith('modal_prison_jail_exec_')) {
+                const targetName = customId.replace('modal_prison_jail_exec_', '');
                 const cellNum = parseInt(interaction.fields.getTextInputValue('p_cell'));
                 const reason = interaction.fields.getTextInputValue('p_reason').trim();
                 const mins = parseInt(interaction.fields.getTextInputValue('p_mins'));
 
                 const cellObj = await PrisonCell.findOne({ where: { guildId, cellNumber: cellNum } });
                 if (!cellObj) {
-                    return interaction.reply({ content: `❌ **Cell #${cellNum} has not been set up with coordinates yet!** Select it from the dropdown first.`, flags: 64 });
+                    return interaction.reply({ content: `❌ **Cell #${cellNum} has not been set up with coordinates yet!** Select it from the main panel dropdown first.`, flags: 64 });
                 }
 
                 const isTemp = !isNaN(mins) && mins > 0;
                 const expiresAt = isTemp ? new Date(Date.now() + mins * 60000) : null;
 
-                await JailedPlayer.upsert({ guildId, inGameName: name, reason, cellNumber: cellNum, isTemp, expiresAt, jailedBy: interaction.user.id });
+                await JailedPlayer.upsert({ guildId, inGameName: targetName, reason, cellNumber: cellNum, isTemp, expiresAt, jailedBy: interaction.user.id });
 
-                // Teleport them immediately via RCON
                 const { sendRconCommand } = require('../utils/rconManager');
-                await sendRconCommand(guildId, `teleportpos (${cellObj.posX},${cellObj.posY},${cellObj.posZ}) "${name}"`, client);
-                await sendRconCommand(guildId, `say "🔒 ${name} has been thrown into Cell #${cellNum} for: ${reason}!"`, client);
+                await sendRconCommand(guildId, `teleportpos (${cellObj.posX},${cellObj.posY},${cellObj.posZ}) "${targetName}"`, client);
+                await sendRconCommand(guildId, `say "🔒 ${targetName} has been thrown into Cell #${cellNum} for: ${reason}!"`, client);
 
-                return await renderPrisonPanel(interaction, `✅ Successfully jailed **${name}** in Cell #${cellNum}!`);
+                return interaction.update({ content: `✅ Successfully jailed **${targetName}** in Cell #${cellNum}!\n*Reason: ${reason}*`, components: [] });
             }
 
             if (customId === 'modal_prison_unjail') {
