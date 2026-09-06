@@ -27,7 +27,7 @@ const MODULES_LIST = [
     { id: 'aiEnabled', name: 'AI Assistant', emoji: '🤖' },
     { id: 'homeTpEnabled', name: 'Home Teleport', emoji: '🏠' },
     { id: 'skipNightEnabled', name: 'Skip Night', emoji: '🌙' },
-    { id: 'recyclerEnabled', name: 'Recycler System', emoji: '♻️' }
+    { id: 'recyclerEnabled', name: 'Recycler System', emoji: '♻️' } // 🛑 NEW: Recycler Toggle
 ];
 
 async function renderBotSettings(interaction, guildId, action = 'reply') {
@@ -112,7 +112,7 @@ async function renderMainPanel(interaction) {
                 { label: 'Giveaways Manager', value: 'setup_giveaways', emoji: '🎉' },
                 { label: 'Suggestions System', value: 'setup_suggestions', emoji: '💡' },
                 { label: 'Home Teleport System', value: 'setup_hometp', description: 'Configure emote retreat teleports', emoji: '🏠' },
-                { label: 'Recycler Manager', value: 'setup_recycler', description: 'Configure independent recycler tools', emoji: '♻️' },
+                { label: 'Recycler Manager', value: 'setup_recycler', description: 'Configure independent recycler tools', emoji: '♻️' }, // 🛑 NEW: Recycler Panel Here!
                 { label: 'Skip Night Settings', value: 'setup_skipnight', emoji: '🌙' }
             ])
     );
@@ -200,8 +200,8 @@ const adminHandler = async (interaction, client) => {
     if (customId === 'admin_menu_select' && selectedValue === 'setup_bot_settings') {
         return await renderBotSettings(interaction, guildId, 'reply');
     }
-
-    // THIS OPENS THE NEW RECYCLER UI
+    
+    // 🛑 NEW: Routes to the Recycler Panel
     if (customId === 'admin_menu_select_2' && selectedValue === 'setup_recycler') {
         try {
             const recyclerHandler = require('./recyclerHandler');
