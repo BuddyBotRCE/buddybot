@@ -44,10 +44,10 @@ const buildPanelPayload = async (guildId, messageOverride = '') => {
             ));
         }
 
+        // 🛑 REMOVED "NEW RECYCLER" BUTTON
         components.push(new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('bind_create_kit').setLabel('New Kit Bind').setStyle(ButtonStyle.Primary).setEmoji('📦'),
-            new ButtonBuilder().setCustomId('bind_create_teleport').setLabel('New Teleport').setStyle(ButtonStyle.Success).setEmoji('🌀'),
-            new ButtonBuilder().setCustomId('bind_create_recycler').setLabel('New Recycler').setStyle(ButtonStyle.Secondary).setEmoji('♻️')
+            new ButtonBuilder().setCustomId('bind_create_teleport').setLabel('New Teleport').setStyle(ButtonStyle.Success).setEmoji('🌀')
         ));
 
         if (allBinds.length > 0) {
@@ -389,12 +389,12 @@ const bindHandler = async (interaction, client) => {
                 const loweredY = (cY - 0.5).toFixed(2);
                 
                 let newCommand = '';
-if (bind.actionType === 'teleport') {
-    // Official Rust Console Edition format: teleportpos (X,Y,Z) "{player}"
-    newCommand = `teleportpos (${cX},${loweredY},${cZ}) "{player}"`;
-} else if (bind.actionType === 'recycler') {
-    newCommand = `spawn recycler_static (${cX},${loweredY},${cZ})`;
-}
+                if (bind.actionType === 'teleport') {
+                    // Official Rust Console Edition format: teleportpos (X,Y,Z) "{player}"
+                    newCommand = `teleportpos (${cX},${loweredY},${cZ}) "{player}"`;
+                } else if (bind.actionType === 'recycler') {
+                    newCommand = `spawn recycler_static (${cX},${loweredY},${cZ})`;
+                }
                 
                 await CustomBind.update({ command: newCommand }, { where: { id: session.selectedBindId } });
                 session.view = 'bind';

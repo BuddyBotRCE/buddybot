@@ -27,7 +27,7 @@ const MODULES_LIST = [
     { id: 'aiEnabled', name: 'AI Assistant', emoji: '🤖' },
     { id: 'homeTpEnabled', name: 'Home Teleport', emoji: '🏠' },
     { id: 'skipNightEnabled', name: 'Skip Night', emoji: '🌙' },
-    { id: 'recyclerEnabled', name: 'Recycler System', emoji: '♻️' } // 🛑 NEW: Recycler Toggle
+    { id: 'recyclerEnabled', name: 'Recycler System', emoji: '♻️' }
 ];
 
 async function renderBotSettings(interaction, guildId, action = 'reply') {
@@ -112,7 +112,7 @@ async function renderMainPanel(interaction) {
                 { label: 'Giveaways Manager', value: 'setup_giveaways', emoji: '🎉' },
                 { label: 'Suggestions System', value: 'setup_suggestions', emoji: '💡' },
                 { label: 'Home Teleport System', value: 'setup_hometp', description: 'Configure emote retreat teleports', emoji: '🏠' },
-                { label: 'Recycler Manager', value: 'setup_recycler', description: 'Configure independent recycler tools', emoji: '♻️' }, // 🛑 NEW: Recycler Panel
+                { label: 'Recycler Manager', value: 'setup_recycler', description: 'Configure independent recycler tools', emoji: '♻️' },
                 { label: 'Skip Night Settings', value: 'setup_skipnight', emoji: '🌙' }
             ])
     );
@@ -123,7 +123,6 @@ async function renderMainPanel(interaction) {
     return await interaction.update({ embeds: [embed], components: [row1, row2], content: null }).catch(() => {});
 }
 
-// --- HELPER: RENDER ADMIN MENU (TICKETS) ---
 async function renderAdminMenu(interaction, guildId, action = 'reply') {
     const config = await GuildConfig.findOrCreate({ where: { guildId } });
     const cfg = config[0];
@@ -157,7 +156,6 @@ async function renderAdminMenu(interaction, guildId, action = 'reply') {
     else await interaction.update(payload);
 }
 
-// --- HELPER: RENDER CATEGORY MANAGER ---
 async function renderCategoryManager(interaction, guildId, action = 'update') {
     const cats = await TicketCategory.findAll({ where: { guildId } });
 
@@ -202,8 +200,8 @@ const adminHandler = async (interaction, client) => {
     if (customId === 'admin_menu_select' && selectedValue === 'setup_bot_settings') {
         return await renderBotSettings(interaction, guildId, 'reply');
     }
-    
-    // 🛑 NEW: Intercept Recycler Setup Route
+
+    // THIS OPENS THE NEW RECYCLER UI
     if (customId === 'admin_menu_select_2' && selectedValue === 'setup_recycler') {
         try {
             const recyclerHandler = require('./recyclerHandler');
@@ -214,12 +212,10 @@ const adminHandler = async (interaction, client) => {
         }
     }
 
-    // Catch Ticket Setup from Dropdown 1
     if (customId === 'admin_menu_select' && interaction.isStringSelectMenu() && interaction.values[0] === 'setup_tickets') {
         return await renderAdminMenu(interaction, guildId, 'reply');
     }
 
-    // Catch AI Setup from BOTH Dropdown 1 and Dropdown 2
     if ((customId === 'admin_menu_select' || customId === 'admin_menu_select_2') && selectedValue === 'setup_ai') {
         const config = await GuildConfig.findOne({ where: { guildId: interaction.guild.id } });
         const isEnabled = config?.aiEnabled !== false;
