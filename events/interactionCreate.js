@@ -28,6 +28,7 @@ const autoModHandler = require(handlerPath('autoModHandler'));
 const wipeHandler = require(handlerPath('wipeHandler')); 
 const homeTpHandler = require(handlerPath('homeTpHandler'));
 const skipNightHandler = require(handlerPath('skipNightHandler'));
+const recyclerHandler = require(handlerPath('recyclerHandler')); // 🛑 NEW: Imported Recycler Handler
 
 module.exports = async (interaction, client) => {
     try {
@@ -140,6 +141,9 @@ module.exports = async (interaction, client) => {
             if (selectedValue.includes('pve') || selectedValue.includes('zone') || selectedValue === 'setup_custom_zones') return await customZoneHandler(interaction, client);
             if (selectedValue === 'setup_automod') return await autoModHandler(interaction, client);
             if (selectedValue === 'setup_hometp') return await homeTpHandler(interaction, client);
+            
+            // 🛑 NEW: Route Dropdown to Recycler Handler
+            if (selectedValue === 'setup_recycler') return await recyclerHandler(interaction, client);
 
             return await adminHandler(interaction, client);
         }
@@ -294,6 +298,11 @@ module.exports = async (interaction, client) => {
 
         if (customId.includes('kit') && !customId.includes('ticket')) {
             return await kitHandler(interaction, client);
+        }
+
+        // 🛑 NEW: Route any buttons/menus inside the Recycler Panel
+        if (customId.includes('recycler')) {
+            return await recyclerHandler(interaction, client);
         }
 
         return await adminHandler(interaction, client);
