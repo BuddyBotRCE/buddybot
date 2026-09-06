@@ -110,7 +110,7 @@ async function connectRcon(guildId, client, targetServerId = null) {
             }
         }, eventEmitterCallback);
 
-        // --- SAFE PARSER PATCH 2: Main WebSocket Listener ---
+                // --- SAFE PARSER PATCH 2: Main WebSocket Listener ---
         ws.on('message', async (data) => {
             try {
                 const rawStr = data.toString();
@@ -126,10 +126,17 @@ async function connectRcon(guildId, client, targetServerId = null) {
 
                 if (!msg) return;
 
-                // 🛑 NEW: Feed the standalone position tracker immediately!
+                // 🛑 ANTI-SPAM: Completely block raw JSON code chunks from GPortal!
+                if (msg.includes('"username":') || msg.includes('"userid":') || msg.includes('"stacktrace":') || msg.trim().startsWith('{')) {
+                    return;
+                }
+
+                // 🛑 Feed the standalone position tracker immediately!
                 if (typeof handleRconLogMessage === 'function') {
                     await handleRconLogMessage(guildId, msg);
                 }
+                
+                // ... (the rest of your listener continues normally below this)
 
                 // 🛑 NEW: Ignore GPortal Auto-Save Spam so it doesn't trigger fake chats
                 if (msg.includes('[ SAVE ]') || msg.includes('Starting auto save') || msg.includes('Begining save')) {
