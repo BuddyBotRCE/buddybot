@@ -2,10 +2,9 @@ const WebSocket = require('ws');
 const { GuildConfig, GameServer, UserEconomy, CustomBind, BindCooldown, ActiveBounty, BountyCooldown, HomeTeleportConfig, HomeTeleportCooldown, HomeTeleportLocation } = require('../database/db');
 const { EmbedBuilder } = require('discord.js');
 const { processD11Router } = require('./d11ChatHandler'); // Linked to your D11 router
-const { handleRconLogMessage } = require('./rconPosTracker');
+const { handleRconLogMessage } = require('./rconPosTracker'); // Our standalone position tracker
 
 const activeConnections = new Map();
-const adminPosQueue = new Map(); 
 const homeTpPosQueue = new Map(); 
 
 function registerEventParser(rconMock, emit) {
@@ -113,7 +112,6 @@ async function connectRcon(guildId, client, targetServerId = null) {
 
         // --- SAFE PARSER PATCH 2: Main WebSocket Listener ---
         ws.on('message', async (data) => {
-            console.log(`[RAW WEBSOCKET PACKET]:`, data.toString());
             try {
                 const rawStr = data.toString();
                 let msg = '';
@@ -127,6 +125,16 @@ async function connectRcon(guildId, client, targetServerId = null) {
                 }
 
                 if (!msg) return;
+
+                // 🛑 NEW: Feed the standalone position tracker immediately!
+                if (typeof handleRconLogMessage === 'function') {
+                    await handleRconLogMessage(guildId, msg);
+                }
+
+                // 🛑 NEW: Ignore GPortal Auto-Save Spam so it doesn't trigger fake chats
+                if (msg.includes('[ SAVE ]') || msg.includes('Starting auto save') || msg.includes('Begining save')) {
+                    return; 
+                }
                 
                 const msgLower = msg.toLowerCase();
                 let rawUsername = '';
@@ -163,98 +171,10 @@ async function connectRcon(guildId, client, targetServerId = null) {
                     return;
                 }
 
-                // Debug log to confirm the parser caught it successfully
-                console.log(`[SAFE PARSER] Caught Chat/Quick-Chat: ${rawContent} from ${rawUsername}`);
-
                 const currentConfig = await GuildConfig.findOne({ where: { guildId: guildId } });
 
                 // ==========================================
-                // 1. POSITION INTERCEPTOR (ADMIN / SETUP TOOLS)
-                // ==========================================
-                if (adminPosQueue.size > 0) {
-                    for (const [adminId, setupData] of adminPosQueue.entries()) {
-                        let posX, posY, posZ;
-                        let foundPos = false;
-
-                        // Flexible match for any coordinate format (with or without parenthesis)
-                        const nakedCoordMatch = msg.match(/(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)/);
-                        if (nakedCoordMatch) {
-                            posX = parseFloat(nakedCoordMatch[1]).toFixed(2);
-                            posY = parseFloat(nakedCoordMatch[2]).toFixed(2);
-                            posZ = parseFloat(nakedCoordMatch[3]).toFixed(2);
-                            foundPos = true;
-                        }
-
-                        if (!foundPos) {
-                            const matches = msg.match(/-?\d+(\.\d+)?/g);
-                            if (matches && matches.length >= 3) {
-                                const len = matches.length;
-                                posX = parseFloat(matches[len-3]).toFixed(2); 
-                                posY = parseFloat(matches[len-2]).toFixed(2); 
-                                posZ = parseFloat(matches[len-1]).toFixed(2);
-                                foundPos = true;
-                            }
-                        }
-
-                        if (foundPos) {
-                            if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
-
-                            if (setupData.type === 'custom_bind') {
-                                try {
-                                    const bind = await CustomBind.findByPk(setupData.targetId);
-                                    if (bind) {
-                                       let command = bind.actionType === 'teleport' ? `teleportpos (${posX},${parseFloat(posY)-0.5},${posZ}) "{player}"` : `spawn recycler_static (${posX},${parseFloat(posY)-0.5},${posZ})`; 
-                                        await bind.update({ command });
-                                    }
-                                    const bindHandler = require('../handlers/bindHandler');
-                                    if (bindHandler && bindHandler.refreshPanelViaInteraction) {
-                                        await bindHandler.refreshPanelViaInteraction(setupData.interaction, `✅ **Position Captured!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``, setupData.targetId);
-                                    }
-                                } catch (error) {}
-                            } 
-                            else if (setupData.type === 'auto_event') {
-                                try {
-                                    const autoEventsHandler = require('../handlers/autoEventsHandler');
-                                    if (autoEventsHandler && autoEventsHandler.autoSaveLocation) {
-                                        await autoEventsHandler.autoSaveLocation(setupData.interaction.guild.id, posX, posY, posZ, setupData.targetId);
-                                    }
-                                    if (autoEventsHandler && autoEventsHandler.refreshPanelViaInteraction) {
-                                        await autoEventsHandler.refreshPanelViaInteraction(
-                                            setupData.interaction,
-                                            `✅ **Spawn Position Added!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``,
-                                            setupData.targetId
-                                        );
-                                    }
-                                } catch (error) {
-                                    console.error('[AUTO EVENT RCON SAVE ERROR]', error);
-                                }
-                            }
-                            else if (setupData.type === 'custom_zone') {
-                                try {
-                                    const customZoneHandler = require('../handlers/customZoneHandler');
-                                    if (customZoneHandler && customZoneHandler.autoSaveLocation) {
-                                        await customZoneHandler.autoSaveLocation(setupData.interaction.guild.id, posX, posY, posZ, setupData.targetId);
-                                    }
-                                    if (customZoneHandler && customZoneHandler.refreshPanelViaInteraction) {
-                                        await customZoneHandler.refreshPanelViaInteraction(
-                                            setupData.interaction,
-                                            `✅ **Zone Center Position Saved!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``,
-                                            setupData.targetId
-                                        );
-                                    }
-                                } catch (error) {
-                                    console.error('[CUSTOM ZONE RCON SAVE ERROR]', error);
-                                }
-                            }
-
-                            adminPosQueue.delete(adminId);
-                            break;
-                        }
-                    }
-                }
-
-                // ==========================================
-                // 1.1 HOME TELEPORT RESPAWN SCANNER INTERCEPTOR
+                // 1. HOME TELEPORT RESPAWN SCANNER INTERCEPTOR
                 // ==========================================
                 if (homeTpPosQueue.size > 0) {
                     for (const [userId, tpData] of homeTpPosQueue.entries()) {
@@ -321,7 +241,7 @@ async function connectRcon(guildId, client, targetServerId = null) {
                 }
 
                 // ==========================================
-                // 4. D11 QUICK-CHAT ROUTER & CUSTOM BINDS
+                // 3. D11 QUICK-CHAT ROUTER & CUSTOM BINDS
                 // ==========================================
                 const handled = await processD11Router(guildId, rawUsername, rawContent, msgLower, client, homeTpPosQueue, sendRconCommand);
                 if (handled) return;
@@ -339,35 +259,6 @@ async function sendRconCommand(guildId, commandStr, client = null, serverId = nu
     if (!ws || ws.readyState !== WebSocket.OPEN) throw new Error("Not connected to RCON.");
     ws.send(JSON.stringify({ Identifier: 1, Message: commandStr, Name: "BuddyBot" }));
     return true;
-}
-
-async function queueAdminPos(interaction, type = 'custom_bind', targetId = null, serverId = null) {
-    const guildId = interaction.guild.id;
-    const adminId = interaction.user.id;
-    const client = interaction.client;
-
-    const userProfile = await UserEconomy.findOne({ where: { userId: adminId } });
-    if (!userProfile || !userProfile.inGameName) {
-        return interaction.editReply({ content: `❌ **Missing In-Game Name!** Link your gamertag via \`/playerpanel\` first!` }).catch(()=>{});
-    }
-
-    const inGameName = userProfile.inGameName;
-    if (adminPosQueue.has(adminId)) clearTimeout(adminPosQueue.get(adminId).timeoutTimer);
-
-    const timeoutTimer = setTimeout(async () => {
-        if (adminPosQueue.has(adminId)) {
-            adminPosQueue.delete(adminId);
-            await interaction.editReply({ content: `⚠️ **Auto-Scan Failed.** Make sure you are online as \`${inGameName}\` and try again.` }).catch(()=>{});
-        }
-    }, 8000);
-
-    adminPosQueue.set(adminId, { guildId, adminId, type, timeoutTimer, inGameName, targetId, interaction, serverId });
-    
-    try {
-        await sendRconCommand(guildId, `printpos "${inGameName}"`, client, serverId);
-    } catch (err) {
-        adminPosQueue.delete(adminId);
-    }
 }
 
 async function triggerCustomEvent(guildId, eventType, data = {}) {
@@ -431,4 +322,5 @@ async function fetchServerKits(guildId) {
     });
 }
 
-module.exports = { connectRcon, sendRconCommand, triggerCustomEvent, activeConnections, adminPosQueue, queueAdminPos, fetchServerKits };
+// Notice how we removed queueAdminPos and adminPosQueue from the exports below!
+module.exports = { connectRcon, sendRconCommand, triggerCustomEvent, activeConnections, fetchServerKits };

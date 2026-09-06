@@ -1,77 +1,132 @@
 // ============================================================================
 // STANDALONE RCON POSITION TRACKER FOR RUST CONSOLE EDITION
 // ============================================================================
+const { UserEconomy, CustomBind } = require('../database/db');
 
-const pendingPosRequests = new Map();
+// Replaces the queue that used to be in rconManager
+const adminPosQueue = new Map();
 
 /**
  * Request coordinates from an in-game admin via RCON
- * @param {import('discord.js').Interaction} interaction 
- * @param {string} targetModule - e.g., 'custom_zone', 'br_spawn', 'br_crate', 'gg_spawn'
- * @param {any} targetId - Database ID or identifier
- * @param {Function} onSaveCallback - Function to call with (guildId, x, y, z, targetId)
- * @param {Function} onRefreshCallback - Function to call to refresh the UI
  */
-async function captureAdminPosition(interaction, targetModule, targetId, onSaveCallback, onRefreshCallback) {
+async function captureAdminPosition(interaction, type = 'custom_bind', targetId = null, serverId = null) {
     const guildId = interaction.guild.id;
-    
-    // Store request context
-    pendingPosRequests.set(guildId, {
-        targetModule,
-        targetId,
-        interaction,
-        onSaveCallback,
-        onRefreshCallback,
-        timestamp: Date.now()
-    });
+    const adminId = interaction.user.id;
+    const client = interaction.client;
 
+    const userProfile = await UserEconomy.findOne({ where: { userId: adminId } });
+    if (!userProfile || !userProfile.inGameName) {
+        return interaction.editReply({ content: `❌ **Missing In-Game Name!** Link your gamertag via \`/playerpanel\` first!` }).catch(()=>{});
+    }
+
+    const inGameName = userProfile.inGameName;
+    if (adminPosQueue.has(adminId)) clearTimeout(adminPosQueue.get(adminId).timeoutTimer);
+
+    const timeoutTimer = setTimeout(async () => {
+        if (adminPosQueue.has(adminId)) {
+            adminPosQueue.delete(adminId);
+            await interaction.editReply({ content: `⚠️ **Auto-Scan Failed.** Make sure you are online as \`${inGameName}\` and try again.` }).catch(()=>{});
+        }
+    }, 8000);
+
+    adminPosQueue.set(adminId, { guildId, adminId, type, timeoutTimer, inGameName, targetId, interaction, serverId });
+    
     try {
-        // LAZY LOAD: Require this here to prevent Circular Dependency crashes
+        // LAZY LOAD to avoid circular dependency
         const { sendRconCommand } = require('./rconManager');
         
-        // Send printpos command to Rust Console server
-        await sendRconCommand(guildId, 'printpos', interaction.client);
+        // RCE command: printpos "Gamertag"
+        await sendRconCommand(guildId, `printpos "${inGameName}"`, client, serverId);
     } catch (err) {
-        console.error('[RCON POS TRACKER ERROR] Failed to send printpos:', err);
-        pendingPosRequests.delete(guildId);
-        if (interaction.isRepliable() && !interaction.replied) {
-            await interaction.reply({ content: '❌ Failed to communicate with Rust Console RCON server.', flags: 64 }).catch(() => {});
-        }
+        adminPosQueue.delete(adminId);
+        console.error('[RCON POS TRACKER ERROR]', err);
     }
 }
 
 /**
  * Handle incoming RCON console logs to intercept player coordinates
- * @param {string} guildId 
- * @param {string} logMessage 
  */
-async function handleRconLogMessage(guildId, logMessage) {
-    if (!pendingPosRequests.has(guildId)) return;
+async function handleRconLogMessage(guildId, msg) {
+    if (adminPosQueue.size === 0) return false;
 
-    // Rust Console printpos output format check (e.g. "Position: (X, Y, Z)" or similar coordinate logs)
-    const coordMatch = logMessage.match(/(-?\d+(\.\d+)?)[,\s]+(-?\d+(\.\d+)?)[,\s]+(-?\d+(\.\d+)?)/);
-    if (!coordMatch) return;
+    const msgLower = msg.toLowerCase();
 
-    const request = pendingPosRequests.get(guildId);
-    pendingPosRequests.delete(guildId);
+    for (const [adminId, setupData] of adminPosQueue.entries()) {
+        if (setupData.guildId !== guildId) continue;
 
-    const x = parseFloat(coordMatch[1]);
-    const y = parseFloat(coordMatch[3]);
-    const z = parseFloat(coordMatch[5]);
+        let posX, posY, posZ;
+        let foundPos = false;
 
-    try {
-        if (request.onSaveCallback) {
-            await request.onSaveCallback(guildId, x, y, z, request.targetId);
+        // Flexible Regex to match RCE coordinate patterns
+        const nakedCoordMatch = msg.match(/(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)/);
+        if (nakedCoordMatch) {
+            posX = parseFloat(nakedCoordMatch[1]).toFixed(2);
+            posY = parseFloat(nakedCoordMatch[2]).toFixed(2);
+            posZ = parseFloat(nakedCoordMatch[3]).toFixed(2);
+            foundPos = true;
         }
-        if (request.onRefreshCallback) {
-            await request.onRefreshCallback(request.interaction, `✅ Position successfully captured! (\`X: ${x}, Y: ${y}, Z: ${z}\`)`, request.targetId);
+
+        if (foundPos) {
+            if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
+            console.log(`[RCON POS TRACKER] Captured Coordinates for ${setupData.inGameName}: X:${posX}, Y:${posY}, Z:${posZ}`);
+
+            // === 1. CUSTOM BINDS ===
+            if (setupData.type === 'custom_bind') {
+                try {
+                    const bind = await CustomBind.findByPk(setupData.targetId);
+                    if (bind) {
+                        let command = bind.actionType === 'teleport' ? `teleportpos (${posX},${parseFloat(posY)-0.5},${posZ}) "{player}"` : `spawn recycler_static (${posX},${parseFloat(posY)-0.5},${posZ})`; 
+                        await bind.update({ command });
+                    }
+                    const bindHandler = require('../handlers/bindHandler');
+                    if (bindHandler && bindHandler.refreshPanelViaInteraction) {
+                        await bindHandler.refreshPanelViaInteraction(setupData.interaction, `✅ **Position Captured!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``, setupData.targetId);
+                    }
+                } catch (error) { console.error('[CUSTOM BIND POS SAVE ERROR]', error); }
+            } 
+            // === 2. AUTO EVENTS ===
+            else if (setupData.type === 'auto_event') {
+                try {
+                    const autoEventsHandler = require('../handlers/autoEventsHandler');
+                    if (autoEventsHandler && autoEventsHandler.autoSaveLocation) {
+                        await autoEventsHandler.autoSaveLocation(setupData.interaction.guild.id, posX, posY, posZ, setupData.targetId);
+                    }
+                    if (autoEventsHandler && autoEventsHandler.refreshPanelViaInteraction) {
+                        await autoEventsHandler.refreshPanelViaInteraction(
+                            setupData.interaction,
+                            `✅ **Spawn Position Added!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``,
+                            setupData.targetId
+                        );
+                    }
+                } catch (error) { console.error('[AUTO EVENT RCON SAVE ERROR]', error); }
+            }
+            // === 3. CUSTOM ZONES ===
+            else if (setupData.type === 'custom_zone') {
+                try {
+                    const customZoneHandler = require('../handlers/customZoneHandler');
+                    if (customZoneHandler && customZoneHandler.autoSaveLocation) {
+                        await customZoneHandler.autoSaveLocation(setupData.interaction.guild.id, posX, posY, posZ, setupData.targetId);
+                    }
+                    if (customZoneHandler && customZoneHandler.refreshPanelViaInteraction) {
+                        await customZoneHandler.refreshPanelViaInteraction(
+                            setupData.interaction,
+                            `✅ **Zone Center Position Saved!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``,
+                            setupData.targetId
+                        );
+                    }
+                } catch (error) { console.error('[CUSTOM ZONE RCON SAVE ERROR]', error); }
+            }
+
+            adminPosQueue.delete(adminId);
+            return true; 
         }
-    } catch (err) {
-        console.error('[RCON POS TRACKER SAVE ERROR]', err);
     }
+    return false;
 }
 
+// Exporting as both names so your UI files don't break if they use queueAdminPos
 module.exports = {
     captureAdminPosition,
+    queueAdminPos: captureAdminPosition, 
     handleRconLogMessage
 };
