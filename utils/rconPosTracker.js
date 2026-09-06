@@ -1,7 +1,6 @@
 // ============================================================================
 // STANDALONE RCON POSITION TRACKER FOR RUST CONSOLE EDITION
 // ============================================================================
-const { sendRconCommand } = require('./rconManager');
 
 const pendingPosRequests = new Map();
 
@@ -27,6 +26,9 @@ async function captureAdminPosition(interaction, targetModule, targetId, onSaveC
     });
 
     try {
+        // LAZY LOAD: Require this here to prevent Circular Dependency crashes
+        const { sendRconCommand } = require('./rconManager');
+        
         // Send printpos command to Rust Console server
         await sendRconCommand(guildId, 'printpos', interaction.client);
     } catch (err) {
