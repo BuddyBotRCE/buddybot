@@ -13,27 +13,28 @@ module.exports = async (message, client) => {
     // ==========================================
     if (message.mentions.everyone) return;
 
-    const isMentioned = message.mentions.has(client.user);
-    if (isMentioned) {
-        try {
-            const config = await GuildConfig.findOne({ where: { guildId: message.guild.id } });
-            
-            if (config && config.aiEnabled !== false) {
-                const cleanContent = message.content
-                    .replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '')
-                    .trim();
-                const lowerContent = cleanContent.toLowerCase();
+    try {
+        const config = await GuildConfig.findOne({ where: { guildId: message.guild.id } });
+        
+        if (config && config.aiEnabled !== false) {
+            const cleanContent = message.content
+                .replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '')
+                .trim();
+            const lowerContent = cleanContent.toLowerCase();
 
-                // Check for premade responses first
-                try {
-                    const premadeList = JSON.parse(config.aiPremadeResponses || '[]');
-                    const matchedPreset = premadeList.find(p => lowerContent.includes(p.trigger.toLowerCase()));
-                    if (matchedPreset) {
-                        await message.reply(matchedPreset.response);
-                        return;
-                    }
-                } catch (e) {}
+            // --- 1. PREMADE RESPONSES (Triggers with or without a ping) ---
+            try {
+                const premadeList = JSON.parse(config.aiPremadeResponses || '[]');
+                const matchedPreset = premadeList.find(p => lowerContent.includes(p.trigger.toLowerCase()));
+                if (matchedPreset) {
+                    await message.reply(matchedPreset.response);
+                    return;
+                }
+            } catch (e) {}
 
+            // --- 2. REGULAR AI CHAT (Requires explicit ping) ---
+            const isMentioned = message.mentions.has(client.user);
+            if (isMentioned) {
                 if (!config.aiApiKey) {
                     await message.reply('⚠️ The server administrator has not configured an AI API key yet!');
                     return;
@@ -80,9 +81,9 @@ module.exports = async (message, client) => {
                 await message.reply(aiReply);
                 return;
             }
-        } catch (aiErr) {
-            console.error('[AI CHAT ERROR]', aiErr);
         }
+    } catch (aiErr) {
+        console.error('[AI CHAT ERROR]', aiErr);
     }
 
     // ==========================================

@@ -231,9 +231,12 @@ const adminHandler = async (interaction, client) => {
     if (customId === 'tk_back_main') return await renderAdminMenu(interaction, guildId, 'update');
 
     if (customId === 'toggle_ticket_ai') {
-        const config = await GuildConfig.findOne({ where: { guildId } });
-        const newState = config?.ticketAiEnabled === false ? true : false;
-        await GuildConfig.update({ ticketAiEnabled: newState }, { where: { guildId } });
+        const [config] = await GuildConfig.findOrCreate({ where: { guildId } });
+        // Default to true if null/undefined, then flip it
+        const currentState = config.ticketAiEnabled !== false;
+        const newState = !currentState;
+        
+        await config.update({ ticketAiEnabled: newState });
         return await renderAdminMenu(interaction, guildId, 'update');
     }
 
