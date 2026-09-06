@@ -66,6 +66,7 @@ module.exports = {
                     { label: 'Suggestions System', value: 'setup_suggestions', emoji: '💡' },
                     { label: 'Home Teleport System', value: 'setup_hometp', description: 'Configure emote retreat teleports', emoji: '🏠' },
                     { label: 'Recycler Manager', value: 'setup_recycler', description: 'Configure independent recycler tools', emoji: '♻️' },
+                    { label: 'Prison System Manager', value: 'setup_prison', description: 'Configure 20 jail cells, lifers, & timed sentences', emoji: '🔒' }, // 🔒 Prison Option
                     { label: 'Skip Night Settings', value: 'setup_skipnight', emoji: '🌙' }
                 ])
         );

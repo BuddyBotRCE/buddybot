@@ -74,6 +74,7 @@ const GuildConfig = sequelize.define('GuildConfig', {
     autoEventsEnabled: { type: DataTypes.BOOLEAN, defaultValue: true },
     orpEnabled: { type: DataTypes.BOOLEAN, defaultValue: true },
     homeTpEnabled: { type: DataTypes.BOOLEAN, defaultValue: true },
+    prisonEnabled: { type: DataTypes.BOOLEAN, defaultValue: true }, // 🔒 Prison Toggle
 
     aiProvider: { type: DataTypes.STRING, defaultValue: 'openai' },
     aiModel: { type: DataTypes.STRING, defaultValue: 'gpt-4o-mini' },
@@ -135,7 +136,6 @@ const CustomBind = sequelize.define('CustomBind', { guildId: { type: DataTypes.S
 const BindCooldown = sequelize.define('BindCooldown', { guildId: { type: DataTypes.STRING, primaryKey: true }, userId: { type: DataTypes.STRING, primaryKey: true }, bindId: { type: DataTypes.INTEGER, primaryKey: true }, expiresAt: { type: DataTypes.DATE } });
 const ServerKit = sequelize.define('ServerKit', { guildId: { type: DataTypes.STRING }, kitName: { type: DataTypes.STRING }, items: { type: DataTypes.TEXT } });
 
-// 👇 UPDATED: Added serverId to ShopItem definition 👇
 const ShopItem = sequelize.define('ShopItem', { 
     guildId: { type: DataTypes.STRING }, 
     serverId: { type: DataTypes.STRING, allowNull: true }, 
@@ -211,7 +211,6 @@ const HomeTeleportLocation = sequelize.define('HomeTeleportLocation', {
     posZ: { type: DataTypes.STRING, allowNull: false }
 });
 
-// 👇 NEW: Recycler System Tables 👇
 const RecyclerConfig = sequelize.define('RecyclerConfig', {
     guildId: { type: DataTypes.STRING, allowNull: false, unique: true },
     requiredRoleId: { type: DataTypes.STRING, allowNull: true },
@@ -226,6 +225,28 @@ const RecyclerLocation = sequelize.define('RecyclerLocation', {
     posZ: { type: DataTypes.FLOAT, allowNull: false }
 });
 
+// 👇 NEW: Advanced 20-Cell Prison System Tables 👇
+const PrisonCell = sequelize.define('PrisonCell', {
+    id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+    guildId: { type: DataTypes.STRING, allowNull: false },
+    cellNumber: { type: DataTypes.INTEGER, allowNull: false }, // 1 through 20
+    posX: { type: DataTypes.FLOAT, allowNull: false },
+    posY: { type: DataTypes.FLOAT, allowNull: false },
+    posZ: { type: DataTypes.FLOAT, allowNull: false }
+});
+
+const JailedPlayer = sequelize.define('JailedPlayer', {
+    id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+    guildId: { type: DataTypes.STRING, allowNull: false },
+    inGameName: { type: DataTypes.STRING, allowNull: false },
+    reason: { type: DataTypes.STRING, allowNull: false },
+    jailedBy: { type: DataTypes.STRING, allowNull: true },
+    cellNumber: { type: DataTypes.INTEGER, allowNull: false },
+    isTemp: { type: DataTypes.BOOLEAN, defaultValue: false },
+    expiresAt: { type: DataTypes.DATE, allowNull: true },
+    jailedAt: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
+});
+
 async function initDb() { 
     await sequelize.authenticate(); 
     await sequelize.sync({ alter: true }); 
@@ -236,5 +257,6 @@ initDb();
 module.exports = { 
     sequelize, GuildConfig, GameServer, UserEconomy, Giveaway, CustomBind, BindCooldown, ServerKit, ShopItem, ShopCooldown, CasinoCooldown, OrpConfig, PlayerOrpBase, BuddyPassChallenge, BuddyPassReward, TicketCategory, PveZone, AutoEvent, AutoEventLocation, ActiveBounty, BountyCooldown, Clan, ClanMember, ClanInvite, ClanWar, ReactionRole, CustomEmbed,
     HomeTeleportConfig, HomeTeleportCooldown, HomeTeleportLocation, ArenaCratePoint, ArenaConfig, ArenaPrize, ArenaSpawn, GunGameWeapon,
-    RecyclerConfig, RecyclerLocation // Exported the new Recycler tables here
+    RecyclerConfig, RecyclerLocation,
+    PrisonCell, JailedPlayer // 🛑 Exported Prison Tables
 };

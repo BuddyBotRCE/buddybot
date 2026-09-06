@@ -28,16 +28,15 @@ const autoModHandler = require(handlerPath('autoModHandler'));
 const wipeHandler = require(handlerPath('wipeHandler')); 
 const homeTpHandler = require(handlerPath('homeTpHandler'));
 const skipNightHandler = require(handlerPath('skipNightHandler'));
-const recyclerHandler = require(handlerPath('recyclerHandler')); // 🛑 NEW: Imported Recycler Handler
+const recyclerHandler = require(handlerPath('recyclerHandler')); 
+const prisonHandler = require(handlerPath('prisonHandler')); // 🔒 Prison Handler
 
 module.exports = async (interaction, client) => {
     try {
-        // 🚨 DROPDOWN 2 ALIAS FIX 🚨
         if (interaction.customId === 'admin_menu_select_2') {
             Object.defineProperty(interaction, 'customId', { value: 'admin_menu_select', writable: true, configurable: true });
         }
 
-        // --- COMMANDS ---
         if (interaction.isChatInputCommand()) {
             const command = client.commands.get(interaction.commandName);
             if (!command) return;
@@ -51,7 +50,6 @@ module.exports = async (interaction, client) => {
         // 🚦 0. MODAL SUBMISSION ROUTER
         // ====================================================================
         if (interaction.isModalSubmit()) {
-            // 👇 PLACED AT THE TOP SO BIND MODALS ARE NEVER SKIPPED 👇
             if (customId === 'modal_bind_name' || customId.startsWith('bind_') || customId.includes('bind')) {
                 return await bindHandler(interaction, client);
             }
@@ -74,6 +72,7 @@ module.exports = async (interaction, client) => {
             if (customId.startsWith('modal_tk_')) return await ticketHandler(interaction, client);
             if (customId.startsWith('modal_ga_')) return await giveawayHandler(interaction, client);
             if (customId === 'modal_recycler_cd') return await recyclerHandler(interaction, client);
+            if (customId.startsWith('modal_prison_')) return await prisonHandler(interaction, client); // 🔒 Prison Modals
             
             return await adminHandler(interaction, client);
         }
@@ -142,10 +141,9 @@ module.exports = async (interaction, client) => {
             if (selectedValue.includes('pve') || selectedValue.includes('zone') || selectedValue === 'setup_custom_zones') return await customZoneHandler(interaction, client);
             if (selectedValue === 'setup_automod') return await autoModHandler(interaction, client);
             if (selectedValue === 'setup_hometp') return await homeTpHandler(interaction, client);
-            
-            // 🛑 NEW: Route Dropdown to Recycler Handler
             if (selectedValue === 'setup_recycler') return await recyclerHandler(interaction, client);
-
+            if (selectedValue === 'setup_prison' || selectedValue.startsWith('set_cell_')) return await prisonHandler(interaction, client); // 🔒 Prison Dropdown
+            
             return await adminHandler(interaction, client);
         }
 
@@ -193,117 +191,11 @@ module.exports = async (interaction, client) => {
             }
         }  
 
-        if (customId === 'hub_hometp_info') {
-            return interaction.reply({ 
-                content: `🏠 **Home Teleport Hub Guide:**\n• Use the in-game quick-chat wheel and select **"Can I have a key"** to anchor your home respawn location.\n• Use the quick-chat wheel and select **"Retreat"** to teleport straight back home (subject to role requirements & cooldowns)!`, 
-                flags: 64 
-            });
-        }
-
-        if (customId === 'hub_pvp_areas') {
-            const { PveZone } = require('../database/db');
-            
-            const activePvpZones = await PveZone.findAll({ 
-                where: { 
-                    guildId: interaction.guild.id, 
-                    isEnabled: true, 
-                    pvp: true 
-                } 
-            });
-
-            let pvpText = '### ⚔️ Live Active PvP Areas & Monuments\n\n`All areas are currently Safe PvE (No active PvP zones).`';
-            
-            if (activePvpZones && activePvpZones.length > 0) {
-                pvpText = '### ⚔️ Live Active PvP Areas & Monuments\n\n' + 
-                    activePvpZones.map(z => `• 🔴 **${z.name || 'Custom Zone'}** — Radius: \`${z.radius || 50}m\``).join('\n');
-            }
-
-            return interaction.reply({ content: pvpText, flags: 64 });
-        }
-
-        if (customId === 'hub_link_account' || customId === 'select_link_server_target' || customId === 'hub_leaderboards' || customId === 'hub_lb_select' || customId.startsWith('lb_refresh_') || customId === 'btn_admin_kit' || customId.startsWith('ak_panel_') || customId === 'ak_panel_kit_select' || customId.includes('admin_kit_choice') || customId.startsWith('admin_kit_target_') || customId.startsWith('admin_kit_target_select')) {
-            return await adminHandler(interaction, client);
-        }
-
-        if (customId === 'hub_shop_menu' || customId === 'hub_shop_browse' || customId === 'hub_shop_pricelist' || customId.startsWith('player_shop_') || customId.includes('shop')) {
-            return await shopHandler(interaction, client);
-        }
-
-        if (customId === 'hub_clans' || customId.includes('clan')) {
-            return await clanHandler(interaction, client);
-        }
-
-        if (customId === 'hub_economy_menu' || customId === 'hub_balance' || customId === 'hub_daily' || customId === 'hub_deposit' || customId === 'hub_withdraw' || customId.includes('bank') || customId.includes('econ') || customId === 'btn_admin_give' || customId === 'btn_admin_take' || customId === 'select_admin_give_target' || customId === 'select_admin_take_target') {
-            return await economyHandler(interaction, client);
-        }
-
-        if (customId === 'hub_casino' || customId === 'casino_game_select' || customId.startsWith('modal_play_') || customId.includes('casino') || customId === 'btn_casino_settings') {
-            return await casinoHandler(interaction, client);
-        }
-
-        if (customId === 'hub_buddypass_view' || customId.startsWith('bp_') || customId.includes('buddypass')) {
-            return await buddyPassHandler(interaction, client);
-        }
-
-        if (customId === 'hub_vote_info') {
-            return interaction.reply({ content: `🗳️ **Vote & Claim:** Link your vote tracking with your Rust server to automatically reward players with free currency or kits! (Configure via your voting site webhook).`, flags: 64 }).catch(() => {});
-        }
-
-        if (customId === 'ticket_create' || customId === 'btn_tk_setcat' || customId.startsWith('tk_') || customId.includes('ticket')) {
-            return await ticketHandler(interaction, client);
-        }
-
-        if (customId.includes('sug_') || customId === 'btn_player_open_suggestion') {
-            return await suggestionHandler(interaction, client);
-        }
-
-        if (customId === 'btn_wipe_full' || customId === 'btn_wipe_selective' || customId === 'btn_wipe_cooldowns' || customId === 'select_wipe_custom') {
-            return await wipeHandler(interaction, client);
-        }
-
-        if (customId === 'unified_embed_select' || customId.startsWith('btn_emb_') || customId.startsWith('select_emb_') || customId.startsWith('rr_') || customId.startsWith('select_rr_') || customId.startsWith('btn_rr_')) {
-            return await postEmbedHandler(interaction, client);
-        }
-
-        if (customId === 'toggle_tier_status' || customId === 'btn_manage_stripe' || customId === 'btn_transfer_license' || customId === 'btn_open_verify_modal') {
-            return await premiumHandler(interaction, client);
-        }
-
-        if (customId.startsWith('btn_log_') || customId.startsWith('select_log_chan_')) {
-            return await loggingHandler(interaction, client);
-        }
-
-        if (customId.startsWith('am_') || customId.startsWith('btn_am_')) {
-            return await autoModHandler(interaction, client);
-        }
-
-        if (customId.startsWith('cz_') || customId.startsWith('btn_cz_') || customId === 'select_custom_zone' || customId.includes('pve') || customId.includes('zone')) {
-            return await customZoneHandler(interaction, client);
-        }
-
-        if (customId.startsWith('ae_') || customId === 'btn_finalize_tpl_aeslot') {
-            return await autoEventsHandler(interaction, client);
-        }
-
-        if (customId.includes('ga_') || customId.includes('giveaway')) {
-            return await giveawayHandler(interaction, client);
-        }
-
-        if (customId.includes('bounty') || customId.includes('bounties')) {
-            return await bountyHandler(interaction, client);
-        }
-
-        if (customId.startsWith('bind_') || customId.startsWith('btn_bind_') || customId === 'bind_do_kit' || customId.includes('bind')) {
-            return await bindHandler(interaction, client);
-        }
+        if (customId.includes('recycler')) return await recyclerHandler(interaction, client);
+        if (customId.includes('prison') || customId === 'prison_btn_jail' || customId === 'prison_btn_unjail') return await prisonHandler(interaction, client); // 🔒 Prison Buttons
 
         if (customId.includes('kit') && !customId.includes('ticket')) {
             return await kitHandler(interaction, client);
-        }
-
-        // 🛑 NEW: Route any buttons/menus inside the Recycler Panel
-        if (customId.includes('recycler')) {
-            return await recyclerHandler(interaction, client);
         }
 
         return await adminHandler(interaction, client);

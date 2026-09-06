@@ -27,7 +27,8 @@ const MODULES_LIST = [
     { id: 'aiEnabled', name: 'AI Assistant', emoji: '🤖' },
     { id: 'homeTpEnabled', name: 'Home Teleport', emoji: '🏠' },
     { id: 'skipNightEnabled', name: 'Skip Night', emoji: '🌙' },
-    { id: 'recyclerEnabled', name: 'Recycler System', emoji: '♻️' } // 🛑 NEW: Recycler Toggle
+    { id: 'recyclerEnabled', name: 'Recycler System', emoji: '♻️' },
+    { id: 'prisonEnabled', name: 'Prison System', emoji: '🔒' } // 🔒 Prison Toggle
 ];
 
 async function renderBotSettings(interaction, guildId, action = 'reply') {
@@ -115,6 +116,7 @@ async function renderMainPanel(interaction) {
                     { label: 'Suggestions System', value: 'setup_suggestions', emoji: '💡' },
                     { label: 'Home Teleport System', value: 'setup_hometp', description: 'Configure emote retreat teleports', emoji: '🏠' },
                     { label: 'Recycler Manager', value: 'setup_recycler', description: 'Configure independent recycler tools', emoji: '♻️' },
+                    { label: 'Prison System Manager', value: 'setup_prison', description: 'Configure 20 jail cells, lifers, & timed sentences', emoji: '🔒' },
                     { label: 'Skip Night Settings', value: 'setup_skipnight', emoji: '🌙' }
                 ])
         );
@@ -203,7 +205,6 @@ const adminHandler = async (interaction, client) => {
         return await renderBotSettings(interaction, guildId, 'reply');
     }
     
-    // 🛑 NEW: Routes to the Recycler Panel
     if (customId === 'admin_menu_select_2' && selectedValue === 'setup_recycler') {
         try {
             const recyclerHandler = require('./recyclerHandler');
@@ -211,6 +212,17 @@ const adminHandler = async (interaction, client) => {
         } catch (err) {
             console.error('[RECYCLER HANDLER ERROR]', err);
             return interaction.reply({ content: '❌ The Recycler module is currently unlinked or missing.', flags: 64 });
+        }
+    }
+
+    // 🔒 Route to Prison Manager
+    if (customId === 'admin_menu_select_2' && selectedValue === 'setup_prison') {
+        try {
+            const prisonHandler = require('./prisonHandler');
+            return await prisonHandler(interaction, client);
+        } catch (err) {
+            console.error('[PRISON HANDLER ERROR]', err);
+            return interaction.reply({ content: '❌ The Prison module is currently unlinked or missing.', flags: 64 });
         }
     }
 

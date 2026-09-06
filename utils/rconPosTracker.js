@@ -1,53 +1,36 @@
 // ============================================================================
 // STANDALONE RCON POSITION TRACKER FOR RUST CONSOLE EDITION
 // ============================================================================
-const { UserEconomy, CustomBind, HomeTeleportLocation } = require('../database/db');
+const { UserEconomy, CustomBind, HomeTeleportLocation, PrisonCell, JailedPlayer } = require('../database/db');
 
-// Queues for admins, home teleports, and dynamic recyclers
 const adminPosQueue = new Map();
 const homeTpPosQueue = new Map();
 const recyclerPosQueue = new Map();
 
-// --- 1. HOME TELEPORT QUEUE ---
 async function queueHomeTpPos(guildId, userId, inGameName, client, serverId = null) {
     if (homeTpPosQueue.has(userId)) clearTimeout(homeTpPosQueue.get(userId).timeoutTimer);
-
-    const timeoutTimer = setTimeout(() => {
-        if (homeTpPosQueue.has(userId)) homeTpPosQueue.delete(userId);
-    }, 15000);
-
+    const timeoutTimer = setTimeout(() => { if (homeTpPosQueue.has(userId)) homeTpPosQueue.delete(userId); }, 15000);
     homeTpPosQueue.set(userId, { guildId, userId, inGameName, timeoutTimer, serverId, client });
-
     try {
         const { sendRconCommand } = require('./rconManager');
         await sendRconCommand(guildId, `printpos "${inGameName}"`, client, serverId);
     } catch (err) {
         homeTpPosQueue.delete(userId);
-        console.error('[RCON POS TRACKER HOME TP ERROR]', err);
     }
 }
 
-// --- 2. DYNAMIC RECYCLER QUEUE ---
 async function queueRecyclerPos(guildId, userId, inGameName, client, serverId = null) {
     if (recyclerPosQueue.has(userId)) clearTimeout(recyclerPosQueue.get(userId).timeoutTimer);
-
-    const timeoutTimer = setTimeout(() => {
-        if (recyclerPosQueue.has(userId)) recyclerPosQueue.delete(userId);
-    }, 15000);
-
+    const timeoutTimer = setTimeout(() => { if (recyclerPosQueue.has(userId)) recyclerPosQueue.delete(userId); }, 15000);
     recyclerPosQueue.set(userId, { guildId, userId, inGameName, timeoutTimer, serverId, client });
-
     try {
         const { sendRconCommand } = require('./rconManager');
-        // Force the server to print the player's coordinates to the logs
         await sendRconCommand(guildId, `printpos "${inGameName}"`, client, serverId);
     } catch (err) {
         recyclerPosQueue.delete(userId);
-        console.error('[RCON POS TRACKER RECYCLER ERROR]', err);
     }
 }
 
-// --- 3. ADMIN CAPTURE QUEUE ---
 async function captureAdminPosition(interaction, type = 'custom_bind', targetId = null, serverId = null) {
     const guildId = interaction.guild.id;
     const adminId = interaction.user.id;
@@ -75,23 +58,17 @@ async function captureAdminPosition(interaction, type = 'custom_bind', targetId 
         await sendRconCommand(guildId, `printpos "${inGameName}"`, client, serverId);
     } catch (err) {
         adminPosQueue.delete(adminId);
-        console.error('[RCON POS TRACKER ERROR]', err);
     }
 }
 
-/**
- * Handle incoming RCON console logs to intercept player coordinates
- */
 async function handleRconLogMessage(guildId, msg) {
     
     // === 1. HOME TELEPORT INTERCEPT ===
     if (homeTpPosQueue.size > 0) {
         for (const [userId, tpData] of homeTpPosQueue.entries()) {
             if (tpData.guildId !== guildId) continue;
-
             let posX, posY, posZ;
             let foundPos = false;
-
             const nakedCoordMatch = msg.match(/(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)/);
             if (nakedCoordMatch) {
                 posX = parseFloat(nakedCoordMatch[1]).toFixed(2);
@@ -99,11 +76,9 @@ async function handleRconLogMessage(guildId, msg) {
                 posZ = parseFloat(nakedCoordMatch[3]).toFixed(2);
                 foundPos = true;
             }
-
             if (foundPos) {
                 if (tpData.timeoutTimer) clearTimeout(tpData.timeoutTimer);
                 homeTpPosQueue.delete(userId);
-
                 const { sendRconCommand } = require('./rconManager');
                 await HomeTeleportLocation.upsert({ guildId, userId, posX, posY, posZ });
                 await sendRconCommand(guildId, `say "✅ ${tpData.inGameName}, your Home location has been successfully anchored!"`, tpData.client, tpData.serverId);
@@ -116,10 +91,8 @@ async function handleRconLogMessage(guildId, msg) {
     if (recyclerPosQueue.size > 0) {
         for (const [userId, recData] of recyclerPosQueue.entries()) {
             if (recData.guildId !== guildId) continue;
-
             let posX, posY, posZ;
             let foundPos = false;
-
             const nakedCoordMatch = msg.match(/(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)/);
             if (nakedCoordMatch) {
                 posX = parseFloat(nakedCoordMatch[1]).toFixed(2);
@@ -127,16 +100,11 @@ async function handleRconLogMessage(guildId, msg) {
                 posZ = parseFloat(nakedCoordMatch[3]).toFixed(2);
                 foundPos = true;
             }
-
             if (foundPos) {
                 if (recData.timeoutTimer) clearTimeout(recData.timeoutTimer);
                 recyclerPosQueue.delete(userId);
-
-                // Lower it into the ground by 0.5 so it sits naturally
                 const safeY = (parseFloat(posY) - 0.5).toFixed(2);
                 const { sendRconCommand } = require('./rconManager');
-                
-                // Instantly spawn it at their feet!
                 await sendRconCommand(guildId, `spawn recycler_static (${posX},${safeY},${posZ})`, recData.client, recData.serverId);
                 await sendRconCommand(guildId, `say "♻️ ${recData.inGameName} has dynamically deployed a Recycler!"`, recData.client, recData.serverId);
                 return true;
@@ -144,17 +112,30 @@ async function handleRconLogMessage(guildId, msg) {
         }
     }
 
-    // === 3. ADMIN POSITION INTERCEPT ===
-    if (adminPosQueue.size === 0) return false;
+    // === 3. DEATH & RESPAWN ENFORCER (PRISON TRAP) ===
+    const deathMatch = msg.match(/(['"]?)([^'"]+)\1 (was killed by|died)/i);
+    if (deathMatch) {
+        const deadPlayerName = deathMatch[2].trim();
+        const jailedRecord = await JailedPlayer.findOne({ where: { guildId, inGameName: deadPlayerName } });
+        if (jailedRecord) {
+            const cell = await PrisonCell.findOne({ where: { guildId, cellNumber: jailedRecord.cellNumber } });
+            if (cell) {
+                setTimeout(async () => {
+                    const { sendRconCommand } = require('./rconManager');
+                    await sendRconCommand(guildId, `teleportpos (${cell.posX},${cell.posY},${cell.posZ}) "${deadPlayerName}"`, null);
+                    await sendRconCommand(guildId, `say "🔒 ${deadPlayerName} tried to escape death, but was dragged right back into Cell #${jailedRecord.cellNumber}!"`, null);
+                }, 3000); // 3-second delay to let respawn finish before pulling back
+            }
+        }
+    }
 
-    const msgLower = msg.toLowerCase();
+    // === 4. ADMIN POSITION INTERCEPT ===
+    if (adminPosQueue.size === 0) return false;
 
     for (const [adminId, setupData] of adminPosQueue.entries()) {
         if (setupData.guildId !== guildId) continue;
-
         let posX, posY, posZ;
         let foundPos = false;
-
         const nakedCoordMatch = msg.match(/(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)/);
         if (nakedCoordMatch) {
             posX = parseFloat(nakedCoordMatch[1]).toFixed(2);
@@ -165,10 +146,17 @@ async function handleRconLogMessage(guildId, msg) {
 
         if (foundPos) {
             if (setupData.timeoutTimer) clearTimeout(setupData.timeoutTimer);
-            console.log(`[RCON POS TRACKER] Captured Coordinates for ${setupData.inGameName}: X:${posX}, Y:${posY}, Z:${posZ}`);
 
-            // === A. CUSTOM BINDS ===
-            if (setupData.type === 'custom_bind') {
+            if (setupData.type === 'prison_cell') {
+                try {
+                    const cellNum = parseInt(setupData.targetId);
+                    await PrisonCell.upsert({ guildId: setupData.interaction.guild.id, cellNumber: cellNum, posX, posY: parseFloat(posY)-0.5, posZ });
+                    const prisonHandler = require('../handlers/prisonHandler');
+                    if (prisonHandler && prisonHandler.refreshPanelViaInteraction) {
+                        await prisonHandler.refreshPanelViaInteraction(setupData.interaction, `✅ **Cell #${cellNum} Position Saved!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``);
+                    }
+                } catch (error) { console.error('[PRISON CELL SAVE ERROR]', error); }
+            } else if (setupData.type === 'custom_bind') {
                 try {
                     const bind = await CustomBind.findByPk(setupData.targetId);
                     if (bind) {
@@ -180,30 +168,6 @@ async function handleRconLogMessage(guildId, msg) {
                         await bindHandler.refreshPanelViaInteraction(setupData.interaction, `✅ **Position Captured!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``, setupData.targetId);
                     }
                 } catch (error) { console.error('[CUSTOM BIND POS SAVE ERROR]', error); }
-            } 
-            // === B. AUTO EVENTS ===
-            else if (setupData.type === 'auto_event') {
-                try {
-                    const autoEventsHandler = require('../handlers/autoEventsHandler');
-                    if (autoEventsHandler && autoEventsHandler.autoSaveLocation) {
-                        await autoEventsHandler.autoSaveLocation(setupData.interaction.guild.id, posX, posY, posZ, setupData.targetId);
-                    }
-                    if (autoEventsHandler && autoEventsHandler.refreshPanelViaInteraction) {
-                        await autoEventsHandler.refreshPanelViaInteraction(setupData.interaction, `✅ **Spawn Position Added!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``, setupData.targetId);
-                    }
-                } catch (error) { console.error('[AUTO EVENT RCON SAVE ERROR]', error); }
-            }
-            // === C. CUSTOM ZONES ===
-            else if (setupData.type === 'custom_zone') {
-                try {
-                    const customZoneHandler = require('../handlers/customZoneHandler');
-                    if (customZoneHandler && customZoneHandler.autoSaveLocation) {
-                        await customZoneHandler.autoSaveLocation(setupData.interaction.guild.id, posX, posY, posZ, setupData.targetId);
-                    }
-                    if (customZoneHandler && customZoneHandler.refreshPanelViaInteraction) {
-                        await customZoneHandler.refreshPanelViaInteraction(setupData.interaction, `✅ **Zone Center Position Saved!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``, setupData.targetId);
-                    }
-                } catch (error) { console.error('[CUSTOM ZONE RCON SAVE ERROR]', error); }
             }
 
             adminPosQueue.delete(adminId);
@@ -213,7 +177,46 @@ async function handleRconLogMessage(guildId, msg) {
     return false;
 }
 
-// Exporting with queueRecyclerPos included
+// === AUTOMATED PRISON 2-MINUTE TIMER & REMINDER LOOP ===
+setInterval(async () => {
+    try {
+        const allJailed = await JailedPlayer.findAll();
+        if (!allJailed || allJailed.length === 0) return;
+
+        const now = new Date();
+        const { sendRconCommand, activeConnections } = require('./rconManager');
+
+        for (const prisoner of allJailed) {
+            // Check expiration for temporary sentences
+            if (prisoner.isTemp && prisoner.expiresAt && new Date(prisoner.expiresAt) <= now) {
+                await JailedPlayer.destroy({ where: { id: prisoner.id } });
+                for (const guildId of activeConnections.keys()) {
+                    if (guildId === prisoner.guildId) {
+                        await sendRconCommand(guildId, `say "🔓 ${prisoner.inGameName} has served their time and been released from prison!"`, null);
+                    }
+                }
+                continue;
+            }
+
+            // Calculate remaining time for temp sentences or display lifer status
+            let timeMsg = 'Permanent Lifer';
+            if (prisoner.isTemp && prisoner.expiresAt) {
+                const minsLeft = Math.ceil((new Date(prisoner.expiresAt) - now) / 60000);
+                timeMsg = `${minsLeft}m remaining`;
+            }
+
+            // 2-Minute Recurring In-Game Reminder
+            for (const guildId of activeConnections.keys()) {
+                if (guildId === prisoner.guildId) {
+                    await sendRconCommand(guildId, `say "🔒 [PRISON] Inmate: ${prisoner.inGameName} | Reason: ${prisoner.reason} | Sentence: ${timeMsg}"`, null);
+                }
+            }
+        }
+    } catch (e) {
+        console.error('[PRISON INTERVAL ERROR]', e);
+    }
+}, 120000); // 120,000 ms = exactly 2 minutes
+
 module.exports = {
     captureAdminPosition,
     queueAdminPos: captureAdminPosition, 
