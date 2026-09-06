@@ -3,17 +3,17 @@
 // ============================================================================
 const { UserEconomy, CustomBind, HomeTeleportLocation } = require('../database/db');
 
-// Queues for admins and home teleports
+// Queues for admins, home teleports, and dynamic recyclers
 const adminPosQueue = new Map();
 const homeTpPosQueue = new Map();
+const recyclerPosQueue = new Map();
 
+// --- 1. HOME TELEPORT QUEUE ---
 async function queueHomeTpPos(guildId, userId, inGameName, client, serverId = null) {
     if (homeTpPosQueue.has(userId)) clearTimeout(homeTpPosQueue.get(userId).timeoutTimer);
 
     const timeoutTimer = setTimeout(() => {
-        if (homeTpPosQueue.has(userId)) {
-            homeTpPosQueue.delete(userId);
-        }
+        if (homeTpPosQueue.has(userId)) homeTpPosQueue.delete(userId);
     }, 15000);
 
     homeTpPosQueue.set(userId, { guildId, userId, inGameName, timeoutTimer, serverId, client });
@@ -27,9 +27,27 @@ async function queueHomeTpPos(guildId, userId, inGameName, client, serverId = nu
     }
 }
 
-/**
- * Request coordinates from an in-game admin via RCON
- */
+// --- 2. DYNAMIC RECYCLER QUEUE ---
+async function queueRecyclerPos(guildId, userId, inGameName, client, serverId = null) {
+    if (recyclerPosQueue.has(userId)) clearTimeout(recyclerPosQueue.get(userId).timeoutTimer);
+
+    const timeoutTimer = setTimeout(() => {
+        if (recyclerPosQueue.has(userId)) recyclerPosQueue.delete(userId);
+    }, 15000);
+
+    recyclerPosQueue.set(userId, { guildId, userId, inGameName, timeoutTimer, serverId, client });
+
+    try {
+        const { sendRconCommand } = require('./rconManager');
+        // Force the server to print the player's coordinates to the logs
+        await sendRconCommand(guildId, `printpos "${inGameName}"`, client, serverId);
+    } catch (err) {
+        recyclerPosQueue.delete(userId);
+        console.error('[RCON POS TRACKER RECYCLER ERROR]', err);
+    }
+}
+
+// --- 3. ADMIN CAPTURE QUEUE ---
 async function captureAdminPosition(interaction, type = 'custom_bind', targetId = null, serverId = null) {
     const guildId = interaction.guild.id;
     const adminId = interaction.user.id;
@@ -53,10 +71,7 @@ async function captureAdminPosition(interaction, type = 'custom_bind', targetId 
     adminPosQueue.set(adminId, { guildId, adminId, type, timeoutTimer, inGameName, targetId, interaction, serverId });
     
     try {
-        // LAZY LOAD to avoid circular dependency
         const { sendRconCommand } = require('./rconManager');
-        
-        // RCE command: printpos "Gamertag"
         await sendRconCommand(guildId, `printpos "${inGameName}"`, client, serverId);
     } catch (err) {
         adminPosQueue.delete(adminId);
@@ -68,7 +83,8 @@ async function captureAdminPosition(interaction, type = 'custom_bind', targetId 
  * Handle incoming RCON console logs to intercept player coordinates
  */
 async function handleRconLogMessage(guildId, msg) {
-    // 1. === HOME TELEPORT INTERCEPT ===
+    
+    // === 1. HOME TELEPORT INTERCEPT ===
     if (homeTpPosQueue.size > 0) {
         for (const [userId, tpData] of homeTpPosQueue.entries()) {
             if (tpData.guildId !== guildId) continue;
@@ -89,7 +105,6 @@ async function handleRconLogMessage(guildId, msg) {
                 homeTpPosQueue.delete(userId);
 
                 const { sendRconCommand } = require('./rconManager');
-
                 await HomeTeleportLocation.upsert({ guildId, userId, posX, posY, posZ });
                 await sendRconCommand(guildId, `say "✅ ${tpData.inGameName}, your Home location has been successfully anchored!"`, tpData.client, tpData.serverId);
                 return true;
@@ -97,7 +112,39 @@ async function handleRconLogMessage(guildId, msg) {
         }
     }
 
-    // 2. === ADMIN POSITION INTERCEPT ===
+    // === 2. DYNAMIC RECYCLER INTERCEPT ===
+    if (recyclerPosQueue.size > 0) {
+        for (const [userId, recData] of recyclerPosQueue.entries()) {
+            if (recData.guildId !== guildId) continue;
+
+            let posX, posY, posZ;
+            let foundPos = false;
+
+            const nakedCoordMatch = msg.match(/(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)/);
+            if (nakedCoordMatch) {
+                posX = parseFloat(nakedCoordMatch[1]).toFixed(2);
+                posY = parseFloat(nakedCoordMatch[2]).toFixed(2);
+                posZ = parseFloat(nakedCoordMatch[3]).toFixed(2);
+                foundPos = true;
+            }
+
+            if (foundPos) {
+                if (recData.timeoutTimer) clearTimeout(recData.timeoutTimer);
+                recyclerPosQueue.delete(userId);
+
+                // Lower it into the ground by 0.5 so it sits naturally
+                const safeY = (parseFloat(posY) - 0.5).toFixed(2);
+                const { sendRconCommand } = require('./rconManager');
+                
+                // Instantly spawn it at their feet!
+                await sendRconCommand(guildId, `spawn recycler_static (${posX},${safeY},${posZ})`, recData.client, recData.serverId);
+                await sendRconCommand(guildId, `say "♻️ ${recData.inGameName} has dynamically deployed a Recycler!"`, recData.client, recData.serverId);
+                return true;
+            }
+        }
+    }
+
+    // === 3. ADMIN POSITION INTERCEPT ===
     if (adminPosQueue.size === 0) return false;
 
     const msgLower = msg.toLowerCase();
@@ -108,7 +155,6 @@ async function handleRconLogMessage(guildId, msg) {
         let posX, posY, posZ;
         let foundPos = false;
 
-        // Flexible Regex to match RCE coordinate patterns
         const nakedCoordMatch = msg.match(/(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)/);
         if (nakedCoordMatch) {
             posX = parseFloat(nakedCoordMatch[1]).toFixed(2);
@@ -143,11 +189,7 @@ async function handleRconLogMessage(guildId, msg) {
                         await autoEventsHandler.autoSaveLocation(setupData.interaction.guild.id, posX, posY, posZ, setupData.targetId);
                     }
                     if (autoEventsHandler && autoEventsHandler.refreshPanelViaInteraction) {
-                        await autoEventsHandler.refreshPanelViaInteraction(
-                            setupData.interaction,
-                            `✅ **Spawn Position Added!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``,
-                            setupData.targetId
-                        );
+                        await autoEventsHandler.refreshPanelViaInteraction(setupData.interaction, `✅ **Spawn Position Added!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``, setupData.targetId);
                     }
                 } catch (error) { console.error('[AUTO EVENT RCON SAVE ERROR]', error); }
             }
@@ -159,27 +201,9 @@ async function handleRconLogMessage(guildId, msg) {
                         await customZoneHandler.autoSaveLocation(setupData.interaction.guild.id, posX, posY, posZ, setupData.targetId);
                     }
                     if (customZoneHandler && customZoneHandler.refreshPanelViaInteraction) {
-                        await customZoneHandler.refreshPanelViaInteraction(
-                            setupData.interaction,
-                            `✅ **Zone Center Position Saved!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``,
-                            setupData.targetId
-                        );
+                        await customZoneHandler.refreshPanelViaInteraction(setupData.interaction, `✅ **Zone Center Position Saved!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``, setupData.targetId);
                     }
                 } catch (error) { console.error('[CUSTOM ZONE RCON SAVE ERROR]', error); }
-            }
-            // === D. RECYCLER LOCATION ===
-            else if (setupData.type === 'recycler') {
-                try {
-                    const { RecyclerLocation } = require('../database/db');
-                    await RecyclerLocation.upsert({ guildId: setupData.guildId, posX, posY, posZ });
-                    const recyclerHandler = require('../handlers/recyclerHandler');
-                    if (recyclerHandler && recyclerHandler.refreshPanelViaInteraction) {
-                        await recyclerHandler.refreshPanelViaInteraction(
-                            setupData.interaction,
-                            `✅ **Recycler Position Saved!**\nCoordinates: \`X: ${posX}, Y: ${posY}, Z: ${posZ}\``
-                        );
-                    }
-                } catch (error) { console.error('[RECYCLER RCON SAVE ERROR]', error); }
             }
 
             adminPosQueue.delete(adminId);
@@ -189,10 +213,11 @@ async function handleRconLogMessage(guildId, msg) {
     return false;
 }
 
-// Exporting with queueHomeTpPos included
+// Exporting with queueRecyclerPos included
 module.exports = {
     captureAdminPosition,
     queueAdminPos: captureAdminPosition, 
     handleRconLogMessage,
-    queueHomeTpPos
+    queueHomeTpPos,
+    queueRecyclerPos
 };
