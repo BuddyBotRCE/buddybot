@@ -1,7 +1,6 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, RoleSelectMenuBuilder } = require('discord.js');
 const { RecyclerConfig, RecyclerLocation } = require('../database/db');
 const { captureAdminPosition } = require('../utils/rconPosTracker'); 
-const adminHandler = require('./adminHandler');
 
 async function renderRecyclerPanel(interaction) {
     const guildId = interaction.guild.id;
@@ -17,7 +16,7 @@ async function renderRecyclerPanel(interaction) {
             `Configure a dedicated server Recycler that players can spawn via quick-chat emote.\n\n` +
             `• **Required Role:** ${roleDisplay}\n` +
             `• **Location Status:** ${locDisplay}\n\n` +
-            `**How to spawn in-game:** Emote \`I Need Scrap\` or type \`!recycler\``
+            `**How to spawn in-game:** Emote \`Repair This\` or type \`!recycler\``
         )
         .setColor('#27ae60');
 
@@ -30,12 +29,22 @@ async function renderRecyclerPanel(interaction) {
         new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Dashboard').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
     );
 
-    const payload = { embeds: [embed], components: [row1, row2], flags: 64 };
+    const payload = { embeds: [embed], components: [row1, row2], flags: 64, content: '' };
     
-    if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-        return await interaction.reply(payload);
+    try {
+        // This ensures Discord properly transitions the menu instead of hanging!
+        if (interaction.isMessageComponent()) {
+            if (interaction.replied || interaction.deferred) {
+                return await interaction.editReply(payload);
+            } else {
+                return await interaction.update(payload);
+            }
+        } else {
+            return await interaction.reply(payload);
+        }
+    } catch (err) {
+        console.error('[RECYCLER UI RENDER ERROR]', err);
     }
-    return await interaction.update(payload).catch(() => {});
 }
 
 module.exports = async (interaction, client) => {
@@ -55,6 +64,8 @@ module.exports = async (interaction, client) => {
         }
 
         if (interaction.isButton() && customId === 'admin_menu_back') {
+            // Lazy load the admin handler to prevent startup crashes
+            const adminHandler = require('./adminHandler');
             if (adminHandler && adminHandler.renderMainPanel) {
                 return await adminHandler.renderMainPanel(interaction);
             }
