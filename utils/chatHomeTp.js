@@ -31,16 +31,22 @@ async function processHomeTpChat(guildId, rawUsername, isSetHome, isRetreat, cli
     // A. SET HOME TRIGGER (Emote: "Can I have a key")
     // ==========================================
     if (isSetHome) {
-        // 1. Warn the player and kill them to force a bed respawn
+        // 1. Warn the player
         await sendRconCommand(guildId, `say "⚠️ ${matchedPlayer.inGameName}, killing you to capture your bed spawn..."`, client);
-        await sendRconCommand(guildId, `kill "${matchedPlayer.inGameName}"`, client);
         
-        // 2. Clear any existing timer
+        // 2. Execute the Kill command (killplayer is the correct RCON admin command)
+        await sendRconCommand(guildId, `killplayer "${matchedPlayer.inGameName}"`, client);
+        
+        // FALLBACK: If 'killplayer' doesn't work on your specific RCE branch, uncomment the line below. 
+        // It teleports the player 2000 meters into the sky so they fall to their death instantly.
+        // await sendRconCommand(guildId, `teleportpos (0,2000,0) "${matchedPlayer.inGameName}"`, client);
+        
+        // 3. Clear any existing timer
         if (homeTpPosQueue.has(matchedPlayer.userId)) {
             clearTimeout(homeTpPosQueue.get(matchedPlayer.userId).timeoutTimer);
         }
         
-        // 3. Give them 2 full minutes (120,000ms) to bypass bag timers and respawn
+        // 4. Give them 2 full minutes to bypass bag timers and respawn
         const timeoutTimer = setTimeout(() => {
             if (homeTpPosQueue.has(matchedPlayer.userId)) {
                 homeTpPosQueue.delete(matchedPlayer.userId);
@@ -48,10 +54,11 @@ async function processHomeTpChat(guildId, rawUsername, isSetHome, isRetreat, cli
             }
         }, 120000); 
 
-        // 4. Register them in the queue so rconManager catches their "spawned at" log
+        // 5. Register them in the queue so rconManager catches their "spawned at" log
         homeTpPosQueue.set(matchedPlayer.userId, { 
             userId: matchedPlayer.userId, 
             inGameName: matchedPlayer.inGameName, 
+            serverId: null,
             timeoutTimer 
         });
         
