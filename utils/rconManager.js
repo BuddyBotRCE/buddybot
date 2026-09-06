@@ -2,6 +2,7 @@ const WebSocket = require('ws');
 const { GuildConfig, GameServer, UserEconomy, CustomBind, BindCooldown, ActiveBounty, BountyCooldown, HomeTeleportConfig, HomeTeleportCooldown, HomeTeleportLocation } = require('../database/db');
 const { EmbedBuilder } = require('discord.js');
 const { processD11Router } = require('./d11ChatHandler'); // Linked to your D11 router
+const { handleRconLogMessage } = require('./rconPosTracker');
 
 const activeConnections = new Map();
 const adminPosQueue = new Map(); 
