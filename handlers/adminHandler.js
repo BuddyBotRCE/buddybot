@@ -98,24 +98,26 @@ async function renderMainPanel(interaction) {
     );
 
     const row2 = new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder().setCustomId('admin_menu_select_2').setPlaceholder('⭐ Premium & Advanced Features...')
-            .addOptions([
-                { label: 'Auto-Events (Premium)', value: 'setup_autoevents', emoji: '🚁' },
-                { label: 'Auto-Moderation Suite', value: 'setup_automod', emoji: '🛡️' },
-                { label: 'BuddyPass Manager', value: 'setup_buddypass', emoji: '⭐' },
-                { label: 'Clan System Manager', value: 'setup_clans', emoji: '🛡️' },
-                { label: 'Bounties System', value: 'setup_bounties', emoji: '🎯' },
-                { label: 'Custom Binds', value: 'setup_binds', emoji: '🗣️' },
-                { label: 'AI Integration Setup', value: 'setup_ai', emoji: '🤖' },
-                { label: 'Premium Status & License', value: 'setup_tier', emoji: '⭐' },
-                { label: 'Embeds & Reaction Roles', value: 'setup_embeds_roles', description: 'Announcements, Verifications, & Roles', emoji: '🎨' },
-                { label: 'Giveaways Manager', value: 'setup_giveaways', emoji: '🎉' },
-                { label: 'Suggestions System', value: 'setup_suggestions', emoji: '💡' },
-                { label: 'Home Teleport System', value: 'setup_hometp', description: 'Configure emote retreat teleports', emoji: '🏠' },
-                { label: 'Recycler Manager', value: 'setup_recycler', description: 'Configure independent recycler tools', emoji: '♻️' }, // 🛑 NEW: Recycler Panel Here!
-                { label: 'Skip Night Settings', value: 'setup_skipnight', emoji: '🌙' }
-            ])
-    );
+            new StringSelectMenuBuilder().setCustomId('admin_menu_select_2').setPlaceholder('⭐ Premium & Advanced Features...')
+                .addOptions([
+                    { label: '🎮 Buddy Games (Gun Game & BR)', value: 'setup_buddy_games', description: 'Configure automated Rust Console Edition arena events', emoji: '🎮' },
+                    { label: 'Auto-Events (Premium)', value: 'setup_autoevents', emoji: '🚁' },
+                    { label: 'Auto-Moderation Suite', value: 'setup_automod', emoji: '🛡️' },
+                    { label: 'BuddyPass Manager', value: 'setup_buddypass', emoji: '⭐' },
+                    { label: 'Clan System Manager', value: 'setup_clans', emoji: '🛡️' },
+                    { label: 'Bounties System', value: 'setup_bounties', emoji: '🎯' },
+                    { label: 'Custom Binds', value: 'setup_binds', emoji: '🗣️' },
+                    { label: 'ORP Manager', value: 'setup_orp', emoji: '🛡️' },
+                    { label: 'AI Integration Setup', value: 'setup_ai', emoji: '🤖' },
+                    { label: 'Premium Status & License', value: 'setup_tier', emoji: '⭐' },
+                    { label: 'Embeds & Reaction Roles', value: 'setup_embeds_roles', description: 'Announcements, Verifications, & Roles', emoji: '🎨' },
+                    { label: 'Giveaways Manager', value: 'setup_giveaways', emoji: '🎉' },
+                    { label: 'Suggestions System', value: 'setup_suggestions', emoji: '💡' },
+                    { label: 'Home Teleport System', value: 'setup_hometp', description: 'Configure emote retreat teleports', emoji: '🏠' },
+                    { label: 'Recycler Manager', value: 'setup_recycler', description: 'Configure independent recycler tools', emoji: '♻️' },
+                    { label: 'Skip Night Settings', value: 'setup_skipnight', emoji: '🌙' }
+                ])
+        );
 
     if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
         return await interaction.reply({ embeds: [embed], components: [row1, row2], flags: 64 });
