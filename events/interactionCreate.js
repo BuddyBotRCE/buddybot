@@ -76,7 +76,7 @@ module.exports = async (interaction, client) => {
             if (customId === 'modal_recycler_cd') return await recyclerHandler(interaction, client);
             if (customId.startsWith('modal_prison_')) return await prisonHandler(interaction, client);
             if (customId === 'modal_automsg_add') return await autoMessageHandler(interaction, client);
-            if (customId.startsWith('modal_gg_')) return await gunGameHandler(interaction, client);
+            if (customId.startsWith('modal_gg_') || customId === 'modal_gg_add_weapon') return await gunGameHandler(interaction, client);
 
             return await adminHandler(interaction, client);
         }
@@ -148,9 +148,11 @@ module.exports = async (interaction, client) => {
             if (selectedValue === 'setup_recycler') return await recyclerHandler(interaction, client);
             if (selectedValue === 'setup_prison' || selectedValue.startsWith('set_cell_')) return await prisonHandler(interaction, client); 
             if (selectedValue === 'setup_automessages') return await autoMessageHandler(interaction, client);
-            if (selectedValue === 'setup_gungame' || customId.startsWith('gg_')) {
-    return await gunGameHandler(interaction, client);
-}
+            
+            // 🎯 Routed Gun Game opening from dropdown
+            if (selectedValue === 'setup_buddy_games' || selectedValue === 'setup_gungame') {
+                return await gunGameHandler(interaction, client);
+            }
 
             return await adminHandler(interaction, client);
         }
@@ -202,9 +204,13 @@ module.exports = async (interaction, client) => {
         if (customId.includes('recycler')) return await recyclerHandler(interaction, client);
         if (customId.includes('prison') || customId === 'prison_btn_jail' || customId === 'prison_btn_unjail') return await prisonHandler(interaction, client);
         
-        // 🛑 NEW: Route Auto-Message Buttons & Menus (Add/Delete)
         if (customId.startsWith('automsg_') || customId.includes('automsg')) {
             return await autoMessageHandler(interaction, client);
+        }
+
+        // 🎯 GLOBAL GUN GAME BUTTON & SELECT MENU ROUTER
+        if (customId.startsWith('gg_') || customId.includes('gg_')) {
+            return await gunGameHandler(interaction, client);
         }
 
         if (customId.includes('kit') && !customId.includes('ticket')) {

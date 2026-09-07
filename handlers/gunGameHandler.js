@@ -105,7 +105,7 @@ const gunGameHandler = async (interaction, client) => {
             return interaction.update({ content: '🔙 Returned to main dashboard.', embeds: [], components: [] });
         }
 
-        if (customId === 'admin_menu_select' && selectedValue === 'setup_gungame') {
+        if (customId === 'admin_menu_select' && (selectedValue === 'setup_gungame' || selectedValue === 'setup_buddy_games')) {
             const payload = await buildGGPanelPayload(guildId);
             return interaction.update(payload).catch(() => interaction.reply(payload));
         }
