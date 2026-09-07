@@ -31,6 +31,7 @@ const homeTpHandler = require(handlerPath('homeTpHandler'));
 const skipNightHandler = require(handlerPath('skipNightHandler'));
 const recyclerHandler = require(handlerPath('recyclerHandler')); 
 const prisonHandler = require(handlerPath('prisonHandler')); 
+const gunGameHandler = require(handlerPath('gunGameHandler'));
 
 module.exports = async (interaction, client) => {
     try {
@@ -75,7 +76,8 @@ module.exports = async (interaction, client) => {
             if (customId === 'modal_recycler_cd') return await recyclerHandler(interaction, client);
             if (customId.startsWith('modal_prison_')) return await prisonHandler(interaction, client);
             if (customId === 'modal_automsg_add') return await autoMessageHandler(interaction, client);
-            
+            if (customId.startsWith('modal_gg_')) return await gunGameHandler(interaction, client);
+
             return await adminHandler(interaction, client);
         }
 
@@ -146,7 +148,10 @@ module.exports = async (interaction, client) => {
             if (selectedValue === 'setup_recycler') return await recyclerHandler(interaction, client);
             if (selectedValue === 'setup_prison' || selectedValue.startsWith('set_cell_')) return await prisonHandler(interaction, client); 
             if (selectedValue === 'setup_automessages') return await autoMessageHandler(interaction, client);
-            
+            if (selectedValue === 'setup_gungame' || customId.startsWith('gg_')) {
+    return await gunGameHandler(interaction, client);
+}
+
             return await adminHandler(interaction, client);
         }
 

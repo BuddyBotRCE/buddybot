@@ -2,7 +2,7 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelect
 const db = require('../database/db');
 const adminHandler = require('./adminHandler');
 const { RUST_CATEGORIES } = require('../utils/rustCatalog');
-const { queueAdminPos } = require('../utils/rconManager');
+const { queueAdminPos } = require('../utils/rconPosTracker');
 
 const BUILT_IN_PRESETS = {
     standard: [
