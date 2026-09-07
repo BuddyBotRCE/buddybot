@@ -53,6 +53,7 @@ module.exports = {
                 .addOptions([
                     { label: '🎮 Buddy Games (Gun Game & BR)', value: 'setup_buddy_games', description: 'Configure automated Rust Console Edition arena events', emoji: '🎮' },
                     { label: 'Auto-Events (Premium)', value: 'setup_autoevents', emoji: '🚁' },
+                    { label: 'Auto-Messages Manager', value: 'setup_automessages', description: 'Configure periodic timed server chat broadcasts', emoji: '📢' },
                     { label: 'Auto-Moderation Suite', value: 'setup_automod', emoji: '🛡️' },
                     { label: 'BuddyPass Manager', value: 'setup_buddypass', emoji: '⭐' },
                     { label: 'Clan System Manager', value: 'setup_clans', emoji: '🛡️' },

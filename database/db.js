@@ -246,6 +246,14 @@ const JailedPlayer = sequelize.define('JailedPlayer', {
     expiresAt: { type: DataTypes.DATE, allowNull: true },
     jailedAt: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 });
+// 👇 NEW: Auto-Messages System Table 👇
+const AutoMessage = sequelize.define('AutoMessage', {
+    id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+    guildId: { type: DataTypes.STRING, allowNull: false },
+    message: { type: DataTypes.TEXT, allowNull: false },
+    intervalMinutes: { type: DataTypes.INTEGER, defaultValue: 30 }, // How often it repeats
+    isEnabled: { type: DataTypes.BOOLEAN, defaultValue: true }
+});
 
 async function initDb() { 
     await sequelize.authenticate(); 

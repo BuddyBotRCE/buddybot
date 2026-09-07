@@ -307,6 +307,45 @@ client.once('ready', async () => {
                     const newMsg = await channel.send({ embeds: [statusEmbed] });
                     await config.update({ statusMessageId: newMsg.id });
                 }
+                // === AUTOMATED BROADCAST CHAT LOOP ===
+const { AutoMessage, GuildConfig } = require('../database/db');
+const { sendRconCommand, activeConnections } = require('./rconManager');
+
+// Track last sent times in memory to respect individual intervals
+const messageLastSent = new Map();
+
+setInterval(async () => {
+    try {
+        const allMessages = await AutoMessage.findAll({ where: { isEnabled: true } });
+        if (!allMessages || allMessages.length === 0) return;
+
+        const now = Date.now();
+
+        for (const msgObj of allMessages) {
+            const guildId = msgObj.guildId;
+            
+            // Check if this guild has the feature toggled on
+            const config = await GuildConfig.findOne({ where: { guildId } });
+            if (config && config.autoMessagesEnabled === false) continue;
+
+            const lastSent = messageLastSent.get(msgObj.id) || 0;
+            const intervalMs = msgObj.intervalMinutes * 60000;
+
+            if (now - lastSent >= intervalMs) {
+                messageLastSent.set(msgObj.id, now);
+
+                // Broadcast via RCON to all active server connections for this guild
+                for (const [gId] of activeConnections.entries()) {
+                    if (gId === guildId) {
+                        await sendRconCommand(guildId, `say "${msgObj.message}"`, null);
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        console.error('[AUTO MESSAGE BROADCAST ERROR]', e);
+    }
+}, 30000); // Ticks every 30 seconds to check timers accurately
             }
         } catch (loopErr) {
             console.error('[STATUS LOOP ERROR]', loopErr);

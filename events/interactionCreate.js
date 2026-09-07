@@ -8,6 +8,7 @@ const { GuildConfig } = require('../database/db');
 const handlerPath = (fileName) => path.join(__dirname, '..', 'handlers', fileName);
 
 const autoEventsHandler = require(handlerPath('autoEventsHandler'));
+const autoMessageHandler = require(handlerPath('autoMessageHandler'));
 const economyHandler = require(handlerPath('economyHandler'));
 const premiumHandler = require(handlerPath('premiumHandler'));
 const suggestionHandler = require(handlerPath('suggestionHandler'));
@@ -73,7 +74,7 @@ module.exports = async (interaction, client) => {
             if (customId.startsWith('modal_ga_')) return await giveawayHandler(interaction, client);
             if (customId === 'modal_recycler_cd') return await recyclerHandler(interaction, client);
             if (customId.startsWith('modal_prison_')) return await prisonHandler(interaction, client); // 🔒 Prison Modals
-            
+            if (customId === 'modal_automsg_add') return await autoMessageHandler(interaction, client);
             return await adminHandler(interaction, client);
         }
 
@@ -143,6 +144,7 @@ module.exports = async (interaction, client) => {
             if (selectedValue === 'setup_hometp') return await homeTpHandler(interaction, client);
             if (selectedValue === 'setup_recycler') return await recyclerHandler(interaction, client);
             if (selectedValue === 'setup_prison' || selectedValue.startsWith('set_cell_')) return await prisonHandler(interaction, client); // 🔒 Prison Dropdown
+            if (selectedValue === 'setup_automessages' || customId.includes('automsg')) return await autoMessageHandler(interaction, client);
             
             return await adminHandler(interaction, client);
         }

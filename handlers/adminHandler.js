@@ -28,7 +28,8 @@ const MODULES_LIST = [
     { id: 'homeTpEnabled', name: 'Home Teleport', emoji: '🏠' },
     { id: 'skipNightEnabled', name: 'Skip Night', emoji: '🌙' },
     { id: 'recyclerEnabled', name: 'Recycler System', emoji: '♻️' },
-    { id: 'prisonEnabled', name: 'Prison System', emoji: '🔒' } // 🔒 Prison Toggle
+    { id: 'prisonEnabled', name: 'Prison System', emoji: '🔒' }, // 🔒 Prison Toggle
+    { id: 'autoMessagesEnabled', name: 'Auto-Messages', emoji: '📢' }
 ];
 
 async function renderBotSettings(interaction, guildId, action = 'reply') {
@@ -103,6 +104,7 @@ async function renderMainPanel(interaction) {
                 .addOptions([
                     { label: '🎮 Buddy Games (Gun Game & BR)', value: 'setup_buddy_games', description: 'Configure automated Rust Console Edition arena events', emoji: '🎮' },
                     { label: 'Auto-Events (Premium)', value: 'setup_autoevents', emoji: '🚁' },
+                    { label: 'Auto-Messages Manager', value: 'setup_automessages', description: 'Configure periodic timed server chat broadcasts', emoji: '📢' },
                     { label: 'Auto-Moderation Suite', value: 'setup_automod', emoji: '🛡️' },
                     { label: 'BuddyPass Manager', value: 'setup_buddypass', emoji: '⭐' },
                     { label: 'Clan System Manager', value: 'setup_clans', emoji: '🛡️' },
@@ -214,6 +216,15 @@ const adminHandler = async (interaction, client) => {
             return interaction.reply({ content: '❌ The Recycler module is currently unlinked or missing.', flags: 64 });
         }
     }
+    if (customId === 'admin_menu_select_2' && selectedValue === 'setup_automessages') {
+    try {
+        const autoMessageHandler = require('./autoMessageHandler');
+        return await autoMessageHandler(interaction, client);
+    } catch (err) {
+        console.error('[AUTO MESSAGE HANDLER ERROR]', err);
+        return interaction.reply({ content: '❌ The Auto-Messages module is currently unlinked or missing.', flags: 64 });
+    }
+}
 
     // 🔒 Route to Prison Manager
     if (customId === 'admin_menu_select_2' && selectedValue === 'setup_prison') {
