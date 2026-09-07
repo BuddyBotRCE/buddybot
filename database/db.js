@@ -250,9 +250,12 @@ const JailedPlayer = sequelize.define('JailedPlayer', {
 const AutoMessage = sequelize.define('AutoMessage', {
     id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
     guildId: { type: DataTypes.STRING, allowNull: false },
+    serverId: { type: DataTypes.STRING, allowNull: true }, // null = all servers
     message: { type: DataTypes.TEXT, allowNull: false },
-    intervalMinutes: { type: DataTypes.INTEGER, defaultValue: 30 }, // How often it repeats
-    isEnabled: { type: DataTypes.BOOLEAN, defaultValue: true }
+    intervalMinutes: { type: DataTypes.INTEGER, defaultValue: 30 },
+    isEnabled: { type: DataTypes.BOOLEAN, defaultValue: true },
+    color: { type: DataTypes.STRING, defaultValue: '#3498db' }, // Embed color / Tag color style
+    prefix: { type: DataTypes.STRING, defaultValue: '[ANNOUNCEMENT]' }
 });
 
 async function initDb() { 

@@ -308,10 +308,10 @@ client.once('ready', async () => {
                     await config.update({ statusMessageId: newMsg.id });
                 }
                 // === AUTOMATED BROADCAST CHAT LOOP ===
+                // === ADVANCED AUTOMATED BROADCAST CHAT LOOP ===
 const { AutoMessage, GuildConfig } = require('../database/db');
 const { sendRconCommand, activeConnections } = require('./rconManager');
 
-// Track last sent times in memory to respect individual intervals
 const messageLastSent = new Map();
 
 setInterval(async () => {
@@ -324,7 +324,6 @@ setInterval(async () => {
         for (const msgObj of allMessages) {
             const guildId = msgObj.guildId;
             
-            // Check if this guild has the feature toggled on
             const config = await GuildConfig.findOne({ where: { guildId } });
             if (config && config.autoMessagesEnabled === false) continue;
 
@@ -334,16 +333,23 @@ setInterval(async () => {
             if (now - lastSent >= intervalMs) {
                 messageLastSent.set(msgObj.id, now);
 
-                // Broadcast via RCON to all active server connections for this guild
-                for (const [gId] of activeConnections.entries()) {
+                const formattedMsg = `${msgObj.prefix} ${msgObj.message}`;
+
+                for (const [gId, serverConnections] of activeConnections.entries()) {
                     if (gId === guildId) {
-                        await sendRconCommand(guildId, `say "${msgObj.message}"`, null);
+                        if (msgObj.serverId) {
+                            // Send only to the specific targeted server
+                            await sendRconCommand(guildId, `say "${formattedMsg}"`, null, msgObj.serverId);
+                        } else {
+                            // Send to all active servers for this guild
+                            await sendRconCommand(guildId, `say "${formattedMsg}"`, null);
+                        }
                     }
                 }
             }
         }
     } catch (e) {
-        console.error('[AUTO MESSAGE BROADCAST ERROR]', e);
+        console.error('[ADVANCED AUTO MESSAGE BROADCAST ERROR]', e);
     }
 }, 30000); // Ticks every 30 seconds to check timers accurately
             }

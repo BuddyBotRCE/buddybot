@@ -1,34 +1,60 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { AutoMessage } = require('../database/db');
+const { AutoMessage, GameServer } = require('../database/db');
+
+const COLOR_OPTIONS = [
+    { label: '🟢 Emerald Green (#2ecc71)', value: '#2ecc71' },
+    { label: '🔵 Dodger Blue (#3498db)', value: '#3498db' },
+    { label: '🟡 Amber Gold (#f1c40f)', value: '#f1c40f' },
+    { label: '🔴 Crimson Red (#e74c3c)', value: '#e74c3c' },
+    { label: '🟣 Amethyst Purple (#9b59b6)', value: '#9b59b6' },
+    { label: '🩷 Hot Pink (#ff69b4)', value: '#ff69b4' },
+    { label: '🟠 Neon Orange (#ff4500)', value: '#ff4500' },
+    { label: '🔵 Cyan / Aqua (#00ffff)', value: '#00ffff' },
+    { label: '🍋 Lime Green (#00ff00)', value: '#00ff00' },
+    { label: '🩅 Electric Indigo (#4b0082)', value: '#4b0082' },
+    { label: '🤍 Pure White (#ffffff)', value: '#ffffff' },
+    { label: '🖤 Midnight Dark (#111111)', value: '#111111' },
+    { label: '🤎 Chocolate Brown (#8b4513)', value: '#8b4513' },
+    { label: '🪙 Luxury Gold (#ffd700)', value: '#ffd700' },
+    { label: '🩵 Turquoise Blue (#40e0d0)', value: '#40e0d0' }
+];
 
 async function renderAutoMessagePanel(interaction, messageOverride = '') {
     const guildId = interaction.guild.id;
     const messages = await AutoMessage.findAll({ where: { guildId } });
+    const servers = await GameServer.findAll({ where: { guildId } });
 
     let msgList = messages.length > 0
-        ? messages.map((m, i) => `**${i + 1}.** [Every ${m.intervalMinutes}m] ${m.isEnabled ? '🟢' : '🔴'}\n> \`${m.message}\``).join('\n\n')
+        ? messages.map((m, i) => {
+            const serverTarget = m.serverId ? servers.find(s => s.id.toString() === m.serverId)?.serverName || 'Specific Server' : '🌐 All Servers';
+            return `**${i + 1}.** ${m.isEnabled ? '🟢 ACTIVE' : '🔴 PAUSED'} | Interval: \`${m.intervalMinutes}m\` | Target: \`${serverTarget}\`\n` +
+                   `> **Prefix:** \`${m.prefix}\` | **Color:** \`${m.color}\`\n` +
+                   `> \`${m.message}\``;
+        }).join('\n\n')
         : '*No auto-messages configured yet. Click "Add Message" below!*';
 
     const embed = new EmbedBuilder()
         .setTitle('📢 Automated Server Messages Manager')
         .setDescription(
             (messageOverride ? `**${messageOverride}**\n\n` : '') +
-            `Configure periodic broadcast messages that automatically display in the Rust server chat.\n\n` +
-            `**Active Messages:**\n${msgList}`
+            `Configure periodic broadcast messages that automatically display in Rust server chats with custom intervals, target servers, prefixes, and color themes.\n\n` +
+            `**Active Broadcasts (${messages.length}):**\n${msgList}`
         )
         .setColor('#3498db');
 
     const components = [];
 
     if (messages.length > 0) {
-        const delMenu = new StringSelectMenuBuilder()
-            .setCustomId('automsg_del_select')
-            .setPlaceholder('🗑️ Select a message to delete...')
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId('automsg_manage_select')
+            .setPlaceholder('⚙️ Select a message to edit, toggle, or delete...')
             .addOptions(messages.slice(0, 25).map(m => ({
-                label: `Every ${m.intervalMinutes}m: ${m.message.substring(0, 40)}...`,
-                value: m.id.toString()
+                label: `[${m.intervalMinutes}m] ${m.prefix} ${m.message.substring(0, 30)}...`.substring(0, 100),
+                value: m.id.toString(),
+                description: `Status: ${m.isEnabled ? 'Active' : 'Paused'}`,
+                emoji: m.isEnabled ? '🟢' : '🔴'
             })));
-        components.push(new ActionRowBuilder().addComponents(delMenu));
+        components.push(new ActionRowBuilder().addComponents(selectMenu));
     }
 
     components.push(new ActionRowBuilder().addComponents(
@@ -46,6 +72,41 @@ async function renderAutoMessagePanel(interaction, messageOverride = '') {
     }
 }
 
+async function renderEditMessagePanel(interaction, msgId) {
+    const msgObj = await AutoMessage.findByPk(msgId);
+    if (!msgObj) return renderAutoMessagePanel(interaction, '❌ Message not found.');
+
+    const servers = await GameServer.findAll({ where: { guildId: interaction.guild.id } });
+    const targetName = msgObj.serverId ? servers.find(s => s.id.toString() === msgObj.serverId)?.serverName || 'Specific Server' : '🌐 All Servers';
+
+    const embed = new EmbedBuilder()
+        .setTitle(`✏️ Editing Auto-Message #${msgObj.id}`)
+        .setDescription(
+            `• **Status:** ${msgObj.isEnabled ? '🟢 Active' : '🔴 Paused'}\n` +
+            `• **Interval:** \`${msgObj.intervalMinutes} minutes\`\n` +
+            `• **Target Server:** \`${targetName}\`\n` +
+            `• **Prefix:** \`${msgObj.prefix}\`\n` +
+            `• **Color Theme:** \`${msgObj.color}\`\n\n` +
+            `**Message Content:**\n> \`${msgObj.message}\``
+        )
+        .setColor(msgObj.color || '#3498db');
+
+    const row1 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`automsg_toggle_${msgObj.id}`).setLabel(msgObj.isEnabled ? 'Pause Message' : 'Enable Message').setStyle(msgObj.isEnabled ? ButtonStyle.Danger : ButtonStyle.Success).setEmoji(msgObj.isEnabled ? '⏸️' : '▶️'),
+        new ButtonBuilder().setCustomId(`automsg_edit_text_${msgObj.id}`).setLabel('Edit Content & Prefix').setStyle(ButtonStyle.Primary).setEmoji('📝'),
+        new ButtonBuilder().setCustomId(`automsg_edit_time_${msgObj.id}`).setLabel('Set Interval').setStyle(ButtonStyle.Secondary).setEmoji('⏱️'),
+        new ButtonBuilder().setCustomId(`automsg_edit_color_${msgObj.id}`).setLabel('Color Theme').setStyle(ButtonStyle.Secondary).setEmoji('🎨')
+    );
+
+    const row2 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`automsg_edit_server_${msgObj.id}`).setLabel('Target Server').setStyle(ButtonStyle.Secondary).setEmoji('🌐'),
+        new ButtonBuilder().setCustomId(`automsg_delete_${msgObj.id}`).setLabel('Delete Message').setStyle(ButtonStyle.Danger).setEmoji('🗑️'),
+        new ButtonBuilder().setCustomId('automsg_back_main').setLabel('Back to List').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+    );
+
+    return interaction.update({ embeds: [embed], components: [row1, row2], flags: 64 });
+}
+
 module.exports = async (interaction, client) => {
     try {
         const customId = interaction.customId || '';
@@ -55,23 +116,127 @@ module.exports = async (interaction, client) => {
         if (interaction.isButton() && customId === 'automsg_btn_add') {
             const modal = new ModalBuilder().setCustomId('modal_automsg_add').setTitle('Create Auto-Message');
             modal.addComponents(
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('msg_text').setLabel('Message Text (Supports RCON quotes)').setStyle(TextInputStyle.Paragraph).setRequired(true)),
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('msg_prefix').setLabel('Prefix Tag (e.g. [SERVER], [EVENT])').setStyle(TextInputStyle.Short).setValue('[ANNOUNCEMENT]').setRequired(true)),
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('msg_text').setLabel('Message Text').setStyle(TextInputStyle.Paragraph).setRequired(true)),
                 new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('msg_mins').setLabel('Interval in Minutes (e.g. 30)').setStyle(TextInputStyle.Short).setRequired(true))
             );
             return await interaction.showModal(modal);
         }
 
         if (interaction.isModalSubmit() && customId === 'modal_automsg_add') {
+            const prefix = interaction.fields.getTextInputValue('msg_prefix').trim();
             const message = interaction.fields.getTextInputValue('msg_text').trim();
             const intervalMinutes = parseInt(interaction.fields.getTextInputValue('msg_mins')) || 30;
 
-            await AutoMessage.create({ guildId, message, intervalMinutes });
-            return await renderAutoMessagePanel(interaction, `✅ Successfully created new auto-message (Interval: ${intervalMinutes}m)!`);
+            await AutoMessage.create({ guildId, prefix, message, intervalMinutes });
+            return await renderAutoMessagePanel(interaction, `✅ Successfully created new auto-message!`);
         }
 
-        if (interaction.isStringSelectMenu() && customId === 'automsg_del_select') {
-            await AutoMessage.destroy({ where: { id: selectedVal, guildId } });
-            return await renderAutoMessagePanel(interaction, `🗑️ Successfully deleted the auto-message.`);
+        if (interaction.isStringSelectMenu() && customId === 'automsg_manage_select') {
+            return await renderEditMessagePanel(interaction, selectedVal);
+        }
+
+        if (interaction.isButton() && customId === 'automsg_back_main') {
+            return await renderAutoMessagePanel(interaction);
+        }
+
+        // Toggle Status
+        if (customId.startsWith('automsg_toggle_')) {
+            const msgId = customId.replace('automsg_toggle_', '');
+            const msgObj = await AutoMessage.findByPk(msgId);
+            if (msgObj) {
+                await msgObj.update({ isEnabled: !msgObj.isEnabled });
+                return await renderEditMessagePanel(interaction, msgId);
+            }
+        }
+
+        // Delete Message
+        if (customId.startsWith('automsg_delete_')) {
+            const msgId = customId.replace('automsg_delete_', '');
+            await AutoMessage.destroy({ where: { id: msgId, guildId } });
+            return await renderAutoMessagePanel(interaction, `🗑️ Successfully deleted auto-message.`);
+        }
+
+        // Edit Content Modal Trigger
+        if (customId.startsWith('automsg_edit_text_')) {
+            const msgId = customId.replace('automsg_edit_text_', '');
+            const msgObj = await AutoMessage.findByPk(msgId);
+            const modal = new ModalBuilder().setCustomId(`modal_automsg_text_${msgId}`).setTitle('Edit Message Text & Prefix');
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('msg_prefix').setLabel('Prefix Tag').setStyle(TextInputStyle.Short).setValue(msgObj.prefix).setRequired(true)),
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('msg_text').setLabel('Message Content').setStyle(TextInputStyle.Paragraph).setValue(msgObj.message).setRequired(true))
+            );
+            return await interaction.showModal(modal);
+        }
+
+        if (interaction.isModalSubmit() && customId.startsWith('modal_automsg_text_')) {
+            const msgId = customId.replace('modal_automsg_text_', '');
+            const prefix = interaction.fields.getTextInputValue('msg_prefix').trim();
+            const message = interaction.fields.getTextInputValue('msg_text').trim();
+            await AutoMessage.update({ prefix, message }, { where: { id: msgId } });
+            return await renderEditMessagePanel(interaction, msgId);
+        }
+
+        // Edit Interval Modal Trigger
+        if (customId.startsWith('automsg_edit_time_')) {
+            const msgId = customId.replace('automsg_edit_time_', '');
+            const msgObj = await AutoMessage.findByPk(msgId);
+            const modal = new ModalBuilder().setCustomId(`modal_automsg_time_${msgId}`).setTitle('Edit Interval Time');
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('msg_mins').setLabel('Interval in Minutes').setStyle(TextInputStyle.Short).setValue(msgObj.intervalMinutes.toString()).setRequired(true))
+            );
+            return await interaction.showModal(modal);
+        }
+
+        if (interaction.isModalSubmit() && customId.startsWith('modal_automsg_time_')) {
+            const msgId = customId.replace('modal_automsg_time_', '');
+            const intervalMinutes = parseInt(interaction.fields.getTextInputValue('msg_mins')) || 30;
+            await AutoMessage.update({ intervalMinutes }, { where: { id: msgId } });
+            return await renderEditMessagePanel(interaction, msgId);
+        }
+
+        // Color Theme Panel Trigger
+        if (customId.startsWith('automsg_edit_color_')) {
+            const msgId = customId.replace('automsg_edit_color_', '');
+            const embed = new EmbedBuilder().setTitle('🎨 Choose Color Theme').setDescription('Select an expanded color theme preset for this announcement style.').setColor('#3498db');
+            const menu = new StringSelectMenuBuilder().setCustomId(`automsg_color_select_${msgId}`).setPlaceholder('Select color theme...').addOptions(COLOR_OPTIONS);
+            return interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(menu), new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`automsg_back_edit_${msgId}`).setLabel('Back').setStyle(ButtonStyle.Secondary))] });
+        }
+
+        if (interaction.isStringSelectMenu() && customId.startsWith('automsg_color_select_')) {
+            const msgId = customId.replace('automsg_color_select_', '');
+            const color = selectedVal;
+            await AutoMessage.update({ color }, { where: { id: msgId } });
+            return await renderEditMessagePanel(interaction, msgId);
+        }
+
+        // Target Server Panel Trigger
+        if (customId.startsWith('automsg_edit_server_')) {
+            const msgId = customId.replace('automsg_edit_server_', '');
+            const servers = await GameServer.findAll({ where: { guildId } });
+            
+            let serverOptions = [{ label: '🌐 All Servers (Global Broadcast)', value: 'target_server_all', emoji: '🌐' }];
+            if (servers.length > 0) {
+                servers.forEach(s => {
+                    serverOptions.push({ label: `🖥️ Server: ${s.serverName}`, value: `target_server_${s.id}`, emoji: '🖥️' });
+                });
+            }
+
+            const embed = new EmbedBuilder().setTitle('🌐 Target Server').setDescription('Choose whether this message broadcasts to all connected servers or a single specific server.').setColor('#3498db');
+            const menu = new StringSelectMenuBuilder().setCustomId(`automsg_server_select_${msgId}`).setPlaceholder('Select target server...').addOptions(serverOptions);
+            return interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(menu), new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`automsg_back_edit_${msgId}`).setLabel('Back').setStyle(ButtonStyle.Secondary))] });
+        }
+
+        if (interaction.isStringSelectMenu() && customId.startsWith('automsg_server_select_')) {
+            const msgId = customId.replace('automsg_server_select_', '');
+            const serverId = selectedVal === 'target_server_all' ? null : selectedVal.replace('target_server_', '');
+            await AutoMessage.update({ serverId }, { where: { id: msgId } });
+            return await renderEditMessagePanel(interaction, msgId);
+        }
+
+        if (customId.startsWith('automsg_back_edit_')) {
+            const msgId = customId.replace('automsg_back_edit_', '');
+            return await renderEditMessagePanel(interaction, msgId);
         }
 
         if (interaction.isButton() && customId === 'admin_menu_back') {
