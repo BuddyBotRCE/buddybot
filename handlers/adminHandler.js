@@ -225,6 +225,15 @@ const adminHandler = async (interaction, client) => {
         return interaction.reply({ content: '❌ The Auto-Messages module is currently unlinked or missing.', flags: 64 });
     }
 }
+    if (customId === 'admin_menu_select_2' && selectedValue === 'setup_automessages') {
+    try {
+        const autoMessageHandler = require('./autoMessageHandler');
+        return await autoMessageHandler(interaction, client);
+    } catch (err) {
+        console.error('[AUTO MESSAGE HANDLER ERROR]', err);
+        return interaction.reply({ content: '❌ The Auto-Messages module is currently unlinked or missing.', flags: 64 });
+    }
+}
 
     // 🔒 Route to Prison Manager
     if (customId === 'admin_menu_select_2' && selectedValue === 'setup_prison') {
