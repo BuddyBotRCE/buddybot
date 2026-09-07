@@ -266,5 +266,5 @@ module.exports = {
     sequelize, GuildConfig, GameServer, UserEconomy, Giveaway, CustomBind, BindCooldown, ServerKit, ShopItem, ShopCooldown, CasinoCooldown, OrpConfig, PlayerOrpBase, BuddyPassChallenge, BuddyPassReward, TicketCategory, PveZone, AutoEvent, AutoEventLocation, ActiveBounty, BountyCooldown, Clan, ClanMember, ClanInvite, ClanWar, ReactionRole, CustomEmbed,
     HomeTeleportConfig, HomeTeleportCooldown, HomeTeleportLocation, ArenaCratePoint, ArenaConfig, ArenaPrize, ArenaSpawn, GunGameWeapon,
     RecyclerConfig, RecyclerLocation,
-    PrisonCell, JailedPlayer // 🛑 Exported Prison Tables
+    PrisonCell, JailedPlayer, AutoMessage // 🛑 Exported Prison Tables
 };
