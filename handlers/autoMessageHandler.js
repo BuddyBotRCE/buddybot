@@ -2,21 +2,31 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelect
 const { AutoMessage, GameServer } = require('../database/db');
 
 const COLOR_OPTIONS = [
-    { label: '🟢 Emerald Green (#2ecc71)', value: '#2ecc71' },
-    { label: '🔵 Dodger Blue (#3498db)', value: '#3498db' },
-    { label: '🟡 Amber Gold (#f1c40f)', value: '#f1c40f' },
-    { label: '🔴 Crimson Red (#e74c3c)', value: '#e74c3c' },
-    { label: '🟣 Amethyst Purple (#9b59b6)', value: '#9b59b6' },
-    { label: '🩷 Hot Pink (#ff69b4)', value: '#ff69b4' },
-    { label: '🟠 Neon Orange (#ff4500)', value: '#ff4500' },
-    { label: '🔵 Cyan / Aqua (#00ffff)', value: '#00ffff' },
-    { label: '🍋 Lime Green (#00ff00)', value: '#00ff00' },
-    { label: '🩅 Electric Indigo (#4b0082)', value: '#4b0082' },
-    { label: '🤍 Pure White (#ffffff)', value: '#ffffff' },
-    { label: '🖤 Midnight Dark (#111111)', value: '#111111' },
-    { label: '🤎 Chocolate Brown (#8b4513)', value: '#8b4513' },
-    { label: '🪙 Luxury Gold (#ffd700)', value: '#ffd700' },
-    { label: '🩵 Turquoise Blue (#40e0d0)', value: '#40e0d0' }
+    { label: '🟢 Emerald Green (#2ecc71)', value: '#2ecc71', description: 'Fresh, vibrant success tone' },
+    { label: '🔵 Dodger Blue (#3498db)', value: '#3498db', description: 'Standard professional blue' },
+    { label: '🟡 Amber Gold (#f1c40f)', value: '#f1c40f', description: 'Warm warning or notice tone' },
+    { label: '🔴 Crimson Red (#e74c3c)', value: '#e74c3c', description: 'Bold alert or danger tone' },
+    { label: '🟣 Amethyst Purple (#9b59b6)', value: '#9b59b6', description: 'Sleek premium accent' },
+    { label: '🩷 Hot Pink (#ff69b4)', value: '#ff69b4', description: 'Bright energetic pink' },
+    { label: '🟠 Neon Orange (#ff4500)', value: '#ff4500', description: 'High-visibility vibrant orange' },
+    { label: '🔵 Cyan / Aqua (#00ffff)', value: '#00ffff', description: 'Electric bright cyan' },
+    { label: '🍋 Lime Green (#00ff00)', value: '#00ff00', description: 'Luminous neon green' },
+    { label: '🩅 Electric Indigo (#4b0082)', value: '#4b0082', description: 'Deep mystical purple-blue' },
+    { label: '🤍 Pure White (#ffffff)', value: '#ffffff', description: 'Clean crisp neutral' },
+    { label: '🖤 Midnight Dark (#111111)', value: '#111111', description: 'Stealth black tone' },
+    { label: '🤎 Chocolate Brown (#8b4513)', value: '#8b4513', description: 'Earthy rust tone' },
+    { label: '🪙 Luxury Gold (#ffd700)', value: '#ffd700', description: 'Metallic store gold' },
+    { label: '🩵 Turquoise Blue (#40e0d0)', value: '#40e0d0', description: 'Refreshing aqua blue' },
+    { label: '🪸 Coral Pink (#ff7f50)', value: '#ff7f50', description: 'Warm sunset coral' },
+    { label: '🌿 Forest Green (#228b22)', value: '#228b22', description: 'Deep natural green' },
+    { label: '🌊 Deep Navy Blue (#000080)', value: '#000080', description: 'Dark ocean navy' },
+    { label: '🍇 Grape Purple (#6f2da8)', value: '#6f2da8', description: 'Rich dark violet' },
+    { label: '⚡ Electric Yellow (#ffff00)', value: '#ffff00', description: 'High-contrast bright yellow' },
+    { label: '🏮 Rust Orange (#b7410e)', value: '#b7410e', description: 'Classic Rust game orange' },
+    { label: '❄️ Ice Blue (#add8e6)', value: '#add8e6', description: 'Cool light pastel blue' },
+    { label: '🌸 Pastel Pink (#ffb6c1)', value: '#ffb6c1', description: 'Soft muted pink' },
+    { label: '🫒 Olive Drab (#556b2f)', value: '#556b2f', description: 'Tactical military olive' },
+    { label: '🩻 Slate Grey (#708090)', value: '#708090', description: 'Neutral modern slate' }
 ];
 
 async function renderAutoMessagePanel(interaction, messageOverride = '') {
@@ -86,7 +96,7 @@ async function renderEditMessagePanel(interaction, msgId) {
             `• **Interval:** \`${msgObj.intervalMinutes} minutes\`\n` +
             `• **Target Server:** \`${targetName}\`\n` +
             `• **Prefix:** \`${msgObj.prefix}\`\n` +
-            `• **Color Theme:** \`${msgObj.color}\`\n\n` +
+            `• **Color Theme Preview:** \`⬛⬛⬛ ${msgObj.color} ⬛⬛⬛\`\n\n` +
             `**Message Content:**\n> \`${msgObj.message}\``
         )
         .setColor(msgObj.color || '#3498db');
@@ -140,7 +150,6 @@ module.exports = async (interaction, client) => {
             return await renderAutoMessagePanel(interaction);
         }
 
-        // Toggle Status
         if (customId.startsWith('automsg_toggle_')) {
             const msgId = customId.replace('automsg_toggle_', '');
             const msgObj = await AutoMessage.findByPk(msgId);
@@ -150,14 +159,12 @@ module.exports = async (interaction, client) => {
             }
         }
 
-        // Delete Message
         if (customId.startsWith('automsg_delete_')) {
             const msgId = customId.replace('automsg_delete_', '');
             await AutoMessage.destroy({ where: { id: msgId, guildId } });
             return await renderAutoMessagePanel(interaction, `🗑️ Successfully deleted auto-message.`);
         }
 
-        // Edit Content Modal Trigger
         if (customId.startsWith('automsg_edit_text_')) {
             const msgId = customId.replace('automsg_edit_text_', '');
             const msgObj = await AutoMessage.findByPk(msgId);
@@ -177,7 +184,6 @@ module.exports = async (interaction, client) => {
             return await renderEditMessagePanel(interaction, msgId);
         }
 
-        // Edit Interval Modal Trigger
         if (customId.startsWith('automsg_edit_time_')) {
             const msgId = customId.replace('automsg_edit_time_', '');
             const msgObj = await AutoMessage.findByPk(msgId);
@@ -195,10 +201,9 @@ module.exports = async (interaction, client) => {
             return await renderEditMessagePanel(interaction, msgId);
         }
 
-        // Color Theme Panel Trigger
         if (customId.startsWith('automsg_edit_color_')) {
             const msgId = customId.replace('automsg_edit_color_', '');
-            const embed = new EmbedBuilder().setTitle('🎨 Choose Color Theme').setDescription('Select an expanded color theme preset for this announcement style.').setColor('#3498db');
+            const embed = new EmbedBuilder().setTitle('🎨 Choose Color Theme').setDescription('Select from 25 expanded color theme presets for this announcement style.').setColor('#3498db');
             const menu = new StringSelectMenuBuilder().setCustomId(`automsg_color_select_${msgId}`).setPlaceholder('Select color theme...').addOptions(COLOR_OPTIONS);
             return interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(menu), new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`automsg_back_edit_${msgId}`).setLabel('Back').setStyle(ButtonStyle.Secondary))] });
         }
@@ -210,7 +215,6 @@ module.exports = async (interaction, client) => {
             return await renderEditMessagePanel(interaction, msgId);
         }
 
-        // Target Server Panel Trigger
         if (customId.startsWith('automsg_edit_server_')) {
             const msgId = customId.replace('automsg_edit_server_', '');
             const servers = await GameServer.findAll({ where: { guildId } });
