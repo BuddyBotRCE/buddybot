@@ -30,7 +30,7 @@ const wipeHandler = require(handlerPath('wipeHandler'));
 const homeTpHandler = require(handlerPath('homeTpHandler'));
 const skipNightHandler = require(handlerPath('skipNightHandler'));
 const recyclerHandler = require(handlerPath('recyclerHandler')); 
-const prisonHandler = require(handlerPath('prisonHandler')); // 🔒 Prison Handler
+const prisonHandler = require(handlerPath('prisonHandler')); 
 
 module.exports = async (interaction, client) => {
     try {
@@ -73,8 +73,9 @@ module.exports = async (interaction, client) => {
             if (customId.startsWith('modal_tk_')) return await ticketHandler(interaction, client);
             if (customId.startsWith('modal_ga_')) return await giveawayHandler(interaction, client);
             if (customId === 'modal_recycler_cd') return await recyclerHandler(interaction, client);
-            if (customId.startsWith('modal_prison_')) return await prisonHandler(interaction, client); // 🔒 Prison Modals
+            if (customId.startsWith('modal_prison_')) return await prisonHandler(interaction, client);
             if (customId === 'modal_automsg_add') return await autoMessageHandler(interaction, client);
+            
             return await adminHandler(interaction, client);
         }
 
@@ -143,8 +144,8 @@ module.exports = async (interaction, client) => {
             if (selectedValue === 'setup_automod') return await autoModHandler(interaction, client);
             if (selectedValue === 'setup_hometp') return await homeTpHandler(interaction, client);
             if (selectedValue === 'setup_recycler') return await recyclerHandler(interaction, client);
-            if (selectedValue === 'setup_prison' || selectedValue.startsWith('set_cell_')) return await prisonHandler(interaction, client); // 🔒 Prison Dropdown
-            if (selectedValue === 'setup_automessages' || customId.includes('automsg')) return await autoMessageHandler(interaction, client);
+            if (selectedValue === 'setup_prison' || selectedValue.startsWith('set_cell_')) return await prisonHandler(interaction, client); 
+            if (selectedValue === 'setup_automessages') return await autoMessageHandler(interaction, client);
             
             return await adminHandler(interaction, client);
         }
@@ -194,7 +195,12 @@ module.exports = async (interaction, client) => {
         }  
 
         if (customId.includes('recycler')) return await recyclerHandler(interaction, client);
-        if (customId.includes('prison') || customId === 'prison_btn_jail' || customId === 'prison_btn_unjail') return await prisonHandler(interaction, client); // 🔒 Prison Buttons
+        if (customId.includes('prison') || customId === 'prison_btn_jail' || customId === 'prison_btn_unjail') return await prisonHandler(interaction, client);
+        
+        // 🛑 NEW: Route Auto-Message Buttons & Menus (Add/Delete)
+        if (customId.startsWith('automsg_') || customId.includes('automsg')) {
+            return await autoMessageHandler(interaction, client);
+        }
 
         if (customId.includes('kit') && !customId.includes('ticket')) {
             return await kitHandler(interaction, client);
