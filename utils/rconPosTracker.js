@@ -176,8 +176,7 @@ async function handleRconLogMessage(guildId, msg) {
     }
     return false;
 }
-
-// === AUTOMATED PRISON 2-MINUTE TIMER & REMINDER LOOP ===
+// === AUTOMATED PRISON EXPIRATION, RF DOOR TRIGGER & REMINDER LOOP ===
 setInterval(async () => {
     try {
         const allJailed = await JailedPlayer.findAll();
@@ -185,16 +184,40 @@ setInterval(async () => {
 
         const now = new Date();
         const { sendRconCommand, activeConnections } = require('./rconManager');
+        const { PrisonCell, PrisonLog } = require('../database/db');
 
         for (const prisoner of allJailed) {
             // Check expiration for temporary sentences
             if (prisoner.isTemp && prisoner.expiresAt && new Date(prisoner.expiresAt) <= now) {
-                await JailedPlayer.destroy({ where: { id: prisoner.id } });
-                for (const guildId of activeConnections.keys()) {
-                    if (guildId === prisoner.guildId) {
-                        await sendRconCommand(guildId, `say "🔓 ${prisoner.inGameName} has served their time and been released from prison!"`, null);
+                const guildId = prisoner.guildId;
+                const cellObj = await PrisonCell.findOne({ where: { guildId, cellNumber: prisoner.cellNumber } });
+
+                if (cellObj && cellObj.rfFrequency) {
+                    // 📻 AUTOMATICALLY TRIGGER RF DOOR OPENER VIA RCON
+                    for (const gId of activeConnections.keys()) {
+                        if (gId === guildId) {
+                            await sendRconCommand(guildId, `rf.trigger ${cellObj.rfFrequency}`, null);
+                        }
                     }
                 }
+
+                // Announce release and log inspection audit
+                for (const gId of activeConnections.keys()) {
+                    if (gId === guildId) {
+                        await sendRconCommand(guildId, `say "🔓 ${prisoner.inGameName} has served their time! Cell #${prisoner.cellNumber} door unlocked."`, null);
+                    }
+                }
+
+                await PrisonLog.create({
+                    guildId,
+                    inGameName: prisoner.inGameName,
+                    cellNumber: prisoner.cellNumber,
+                    action: 'TIME_EXPIRED',
+                    reason: 'Completed sentence duration',
+                    wardenDiscordId: 'BOT_AUTOMATION'
+                });
+
+                await JailedPlayer.destroy({ where: { id: prisoner.id } });
                 continue;
             }
 

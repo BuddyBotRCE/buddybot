@@ -226,13 +226,26 @@ const RecyclerLocation = sequelize.define('RecyclerLocation', {
 });
 
 // 👇 NEW: Advanced 20-Cell Prison System Tables 👇
+// Update PrisonCell to store RF Frequency
 const PrisonCell = sequelize.define('PrisonCell', {
     id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
     guildId: { type: DataTypes.STRING, allowNull: false },
-    cellNumber: { type: DataTypes.INTEGER, allowNull: false }, // 1 through 20
-    posX: { type: DataTypes.FLOAT, allowNull: false },
-    posY: { type: DataTypes.FLOAT, allowNull: false },
-    posZ: { type: DataTypes.FLOAT, allowNull: false }
+    cellNumber: { type: DataTypes.INTEGER, allowNull: false },
+    posX: { type: DataTypes.STRING, allowNull: false },
+    posY: { type: DataTypes.STRING, allowNull: false },
+    posZ: { type: DataTypes.STRING, allowNull: false },
+    rfFrequency: { type: DataTypes.STRING, allowNull: true } // 🚪 RF Frequency for door trigger
+});
+
+// 📋 NEW: Prison Audit & Inspection Logs Table
+const PrisonLog = sequelize.define('PrisonLog', {
+    id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+    guildId: { type: DataTypes.STRING, allowNull: false },
+    inGameName: { type: DataTypes.STRING, allowNull: false },
+    cellNumber: { type: DataTypes.INTEGER, allowNull: false },
+    action: { type: DataTypes.STRING, allowNull: false }, // 'JAILED', 'RELEASED', 'TIME_EXPIRED'
+    reason: { type: DataTypes.TEXT, allowNull: true },
+    wardenDiscordId: { type: DataTypes.STRING, allowNull: true }
 });
 
 const JailedPlayer = sequelize.define('JailedPlayer', {
@@ -269,5 +282,5 @@ module.exports = {
     sequelize, GuildConfig, GameServer, UserEconomy, Giveaway, CustomBind, BindCooldown, ServerKit, ShopItem, ShopCooldown, CasinoCooldown, OrpConfig, PlayerOrpBase, BuddyPassChallenge, BuddyPassReward, TicketCategory, PveZone, AutoEvent, AutoEventLocation, ActiveBounty, BountyCooldown, Clan, ClanMember, ClanInvite, ClanWar, ReactionRole, CustomEmbed,
     HomeTeleportConfig, HomeTeleportCooldown, HomeTeleportLocation, ArenaCratePoint, ArenaConfig, ArenaPrize, ArenaSpawn, GunGameWeapon,
     RecyclerConfig, RecyclerLocation,
-    PrisonCell, JailedPlayer, AutoMessage // 🛑 Exported Prison Tables
+    PrisonCell, JailedPlayer, AutoMessage, PrisonLog // 🛑 Exported Prison Tables
 };
