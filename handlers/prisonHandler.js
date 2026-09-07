@@ -24,7 +24,7 @@ async function renderPrisonPanel(interaction, messageOverride = '') {
         .setTitle('🔒 Advanced Prison, Cells & RF Door Manager')
         .setDescription(
             (messageOverride ? `**${messageOverride}**\n\n` : '') +
-            `Manage 20 jail cells, inmate sentences, RF door frequencies, and audit logs.\n\n` +
+            `Manage 20 jail cells, inmate sentences, RF door frequencies, coordinate resets, and audit logs.\n\n` +
             `**Cell Map (1–20):**\n${cellStatus}\n*(🟢 Set + 📻 RF | 🔴 Unset)*\n\n` +
             `**Active Prisoners (${jailed.length}):**\n${inmateList}`
         )
@@ -37,14 +37,15 @@ async function renderPrisonPanel(interaction, messageOverride = '') {
     }
 
     const row1 = new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder().setCustomId('prison_select_cell').setPlaceholder('📍 Select cell (1-20) to capture position...').addOptions(cellOptions.slice(0, 25))
+        new StringSelectMenuBuilder().setCustomId('prison_select_cell').setPlaceholder('📍 Select cell (1-20) to capture or update position...').addOptions(cellOptions.slice(0, 25))
     );
 
     const row2 = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('prison_btn_jail').setLabel('Jail Player').setStyle(ButtonStyle.Danger).setEmoji('⛓️'),
         new ButtonBuilder().setCustomId('prison_btn_unjail').setLabel('Release Player').setStyle(ButtonStyle.Success).setEmoji('🔓'),
-        new ButtonBuilder().setCustomId('prison_btn_rf').setLabel('Set Cell RF Frequency').setStyle(ButtonStyle.Primary).setEmoji('📻'),
-        new ButtonBuilder().setCustomId('prison_btn_logs').setLabel('Inspection Logs').setStyle(ButtonStyle.Secondary).setEmoji('📋')
+        new ButtonBuilder().setCustomId('prison_btn_rf').setLabel('Set Cell RF').setStyle(ButtonStyle.Primary).setEmoji('📻'),
+        new ButtonBuilder().setCustomId('prison_btn_reset_pos').setLabel('Reset Cell Pos').setStyle(ButtonStyle.Danger).setEmoji('♻️'),
+        new ButtonBuilder().setCustomId('prison_btn_logs').setLabel('Logs').setStyle(ButtonStyle.Secondary).setEmoji('📋')
     );
 
     const row3 = new ActionRowBuilder().addComponents(
@@ -71,6 +72,14 @@ module.exports = async (interaction, client) => {
             const cellNum = selectedVal.replace('set_cell_', '');
             await interaction.reply({ content: `📍 **Capturing your position for Cell #${cellNum} via RCON...**`, flags: 64 });
             return await captureAdminPosition(interaction, 'prison_cell', cellNum);
+        }
+
+        if (interaction.isButton() && customId === 'prison_btn_reset_pos') {
+            const modal = new ModalBuilder().setCustomId('modal_prison_reset_pos').setTitle('Reset Cell Position');
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reset_cell_num').setLabel('Cell Number to Wipe (1 - 20)').setStyle(TextInputStyle.Short).setRequired(true))
+            );
+            return await interaction.showModal(modal);
         }
 
         if (interaction.isButton() && customId === 'prison_btn_jail') {
@@ -134,6 +143,16 @@ module.exports = async (interaction, client) => {
         }
 
         if (interaction.isModalSubmit()) {
+            if (customId === 'modal_prison_reset_pos') {
+                const cellNum = parseInt(interaction.fields.getTextInputValue('reset_cell_num'));
+                const deleted = await PrisonCell.destroy({ where: { guildId, cellNumber: cellNum } });
+                if (deleted) {
+                    return await renderPrisonPanel(interaction, `♻️ Successfully wiped coordinates for Cell #${cellNum}. It is now unconfigured.`);
+                } else {
+                    return interaction.reply({ content: `❌ Cell #${cellNum} was already empty or not found.`, flags: 64 });
+                }
+            }
+
             if (customId.startsWith('modal_prison_jail_exec_')) {
                 const targetName = customId.replace('modal_prison_jail_exec_', '');
                 const cellNum = parseInt(interaction.fields.getTextInputValue('p_cell'));
@@ -177,7 +196,6 @@ module.exports = async (interaction, client) => {
                 if (inmate) {
                     const cellObj = await PrisonCell.findOne({ where: { guildId, cellNumber: inmate.cellNumber } });
                     if (cellObj && cellObj.rfFrequency) {
-                        // 📻 TRIGGER RF DOOR OPENER
                         await sendRconCommand(guildId, `rf.trigger ${cellObj.rfFrequency}`, client);
                     }
                     await PrisonLog.create({ guildId, inGameName: name, cellNumber: inmate.cellNumber, action: 'RELEASED', reason: 'Manual Release by Staff', wardenDiscordId: interaction.user.id });
