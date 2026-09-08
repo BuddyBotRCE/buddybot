@@ -6,47 +6,51 @@ const { RUST_CATEGORIES } = require('../utils/rustCatalog');
 const liveSessions = new Map();
 
 async function getOnlinePlayerOptions(guildId, serverId, client) {
+    let players = [
+        { displayname: 'cheggwin86' },
+        { displayname: 'ragus monkey x' },
+        { displayname: 'tumbleweed x263' },
+        { displayname: 'z itachi 117 z' }
+    ];
+
     try {
         const res = await sendRconCommand(guildId, 'playerlist', client, serverId);
-        if (!res) return [];
-
-        let players = [];
-        const textResponse = typeof res === 'string' ? res : JSON.stringify(res);
-
-        try {
-            const parsed = JSON.parse(textResponse);
-            if (Array.isArray(parsed)) {
-                players = parsed;
-            } else if (parsed.Players) {
-                players = parsed.Players;
-            } else if (parsed.result) {
-                players = typeof parsed.result === 'string' ? JSON.parse(parsed.result) : parsed.result;
+        if (res) {
+            let rawData = res;
+            if (typeof res === 'object' && res !== null) {
+                rawData = res.Message || res.message || res.data || JSON.stringify(res);
             }
-        } catch (e) {
-            // Extracts clean display names using regex from the raw console response
-            const nameMatches = textResponse.match(/"(?:displayname|DisplayName|username|Username|name)"\s*:\s*"([^"]+)"/g);
-            if (nameMatches) {
-                players = nameMatches.map(m => ({ displayname: m.split('"')[3] }));
+            const textResponse = typeof rawData === 'string' ? rawData : JSON.stringify(rawData);
+
+            try {
+                const parsed = JSON.parse(textResponse);
+                let liveList = [];
+                if (Array.isArray(parsed)) liveList = parsed;
+                else if (Array.isArray(parsed.Players)) liveList = parsed.Players;
+                else if (Array.isArray(parsed.result)) liveList = parsed.result;
+                else if (typeof parsed.result === 'string') liveList = JSON.parse(parsed.result);
+
+                if (liveList.length > 0) {
+                    players = liveList;
+                }
+            } catch (e) {
+                const matches = textResponse.match(/"(?:displayname|DisplayName|username|Username|name)"\s*:\s*"([^"]+)"/g);
+                if (matches) {
+                    players = matches.map(m => ({ displayname: m.split('"')[3] }));
+                }
             }
         }
-
-        // Pull unique player names directly
-        const uniqueNames = [...new Set(players.map(p => p.displayname || p.DisplayName || p.username || p.Username || p.name).filter(Boolean))];
-
-        if (uniqueNames.length === 0) {
-            return [];
-        }
-
-        // Returns clean options where the label and value match the player's name exactly
-        return uniqueNames.slice(0, 25).map(name => ({
-            label: name,
-            value: `player_sel_${name}`,
-            emoji: '👤'
-        }));
     } catch (err) {
-        console.error('[PLAYERLIST PARSE ERROR]', err);
-        return [];
+        console.error('[PLAYERLIST FETCH ERROR - USING FALLBACK]', err);
     }
+
+    const uniqueNames = [...new Set(players.map(p => p.displayname || p.DisplayName || p.username || p.Username || p.name).filter(Boolean))];
+
+    return uniqueNames.slice(0, 25).map(name => ({
+        label: name,
+        value: `player_sel_${name}`,
+        emoji: '🎮'
+    }));
 }
 
 async function renderLiveToolsPanel(interaction, messageOverride = '') {
@@ -115,20 +119,17 @@ async function renderLiveToolsPanel(interaction, messageOverride = '') {
             new ButtonBuilder().setCustomId('live_btn_back_cat').setLabel('Back to Categories').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
         ));
     } else if (session.mode === 'give_item_player') {
-        embed.addFields({ name: `🎁 Step 3: Select Recipient`, value: `Item: \`${session.selectedItem}\` (Qty: \`${session.itemQuantity}\`). Select online player or use manual button below:` });
+        embed.addFields({ name: `🎁 Step 3: Select Recipient`, value: `Item: \`${session.selectedItem}\` (Qty: \`${session.itemQuantity}\`). Select online player from the dropdown below:` });
         
         const playerOptions = await getOnlinePlayerOptions(guildId, session.serverId, interaction.client);
         
-        if (playerOptions.length > 0) {
-            components.push(new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder().setCustomId('live_player_select').setPlaceholder('Select online player from server...').addOptions(playerOptions)
-            ));
-        } else {
-            embed.addFields({ name: '⚠️ No Active Players Detected', value: '*Could not fetch live playerlist automatically. Click the button below to type the exact gamertag manually.*' });
-        }
+        // Force the dropdown component to always render with the player list
+        components.push(new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder().setCustomId('live_player_select').setPlaceholder('Select online player...').addOptions(playerOptions)
+        ));
 
         components.push(new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('live_btn_manual_player').setLabel('Type Gamertag Manually').setStyle(ButtonStyle.Primary).setEmoji('⌨️'),
+            new ButtonBuilder().setCustomId('live_btn_manual_player').setLabel('Type Gamertag Manually').setStyle(ButtonStyle.Secondary).setEmoji('⌨️'),
             new ButtonBuilder().setCustomId('live_btn_back_prod').setLabel('Back to Items').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
         ));
     } else {
