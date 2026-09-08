@@ -34,7 +34,6 @@ const recyclerHandler = require(handlerPath('recyclerHandler'));
 const prisonHandler = require(handlerPath('prisonHandler')); 
 const gunGameHandler = require(handlerPath('gunGameHandler'));
 const liveAdminHandler = require(handlerPath('liveAdminHandler'));
-const playerPanelHandler = require(handlerPath('playerPanelHandler')); // Added safely here
 
 module.exports = async (interaction, client) => {
     try {
@@ -84,10 +83,6 @@ module.exports = async (interaction, client) => {
             if (customId === 'modal_orp_config') return await orpHandler(interaction, client);
             if (customId === 'modal_live_admin') return await liveAdminHandler(interaction, client);
             if (customId.startsWith('modal_live_')) return await liveAdminHandler(interaction, client);
-            
-            if (customId.startsWith('hub_') || customId.startsWith('btn_player_') || customId.startsWith('player_')) {
-                return await playerPanelHandler(interaction, client);
-            }
 
             return await adminHandler(interaction, client);
         }
@@ -217,10 +212,15 @@ module.exports = async (interaction, client) => {
             }
         }  
 
-        // 🎯 Route Player Panel & Hub Buttons safely here
-        if (customId.startsWith('hub_') || customId.startsWith('btn_player_') || customId.startsWith('player_')) {
-            return await playerPanelHandler(interaction, client);
-        }
+        // 🎯 Route Player Hub & Panel Buttons to their specific feature handlers
+        if (customId.startsWith('hub_shop') || customId.startsWith('shop_')) return await shopHandler(interaction, client);
+        if (customId.startsWith('hub_clan') || customId.startsWith('clan_')) return await clanHandler(interaction, client);
+        if (customId.startsWith('hub_buddypass') || customId.startsWith('buddypass_')) return await buddyPassHandler(interaction, client);
+        if (customId.startsWith('hub_casino') || customId.startsWith('casino_')) return await casinoHandler(interaction, client);
+        if (customId.startsWith('hub_kit') || customId.startsWith('kit_')) return await kitHandler(interaction, client);
+        if (customId.startsWith('hub_hometp') || customId.startsWith('hometp_')) return await homeTpHandler(interaction, client);
+        if (customId.startsWith('hub_leaderboards') || customId.startsWith('hub_bounty')) return await bountyHandler(interaction, client);
+        if (customId === 'btn_player_open_suggestion' || customId.startsWith('sug_')) return await suggestionHandler(interaction, client);
 
         if (customId.includes('recycler')) return await recyclerHandler(interaction, client);
         if (customId.includes('prison') || customId === 'prison_btn_jail' || customId === 'prison_btn_unjail') return await prisonHandler(interaction, client);
