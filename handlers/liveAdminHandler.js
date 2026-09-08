@@ -11,33 +11,37 @@ async function getOnlinePlayerOptions(guildId, serverId, client) {
         if (!res) return [];
 
         let players = [];
-        
-        // If the response is already an object/array (if rconManager parses it)
-        if (typeof res === 'object') {
-            players = Array.isArray(res) ? res : (res.Players || res.result || []);
-        } else if (typeof res === 'string') {
-            try {
-                const parsed = JSON.parse(res);
-                players = Array.isArray(parsed) ? parsed : (parsed.Players || parsed.result || []);
-            } catch (e) {
-                // If it's raw text logs containing JSON or player names
-                const matches = res.match(/"displayname"\s*:\s*"([^"]+)"/g);
-                if (matches) {
-                    players = matches.map(m => ({ displayname: m.split('"')[3] }));
-                }
+        const textResponse = typeof res === 'string' ? res : JSON.stringify(res);
+
+        try {
+            const parsed = JSON.parse(textResponse);
+            if (Array.isArray(parsed)) {
+                players = parsed;
+            } else if (parsed.Players) {
+                players = parsed.Players;
+            } else if (parsed.result) {
+                players = typeof parsed.result === 'string' ? JSON.parse(parsed.result) : parsed.result;
+            }
+        } catch (e) {
+            // Extracts clean display names using regex from the raw console response
+            const nameMatches = textResponse.match(/"(?:displayname|DisplayName|username|Username|name)"\s*:\s*"([^"]+)"/g);
+            if (nameMatches) {
+                players = nameMatches.map(m => ({ displayname: m.split('"')[3] }));
             }
         }
 
-        const uniqueNames = [...new Set(players.map(p => p.displayname || p.DisplayName || p.Username || p.name).filter(Boolean))];
+        // Pull unique player names directly
+        const uniqueNames = [...new Set(players.map(p => p.displayname || p.DisplayName || p.username || p.Username || p.name).filter(Boolean))];
 
         if (uniqueNames.length === 0) {
             return [];
         }
 
+        // Returns clean options where the label and value match the player's name exactly
         return uniqueNames.slice(0, 25).map(name => ({
-            label: name.substring(0, 100),
+            label: name,
             value: `player_sel_${name}`,
-            emoji: '🎮'
+            emoji: '👤'
         }));
     } catch (err) {
         console.error('[PLAYERLIST PARSE ERROR]', err);
