@@ -226,6 +226,10 @@ module.exports = async (interaction, client) => {
         if (customId.includes('kit') && !customId.includes('ticket')) {
             return await kitHandler(interaction, client);
         }
+        // 📢 Route Embed & Reaction Panel Builder Interactions
+if (customId.startsWith('emb_') || customId.startsWith('select_emb_') || customId.startsWith('btn_emb_') || customId.startsWith('rr_') || customId.startsWith('select_rr_') || customId.startsWith('btn_rr_')) {
+    return await postEmbedHandler(interaction, client);
+}
 
         return await adminHandler(interaction, client);
 
