@@ -15,24 +15,29 @@ async function getOnlinePlayerOptions(guildId, serverId, client) {
             const parsed = JSON.parse(res);
             players = Array.isArray(parsed) ? parsed : (parsed.Players || parsed.result || []);
         } catch (e) {
-            // Robust line parser for console RCON output formats
-            const lines = res.split('\n');
-            for (const line of lines) {
-                const trimmed = line.trim();
-                if (trimmed && !trimmed.toLowerCase().includes('steamid') && !trimmed.toLowerCase().includes('connected') && !trimmed.toLowerCase().includes('players')) {
-                    // Pull text inside quotes or clean line words
-                    const parts = trimmed.split('"');
-                    if (parts.length >= 2 && parts[1].length > 1) {
-                        players.push({ Username: parts[1] });
-                    } else {
-                        const words = trimmed.split(/\s+/);
-                        if (words.length > 0 && words[0].length > 1) {
-                            players.push({ Username: words[0] });
-                        }
-                    }
-                }
-            }
+            // Fallback if it contains JSON-like fragments
+            try {
+                const fixedJson = JSON.parse(res.trim());
+                players = Array.isArray(fixedJson) ? fixedJson : [];
+            } catch (err2) {}
         }
+
+        // Extract names specifically from Rust Console Edition "displayname" fields
+        const uniqueNames = [...new Set(players.map(p => p.displayname || p.DisplayName || p.Username || p.name).filter(Boolean))];
+
+        if (uniqueNames.length === 0) {
+            return [];
+        }
+
+        return uniqueNames.slice(0, 25).map(name => ({
+            label: name.substring(0, 100),
+            value: `player_sel_${name}`,
+            emoji: '🎮'
+        }));
+    } catch (err) {
+        return [];
+    }
+}
 
         const uniqueNames = [...new Set(players.map(p => p.Username || p.name || p.DisplayName).filter(Boolean))];
 
