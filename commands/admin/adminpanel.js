@@ -40,7 +40,7 @@ module.exports = {
                     { label: 'Economy Manager', value: 'setup_economy', emoji: '💰' },
                     { label: 'Minigames Casino', value: 'setup_minigames', emoji: '🎰' },
                     { label: 'Ticket System', value: 'setup_tickets', emoji: '🎫' },
-                    { label: 'Cross-Chat', value: 'setup_crosschat', emoji: '💬' },
+                   
                     { label: 'Admin & Mod Roles', value: 'setup_server_roles', description: 'Set bot admin/mod roles', emoji: '👑' },
                     { label: 'Logging System', value: 'setup_logging', emoji: '📊' },
                     { label: 'Custom Zones Builder', value: 'setup_custom_zones', description: 'Create and manage map zones', emoji: '🗺️' },
