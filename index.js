@@ -110,6 +110,9 @@ if (fs.existsSync(interactionCreateEvent)) {
     console.log('[SYSTEM] Loaded event: interactionCreate');
 }
 
+// Global memory maps for timers
+const messageLastSent = new Map();
+
 client.once('ready', async () => {
     require('./events/ready')(client); 
     
@@ -121,6 +124,28 @@ client.once('ready', async () => {
         console.log('[SYSTEM] Global commands registered successfully.');
     } catch (error) {
         console.error('[COMMAND SYNC ERROR]', error);
+    }
+
+    // --- BASELINE INITIALIZATION (PREVENTS REBOOT SPAM) ---
+    try {
+        const { AutoEvent, AutoMessage } = require('./database/db');
+        const startupTime = Date.now();
+        
+        // Initialize Auto Events baseline
+        const allEvents = await AutoEvent.findAll();
+        if (!global.autoEventExecMap) global.autoEventExecMap = new Map();
+        for (const ev of allEvents) {
+            global.autoEventExecMap.set(ev.id, startupTime);
+        }
+
+        // Initialize Auto Messages baseline
+        const allMessages = await AutoMessage.findAll();
+        for (const msgObj of allMessages) {
+            messageLastSent.set(msgObj.id, startupTime);
+        }
+        console.log('[SYSTEM] Background timer baselines established. No events will spam on boot.');
+    } catch (bootErr) {
+        console.error('[BOOT TIMER INIT ERROR]', bootErr);
     }
 
     // --- LIVE AUTO-EVENTS BACKGROUND SCHEDULER LOOP ---
@@ -144,7 +169,7 @@ client.once('ready', async () => {
 
             for (const ev of enabledEvents) {
                 const intervalMs = (ev.interval || 60) * 60 * 1000;
-                const lastRun = global.autoEventExecMap.get(ev.id) || 0;
+                const lastRun = global.autoEventExecMap.get(ev.id) || now; // defaults to now if unassigned
 
                 if (now - lastRun >= intervalMs) {
                     global.autoEventExecMap.set(ev.id, now);
@@ -157,7 +182,7 @@ client.once('ready', async () => {
 
                     const servers = await GameServer.findAll({ where: { guildId: ev.guildId } });
                     if (servers.length === 0) continue;
-                    const targetServer = servers[0]; // Uses first configured server for guild events
+                    const targetServer = servers[0];
 
                     let firedCount = 0;
                     for (let i = 0; i < (ev.amount || 1); i++) {
@@ -187,7 +212,6 @@ client.once('ready', async () => {
     setInterval(async () => {
         try {
             const { Giveaway } = require('./database/db');
-            const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
             const now = new Date();
 
             const activeGiveaways = await Giveaway.findAll({ where: { isActive: true } });
@@ -276,7 +300,6 @@ client.once('ready', async () => {
                 const channel = guild.channels.cache.get(config.statusChannelId);
                 if (!channel) continue;
 
-                // Find server associated with guild
                 const servers = await GameServer.findAll({ where: { guildId: config.guildId } });
                 if (servers.length === 0) continue;
                 const targetServer = servers[0];
@@ -307,56 +330,52 @@ client.once('ready', async () => {
                     const newMsg = await channel.send({ embeds: [statusEmbed] });
                     await config.update({ statusMessageId: newMsg.id });
                 }
-                // === AUTOMATED BROADCAST CHAT LOOP ===
-                // === ADVANCED AUTOMATED BROADCAST CHAT LOOP ===
-const { AutoMessage, GuildConfig } = require('../database/db');
-const { sendRconCommand, activeConnections } = require('./rconManager');
-
-const messageLastSent = new Map();
-
-setInterval(async () => {
-    try {
-        const allMessages = await AutoMessage.findAll({ where: { isEnabled: true } });
-        if (!allMessages || allMessages.length === 0) return;
-
-        const now = Date.now();
-
-        for (const msgObj of allMessages) {
-            const guildId = msgObj.guildId;
-            
-            const config = await GuildConfig.findOne({ where: { guildId } });
-            if (config && config.autoMessagesEnabled === false) continue;
-
-            const lastSent = messageLastSent.get(msgObj.id) || 0;
-            const intervalMs = msgObj.intervalMinutes * 60000;
-
-            if (now - lastSent >= intervalMs) {
-                messageLastSent.set(msgObj.id, now);
-
-                const formattedMsg = `${msgObj.prefix} ${msgObj.message}`;
-
-                for (const [gId, serverConnections] of activeConnections.entries()) {
-                    if (gId === guildId) {
-                        if (msgObj.serverId) {
-                            // Send only to the specific targeted server
-                            await sendRconCommand(guildId, `say "${formattedMsg}"`, null, msgObj.serverId);
-                        } else {
-                            // Send to all active servers for this guild
-                            await sendRconCommand(guildId, `say "${formattedMsg}"`, null);
-                        }
-                    }
-                }
-            }
-        }
-    } catch (e) {
-        console.error('[ADVANCED AUTO MESSAGE BROADCAST ERROR]', e);
-    }
-}, 30000); // Ticks every 30 seconds to check timers accurately
             }
         } catch (loopErr) {
             console.error('[STATUS LOOP ERROR]', loopErr);
         }
     }, 60000);
+
+    // --- ADVANCED AUTOMATED BROADCAST CHAT LOOP ---
+    setInterval(async () => {
+        try {
+            const { AutoMessage, GuildConfig } = require('./database/db');
+            const { activeConnections, sendRconCommand } = require('./utils/rconManager');
+
+            const allMessages = await AutoMessage.findAll({ where: { isEnabled: true } });
+            if (!allMessages || allMessages.length === 0) return;
+
+            const now = Date.now();
+
+            for (const msgObj of allMessages) {
+                const guildId = msgObj.guildId;
+                
+                const config = await GuildConfig.findOne({ where: { guildId } });
+                if (config && config.autoMessagesEnabled === false) continue;
+
+                const lastSent = messageLastSent.get(msgObj.id) || now; // defaults to now if unassigned
+                const intervalMs = msgObj.intervalMinutes * 60000;
+
+                if (now - lastSent >= intervalMs) {
+                    messageLastSent.set(msgObj.id, now);
+
+                    const formattedMsg = `${msgObj.prefix} ${msgObj.message}`;
+
+                    for (const [gId] of activeConnections.entries()) {
+                        if (gId === guildId) {
+                            if (msgObj.serverId) {
+                                await sendRconCommand(guildId, `say "${formattedMsg}"`, null, msgObj.serverId);
+                            } else {
+                                await sendRconCommand(guildId, `say "${formattedMsg}"`, null);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('[ADVANCED AUTO MESSAGE BROADCAST ERROR]', e);
+        }
+    }, 30000);
 });
 
 client.login(process.env.DISCORD_TOKEN);
