@@ -9,7 +9,16 @@ const RUST_TEMPLATES = {
     wipe: { templateName: '🪓 Wipe Announcement', title: '🪓 WIPE ANNOUNCEMENT — FRESH MAP!', description: 'The server has successfully wiped!\n\n• **Map Seed:** [Insert Seed]\n• **Map Size:** [Insert Size]\n• **Blueprints:** [Force / Kept]\n\nConnect via F1 console: `connect server.ip:port`', color: '#e74c3c', thumbnailUrl: '', imageUrl: '', footerText: 'Good luck out there, survivors!' },
     rules: { templateName: '📜 Server Rules', title: '📜 RUST CONSOLE COMMUNITY RULES', description: 'Please follow these rules to keep the server fun and fair for everyone:\n\n1️⃣ No racism, hate speech, or excessive toxicity in chat.\n2️⃣ Max team limits must be strictly respected.\n3️⃣ No exploiting bugs, glitches, or under-map building.\n4️⃣ Be respectful to admins and community members.', color: '#f1c40f', thumbnailUrl: '', imageUrl: '', footerText: 'Breaking rules will result in a permanent ban.' },
     store: { templateName: '🛒 Store & VIP', title: '🛒 SUPPORT THE SERVER & VIP', description: 'Want to support the community and grab cool perks? Check out our official store for VIP kits, skins, and economy packages!\n\nType `/playerpanel` in-game or visit our store link to browse available packages.', color: '#2ecc71', thumbnailUrl: '', imageUrl: '', footerText: 'All proceeds go directly back into server hosting.' },
-    vote: { templateName: '🗳️ Vote & Earn Rewards', title: '🗳️ VOTE FOR FREE SCRAP', description: 'Help our community grow by voting for the server daily! Every vote grants free scrap directly to your in-game wallet.\n\nClick the link or use the vote menu in your player panel to claim.', color: '#9b59b6', thumbnailUrl: '', imageUrl: '', footerText: 'Thank you for supporting our server!' }
+    vote: { templateName: '🗳️ Vote & Earn Rewards', title: '🗳️ VOTE FOR FREE SCRAP', description: 'Help our community grow by voting for the server daily! Every vote grants free scrap directly to your in-game wallet.\n\nClick the link or use the vote menu in your player panel to claim.', color: '#9b59b6', thumbnailUrl: '', imageUrl: '', footerText: 'Thank you for supporting our server!' },
+    raid: { 
+        templateName: '🚨 Raid / Event Alert', 
+        title: '🚨 LIVE EVENT / RAID ALERT!', 
+        description: 'An active event or raid is currently underway! Gear up and get in position.\n\n• **Event Name:** [Insert Event Name]\n• **Time:** [Insert Start / End Time]\n• **Rules:** [Insert Rules e.g. Online Only / No Rocket PvP]\n• **Location Hint:** [Insert Grid / Landmark Hint]\n• **Built By:** [Insert Builder / Admin Name]', 
+        color: '#e74c3c', 
+        thumbnailUrl: '', 
+        imageUrl: '', 
+        footerText: 'Proceed with extreme caution!' 
+    }
 };
 
 module.exports = async (interaction, client) => {
@@ -300,7 +309,13 @@ module.exports = async (interaction, client) => {
 
                 const components = [];
                 if (!embSession.editMode) {
-                    components.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('select_emb_template').setPlaceholder('⚡ Load Pre-Made Rust Template...').addOptions([{ label: '🪓 Wipe Announcement', value: 'wipe' }, { label: '📜 Server Rules', value: 'rules' }, { label: '🛒 Store & VIP', value: 'store' }, { label: '🗳️ Vote & Rewards', value: 'vote' }])));
+                    components.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('select_emb_template').setPlaceholder('⚡ Load Pre-Made Rust Template...').addOptions([
+                        { label: '🪓 Wipe Announcement', value: 'wipe' }, 
+                        { label: '📜 Server Rules', value: 'rules' }, 
+                        { label: '🛒 Store & VIP', value: 'store' }, 
+                        { label: '🗳️ Vote & Rewards', value: 'vote' },
+                        { label: '🚨 Raid Alert', value: 'raid', emoji: '🚨' }
+                    ])));
                 }
                 
                 components.push(new ActionRowBuilder().addComponents(
@@ -331,6 +346,7 @@ module.exports = async (interaction, client) => {
                 const payload = { embeds: [configEmbed, previewEmbed], components, flags: 64 };
                 if (inter.isRepliable() && !inter.replied && !inter.deferred) return await inter.reply(payload);
                 return await inter.editReply(payload).catch(() => inter.followUp(payload));
+            
             };
 
             if (customId === 'unified_embed_select' || customId === 'modal_edit_embed_prompt') return await renderBuilder(interaction);

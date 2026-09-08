@@ -223,8 +223,18 @@ module.exports = async (interaction, client) => {
             return await orpHandler(interaction, client);
         }
 
-        // 📢 EMBED BUILDER & REACTION PANEL ROUTER (UPDATED)
-        if (customId.startsWith('emb_') || customId.startsWith('select_emb_') || customId.startsWith('btn_emb_') || customId.startsWith('rr_') || customId.startsWith('select_rr_') || customId.startsWith('btn_rr_') || interaction.isStringSelectMenu() && customId.includes('emb_')) {
+        // 📢 EMBED BUILDER & REACTION PANEL ROUTER (FINAL FIX)
+        if (
+            customId.startsWith('emb_') || 
+            customId.startsWith('select_emb_') || 
+            customId.startsWith('btn_emb_') || 
+            customId.startsWith('rr_') || 
+            customId.startsWith('select_rr_') || 
+            customId.startsWith('btn_rr_') || 
+            customId.includes('emb_') ||
+            customId.includes('select_emb_') ||
+            interaction.isStringSelectMenu() && (customId.includes('emb_') || customId.includes('rr_'))
+        ) {
             return await postEmbedHandler(interaction, client);
         }
         
