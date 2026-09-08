@@ -44,6 +44,7 @@ module.exports = async (interaction, client) => {
         if (customId === 'unified_embed_select') {
             if (selectedValue === 'setup_postembed') {
                 embedSessions.set(guildId, { title: '📢 Server Announcement', description: 'Type your announcement details here.', color: '#3498db', thumbnailUrl: '', imageUrl: '', footerText: '', pingTarget: null, editMode: false });
+                return await renderBuilder(interaction); // 👈 THIS WAS MISSING!
             }
             if (selectedValue === 'edit_postembed') {
                 const modal = new ModalBuilder().setCustomId('modal_edit_embed_prompt').setTitle('Edit Existing Embed');

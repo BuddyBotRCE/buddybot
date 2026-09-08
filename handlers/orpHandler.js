@@ -3,11 +3,11 @@ const { OrpConfig, PlayerOrpBase, GameServer } = require('../database/db');
 
 async function renderOrpPanel(interaction, messageOverride = '') {
     const guildId = interaction.guild.id;
-    const [orpConf] = await OrpConfig.findOrCreate({ where: { guildId } });
+    const [orpConf] = await OrpConfig.findOrCreate({ where: { guildId }, defaults: { isEnabled: false, zoneSize: 25, activeDurationHours: 24, onlineColor: '#2ecc71', offlineColor: '#e74c3c' } });
     const registeredBases = await PlayerOrpBase.count({ where: { guildId } }).catch(() => 0);
     const servers = await GameServer.findAll({ where: { guildId } }).catch(() => []);
 
-    const targetServerName = orpConf.serverId ? servers.find(s => s.id.toString() === orpConf.serverId)?.serverName || 'Specific Server' : '🌐 All Servers (Global)';
+    const targetServerName = orpConf.serverId ? servers.find(s => s.id.toString() === orpConf.serverId.toString())?.serverName || `Server ID: ${orpConf.serverId}` : '🌐 All Servers (Global)';
 
     const embed = new EmbedBuilder()
         .setTitle('🛡️ ORP Manager (Offline Raid Protection)')
@@ -50,9 +50,10 @@ async function renderOrpPanel(interaction, messageOverride = '') {
 
     const payload = { embeds: [embed], components, flags: 64 };
 
-    if (interaction.isMessageComponent()) {
-        if (interaction.replied || interaction.deferred) return await interaction.editReply(payload);
-        else return await interaction.update(payload);
+    if (interaction.isMessageComponent() && !interaction.replied && !interaction.deferred) {
+        return await interaction.update(payload).catch(async () => await interaction.editReply(payload));
+    } else if (interaction.isMessageComponent()) {
+        return await interaction.editReply(payload);
     } else {
         return await interaction.reply(payload);
     }
@@ -70,25 +71,26 @@ const orpHandler = async (interaction, client) => {
 
         if (interaction.isStringSelectMenu() && customId === 'orp_server_select') {
             const serverId = selectedValue === 'orp_server_all' ? null : selectedValue.replace('orp_server_', '');
-            await OrpConfig.update({ serverId }, { where: { guildId } });
-            return await renderOrpPanel(interaction, `🌐 **ORP Target Server Updated!**`);
+            await OrpConfig.upsert({ guildId, serverId });
+            return await renderOrpPanel(interaction, `🌐 **ORP Target Server Updated Successfully!**`);
         }
 
         if (interaction.isButton()) {
             if (customId === 'btn_orp_toggle') {
                 const [orpConf] = await OrpConfig.findOrCreate({ where: { guildId } });
-                await orpConf.update({ isEnabled: !orpConf.isEnabled });
-                return await renderOrpPanel(interaction, `🔄 ORP status toggled **${orpConf.isEnabled ? 'ON' : 'OFF'}**!`);
+                const newState = !orpConf.isEnabled;
+                await orpConf.update({ isEnabled: newState });
+                return await renderOrpPanel(interaction, `🔄 ORP status toggled **${newState ? 'ON (ACTIVE)' : 'OFF (DISABLED)'}**!`);
             }
 
             if (customId === 'btn_orp_config') {
                 const [orpConf] = await OrpConfig.findOrCreate({ where: { guildId } });
                 const modal = new ModalBuilder().setCustomId('modal_orp_config').setTitle('Configure ORP Parameters');
                 modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('radius').setLabel("Zone Radius (meters)").setStyle(TextInputStyle.Short).setValue(`${orpConf.zoneSize}`).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('duration').setLabel("Max Duration (hours)").setStyle(TextInputStyle.Short).setValue(`${orpConf.activeDurationHours}`).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('online_color').setLabel("Online Color (hex or name)").setStyle(TextInputStyle.Short).setValue(`${orpConf.onlineColor}`).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('offline_color').setLabel("Offline Color (hex or name)").setStyle(TextInputStyle.Short).setValue(`${orpConf.offlineColor}`).setRequired(true))
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('radius').setLabel("Zone Radius (meters)").setStyle(TextInputStyle.Short).setValue(`${orpConf.zoneSize || 25}`).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('duration').setLabel("Max Duration (hours)").setStyle(TextInputStyle.Short).setValue(`${orpConf.activeDurationHours || 24}`).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('online_color').setLabel("Online Color (hex or name)").setStyle(TextInputStyle.Short).setValue(`${orpConf.onlineColor || '#2ecc71'}`).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('offline_color').setLabel("Offline Color (hex or name)").setStyle(TextInputStyle.Short).setValue(`${orpConf.offlineColor || '#e74c3c'}`).setRequired(true))
                 );
                 return await interaction.showModal(modal);
             }
@@ -106,8 +108,8 @@ const orpHandler = async (interaction, client) => {
                 const onlineCol = interaction.fields.getTextInputValue('online_color');
                 const offlineCol = interaction.fields.getTextInputValue('offline_color');
 
-                await OrpConfig.upsert({
-                    guildId,
+                const [conf] = await OrpConfig.findOrCreate({ where: { guildId } });
+                await conf.update({
                     zoneSize: radius,
                     activeDurationHours: duration,
                     onlineColor: onlineCol,
@@ -121,7 +123,7 @@ const orpHandler = async (interaction, client) => {
         return await renderOrpPanel(interaction);
     } catch (err) {
         console.error('[ORP HANDLER ERROR]', err);
-        if (interaction.isRepliable() && !interaction.replied) {
+        if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
             return interaction.reply({ content: '❌ An error occurred processing the ORP action.', flags: 64 }).catch(() => {});
         }
     }
