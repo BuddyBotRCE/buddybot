@@ -15,31 +15,13 @@ async function getOnlinePlayerOptions(guildId, serverId, client) {
             const parsed = JSON.parse(res);
             players = Array.isArray(parsed) ? parsed : (parsed.Players || parsed.result || []);
         } catch (e) {
-            // Fallback if it contains JSON-like fragments
             try {
                 const fixedJson = JSON.parse(res.trim());
                 players = Array.isArray(fixedJson) ? fixedJson : [];
             } catch (err2) {}
         }
 
-        // Extract names specifically from Rust Console Edition "displayname" fields
         const uniqueNames = [...new Set(players.map(p => p.displayname || p.DisplayName || p.Username || p.name).filter(Boolean))];
-
-        if (uniqueNames.length === 0) {
-            return [];
-        }
-
-        return uniqueNames.slice(0, 25).map(name => ({
-            label: name.substring(0, 100),
-            value: `player_sel_${name}`,
-            emoji: '🎮'
-        }));
-    } catch (err) {
-        return [];
-    }
-}
-
-        const uniqueNames = [...new Set(players.map(p => p.Username || p.name || p.DisplayName).filter(Boolean))];
 
         if (uniqueNames.length === 0) {
             return [];
@@ -203,7 +185,6 @@ const liveAdminHandler = async (interaction, client) => {
             }
             if (customId === 'live_item_select') {
                 session.selectedItem = selectedValue.replace('item_', '');
-                // Prompt modal for quantity before choosing player
                 const modal = new ModalBuilder().setCustomId('modal_live_item_qty').setTitle('Set Item Quantity');
                 modal.addComponents(
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('qty').setLabel('Quantity to Give').setStyle(TextInputStyle.Short).setValue('1').setRequired(true))
