@@ -83,7 +83,11 @@ module.exports = async (interaction, client) => {
             if (customId === 'modal_orp_config') return await orpHandler(interaction, client);
             if (customId === 'modal_live_admin') return await liveAdminHandler(interaction, client);
             if (customId.startsWith('modal_live_')) return await liveAdminHandler(interaction, client);
-
+            // Ensure player hub buttons route to your player panel handler
+if (customId.startsWith('hub_') || customId.startsWith('btn_player_') || customId.startsWith('player_')) {
+    const playerPanelHandler = require(handlerPath('playerPanelHandler')); // Adjust require path if named differently
+    return await playerPanelHandler(interaction, client);
+}
             return await adminHandler(interaction, client);
         }
 
