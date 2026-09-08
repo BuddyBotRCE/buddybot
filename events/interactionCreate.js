@@ -82,6 +82,8 @@ module.exports = async (interaction, client) => {
             if (customId.startsWith('modal_gg_') || customId === 'modal_gg_add_weapon') return await gunGameHandler(interaction, client);
             if (customId === 'modal_orp_config') return await orpHandler(interaction, client);
             if (customId === 'modal_live_admin') return await liveAdminHandler(interaction, client);
+            if (customId.startsWith('modal_live_')) return await liveAdminHandler(interaction, client);
+
             return await adminHandler(interaction, client);
         }
 
@@ -146,7 +148,8 @@ module.exports = async (interaction, client) => {
             if (selectedValue === 'setup_logging' || selectedValue.includes('log')) return await loggingHandler(interaction, client);
             if (selectedValue === 'setup_binds') return await bindHandler(interaction, client);
             // Add inside your Admin Dropdown router or component buttons:
-if (selectedValue === 'admin_tools' || customId.startsWith('live_') || customId === 'modal_live_say' || customId === 'modal_live_kick' || customId === 'modal_live_ban' || customId === 'modal_live_custom') {
+            if (selectedValue === 'admin_tools' || customId.startsWith('live_') || customId === 'modal_live_say' || customId === 'modal_live_kick' || customId === 'modal_live_ban' || customId === 'modal_live_custom') {
+            
     return await liveAdminHandler(interaction, client);
 }
             // 🛡️ Fixed ORP Route
@@ -247,6 +250,10 @@ if (selectedValue === 'admin_tools' || customId.startsWith('live_') || customId 
 
         if (customId.includes('kit') && !customId.includes('ticket')) {
             return await kitHandler(interaction, client);
+        }
+
+        if (customId.startsWith('live_') || customId.startsWith('modal_live_')) {
+            return await liveAdminHandler(interaction, client);
         }
 
         return await adminHandler(interaction, client);
