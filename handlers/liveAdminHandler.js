@@ -1,5 +1,5 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { GameServer } = require('../database/db');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, RoleSelectMenuBuilder } = require('discord.js');
+const { GameServer, GuildConfig } = require('../database/db');
 const { sendRconCommand, activeConnections } = require('../utils/rconManager');
 
 const liveSessions = new Map();
@@ -19,10 +19,10 @@ async function renderLiveToolsPanel(interaction, messageOverride = '') {
     }
 
     const embed = new EmbedBuilder()
-        .setTitle('⚡ Live Server Admin Tools & RCON Suite')
+        .setTitle('⚡ Rust Console Edition — Live RCON Suite')
         .setDescription(
             (messageOverride ? `**${messageOverride}**\n\n` : '') +
-            `Complete real-time server command center. Execute live RCON instructions, manage online players, trigger weather/time states, and monitor server health instantly.\n\n` +
+            `Real-time administration suite configured specifically for **Rust Console Edition** (GPortal / Double Eleven servers).\n\n` +
             `• **Active Target Server:** \`${targetServerName}\`\n` +
             `• **WebRCON Status:** ${activeConnections.has(guildId) ? '🟢 Connected' : '🟡 Ready / On-Demand'}`
         )
@@ -31,33 +31,36 @@ async function renderLiveToolsPanel(interaction, messageOverride = '') {
 
     const components = [];
 
-    // Server Selector Dropdown
     if (servers.length > 0) {
         const serverOptions = [{ label: '🌐 All Servers (Global Command)', value: 'live_server_all', emoji: '🌐' }];
         servers.forEach(s => {
             serverOptions.push({ label: `🖥️ Server: ${s.serverName}`, value: `live_server_${s.id}`, emoji: '🖥️' });
         });
         components.push(new ActionRowBuilder().addComponents(
-            new StringSelectMenuBuilder().setCustomId('live_server_select').setPlaceholder('Select target server for live tools...').addOptions(serverOptions)
+            new StringSelectMenuBuilder().setCustomId('live_server_select').setPlaceholder('Select target server...').addOptions(serverOptions)
         ));
     }
 
-    // Row 1: Player & Broadcast Actions
     components.push(new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('live_btn_players').setLabel('Online Players').setStyle(ButtonStyle.Primary).setEmoji('👥'),
+        new ButtonBuilder().setCustomId('live_btn_giveitem').setLabel('Give Item').setStyle(ButtonStyle.Success).setEmoji('🎁'),
+        new ButtonBuilder().setCustomId('live_btn_givekit').setLabel('Give Kit').setStyle(ButtonStyle.Success).setEmoji('📦'),
+        new ButtonBuilder().setCustomId('live_btn_addvip').setLabel('Add VIP').setStyle(ButtonStyle.Success).setEmoji('⭐'),
+        new ButtonBuilder().setCustomId('live_btn_addmod').setLabel('Add Moderator').setStyle(ButtonStyle.Primary).setEmoji('🛡️')
+    ));
+
+    components.push(new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('live_btn_players').setLabel('Online Players').setStyle(ButtonStyle.Secondary).setEmoji('👥'),
         new ButtonBuilder().setCustomId('live_btn_say').setLabel('Global Broadcast').setStyle(ButtonStyle.Primary).setEmoji('📢'),
         new ButtonBuilder().setCustomId('live_btn_kick').setLabel('Kick Player').setStyle(ButtonStyle.Danger).setEmoji('👢'),
         new ButtonBuilder().setCustomId('live_btn_ban').setLabel('Ban Player').setStyle(ButtonStyle.Danger).setEmoji('🔨')
     ));
 
-    // Row 2: World & Server Controls
     components.push(new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('live_btn_save').setLabel('Save World').setStyle(ButtonStyle.Success).setEmoji('💾'),
         new ButtonBuilder().setCustomId('live_btn_weather').setLabel('Weather / Time').setStyle(ButtonStyle.Secondary).setEmoji('⛅'),
         new ButtonBuilder().setCustomId('live_btn_custom').setLabel('Custom RCON').setStyle(ButtonStyle.Secondary).setEmoji('⌨️')
     ));
 
-    // Row 3: Navigation Back
     components.push(new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
     ));
@@ -96,16 +99,55 @@ const liveAdminHandler = async (interaction, client) => {
         if (interaction.isButton()) {
             if (customId === 'live_btn_players') {
                 const res = await sendRconCommand(guildId, 'playerlist', client, session.serverId);
-                return await renderLiveToolsPanel(interaction, `👥 **Online Players List:**\n\`\`\`${res || 'No players online or response empty'}\`\`\``);
+                return await renderLiveToolsPanel(interaction, `👥 **Online Players List (Console):**\n\`\`\`${res || 'No players online or response empty'}\`\`\``);
             }
 
             if (customId === 'live_btn_save') {
                 await sendRconCommand(guildId, 'server.save', client, session.serverId);
-                return await renderLiveToolsPanel(interaction, `💾 **World saved successfully across target server(s)!**`);
+                return await renderLiveToolsPanel(interaction, `💾 **World saved successfully on console server!**`);
+            }
+
+            if (customId === 'live_btn_giveitem') {
+                const modal = new ModalBuilder().setCustomId('modal_live_giveitem').setTitle('Console: Give Item');
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('player').setLabel('Exact Gamertag').setStyle(TextInputStyle.Short).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('item').setLabel('Item Name / Shortname').setStyle(TextInputStyle.Short).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel('Quantity').setStyle(TextInputStyle.Short).setValue('1').setRequired(true))
+                );
+                return await interaction.showModal(modal);
+            }
+
+            if (customId === 'live_btn_givekit') {
+                const modal = new ModalBuilder().setCustomId('modal_live_givekit').setTitle('Console: Give Kit');
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('player').setLabel('Exact Gamertag').setStyle(TextInputStyle.Short).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('kitname').setLabel('Kit Name').setStyle(TextInputStyle.Short).setRequired(true))
+                );
+                return await interaction.showModal(modal);
+            }
+
+            if (customId === 'live_btn_addvip') {
+                const modal = new ModalBuilder().setCustomId('modal_live_addvip').setTitle('Console: Add VIP');
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('player').setLabel('Exact Gamertag').setStyle(TextInputStyle.Short).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('days').setLabel('Duration (Days)').setStyle(TextInputStyle.Short).setValue('30').setRequired(true))
+                );
+                return await interaction.showModal(modal);
+            }
+
+            if (customId === 'live_btn_addmod') {
+                const embed = new EmbedBuilder()
+                    .setTitle('🛡️ Assign Bot Moderator Role')
+                    .setDescription('Select the Discord role you wish to assign as a Bot Moderator using the menu below.')
+                    .setColor('#3498db');
+                const row = new ActionRowBuilder().addComponents(
+                    new RoleSelectMenuBuilder().setCustomId('select_live_mod_role').setPlaceholder('Select Moderator Role...').setMinValues(1).setMaxValues(1)
+                );
+                return await interaction.reply({ embeds: [embed], components: [row], flags: 64 });
             }
 
             if (customId === 'live_btn_say') {
-                const modal = new ModalBuilder().setCustomId('modal_live_say').setTitle('Broadcast Chat Message');
+                const modal = new ModalBuilder().setCustomId('modal_live_say').setTitle('Global Broadcast');
                 modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('message').setLabel('Message to Broadcast').setStyle(TextInputStyle.Short).setRequired(true)));
                 return await interaction.showModal(modal);
             }
@@ -113,7 +155,7 @@ const liveAdminHandler = async (interaction, client) => {
             if (customId === 'live_btn_kick') {
                 const modal = new ModalBuilder().setCustomId('modal_live_kick').setTitle('Kick Player');
                 modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('player').setLabel('Player Name or SteamID64').setStyle(TextInputStyle.Short).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('player').setLabel('Exact Gamertag').setStyle(TextInputStyle.Short).setRequired(true)),
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('Reason').setStyle(TextInputStyle.Short).setValue('Kicked by Admin').setRequired(false))
                 );
                 return await interaction.showModal(modal);
@@ -122,8 +164,8 @@ const liveAdminHandler = async (interaction, client) => {
             if (customId === 'live_btn_ban') {
                 const modal = new ModalBuilder().setCustomId('modal_live_ban').setTitle('Ban Player');
                 modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('player').setLabel('Player Name or SteamID64').setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('Ban Reason').setStyle(TextInputStyle.Short).setValue('Banned by Admin').setRequired(false))
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('player').setLabel('Exact Gamertag').setStyle(TextInputStyle.Short).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('Reason').setStyle(TextInputStyle.Short).setValue('Banned by Admin').setRequired(false))
                 );
                 return await interaction.showModal(modal);
             }
@@ -138,31 +180,59 @@ const liveAdminHandler = async (interaction, client) => {
             }
 
             if (customId === 'live_btn_custom') {
-                const modal = new ModalBuilder().setCustomId('modal_live_custom').setTitle('Execute Custom RCON');
-                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('command').setLabel('RCON Command (e.g. status)').setStyle(TextInputStyle.Short).setRequired(true)));
+                const modal = new ModalBuilder().setCustomId('modal_live_custom').setTitle('Custom RCON Command');
+                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('command').setLabel('Console RCON Command').setStyle(TextInputStyle.Short).setRequired(true)));
                 return await interaction.showModal(modal);
             }
         }
 
+        if (interaction.isRoleSelectMenu() && customId === 'select_live_mod_role') {
+            const roleId = interaction.values[0];
+            await GuildConfig.upsert({ guildId, modRoleId: roleId });
+            return await interaction.update({ content: `✅ Bot **Moderator Role** successfully set to <@&${roleId}>!`, components: [] });
+        }
+
         if (interaction.isModalSubmit()) {
+            if (customId === 'modal_live_giveitem') {
+                const player = interaction.fields.getTextInputValue('player');
+                const item = interaction.fields.getTextInputValue('item');
+                const amount = interaction.fields.getTextInputValue('amount') || '1';
+                await sendRconCommand(guildId, `inventory.giveto "${player}" "${item}" ${amount}`, client, session.serverId);
+                return await renderLiveToolsPanel(interaction, `🎁 Gave **${amount}x ${item}** to **${player}**!`);
+            }
+
+            if (customId === 'modal_live_givekit') {
+                const player = interaction.fields.getTextInputValue('player');
+                const kitName = interaction.fields.getTextInputValue('kitname');
+                await sendRconCommand(guildId, `kit.give "${player}" "${kitName}"`, client, session.serverId);
+                return await renderLiveToolsPanel(interaction, `📦 Gave kit **${kitName}** to **${player}**!`);
+            }
+
+            if (customId === 'modal_live_addvip') {
+                const player = interaction.fields.getTextInputValue('player');
+                const days = interaction.fields.getTextInputValue('days') || '30';
+                await sendRconCommand(guildId, `user.group add "${player}" vip`, client, session.serverId);
+                return await renderLiveToolsPanel(interaction, `⭐ Added **${player}** to VIP group for ${days} days!`);
+            }
+
             if (customId === 'modal_live_say') {
                 const val = interaction.fields.getTextInputValue('message');
                 await sendRconCommand(guildId, `say "${val}"`, client, session.serverId);
-                return await renderLiveToolsPanel(interaction, `📢 Broadcasted message to server: \`${val}\``);
+                return await renderLiveToolsPanel(interaction, `📢 Broadcasted: \`${val}\``);
             }
 
             if (customId === 'modal_live_kick') {
                 const player = interaction.fields.getTextInputValue('player');
                 const reason = interaction.fields.getTextInputValue('reason') || 'Kicked';
                 await sendRconCommand(guildId, `kick "${player}" "${reason}"`, client, session.serverId);
-                return await renderLiveToolsPanel(interaction, `👢 Kicked player **${player}**.`);
+                return await renderLiveToolsPanel(interaction, `👢 Kicked **${player}**.`);
             }
 
             if (customId === 'modal_live_ban') {
                 const player = interaction.fields.getTextInputValue('player');
                 const reason = interaction.fields.getTextInputValue('reason') || 'Banned';
                 await sendRconCommand(guildId, `ban "${player}" "${reason}"`, client, session.serverId);
-                return await renderLiveToolsPanel(interaction, `🔨 Banned player **${player}**.`);
+                return await renderLiveToolsPanel(interaction, `🔨 Banned **${player}**.`);
             }
 
             if (customId === 'modal_live_weather') {
@@ -170,13 +240,13 @@ const liveAdminHandler = async (interaction, client) => {
                 const rain = interaction.fields.getTextInputValue('rain');
                 if (time) await sendRconCommand(guildId, `env.time ${time}`, client, session.serverId);
                 if (rain) await sendRconCommand(guildId, `weather.rain ${rain}`, client, session.serverId);
-                return await renderLiveToolsPanel(interaction, `⛅ **Weather & Time Updated!** (Time: \`${time}\`, Rain: \`${rain}\`)`);
+                return await renderLiveToolsPanel(interaction, `⛅ **Console Weather Updated!**`);
             }
 
             if (customId === 'modal_live_custom') {
                 const val = interaction.fields.getTextInputValue('command');
                 const output = await sendRconCommand(guildId, val, client, session.serverId);
-                return await renderLiveToolsPanel(interaction, `⌨️ **Executed:** \`${val}\`\n\`\`\`${output || 'Command executed (No response text)'}\`\`\``);
+                return await renderLiveToolsPanel(interaction, `⌨️ **Executed:** \`${val}\`\n\`\`\`${output || 'Executed'}\`\`\``);
             }
         }
 
@@ -184,7 +254,7 @@ const liveAdminHandler = async (interaction, client) => {
     } catch (err) {
         console.error('[LIVE ADMIN HANDLER ERROR]', err);
         if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-            return interaction.reply({ content: '❌ An error occurred executing the live tool action.', flags: 64 }).catch(() => {});
+            return interaction.reply({ content: '❌ An error occurred.', flags: 64 }).catch(() => {});
         }
     }
 };
