@@ -34,6 +34,7 @@ const recyclerHandler = require(handlerPath('recyclerHandler'));
 const prisonHandler = require(handlerPath('prisonHandler')); 
 const gunGameHandler = require(handlerPath('gunGameHandler'));
 const liveAdminHandler = require(handlerPath('liveAdminHandler'));
+const playerPanelHandler = require(handlerPath('playerPanelHandler')); // Added safely here
 
 module.exports = async (interaction, client) => {
     try {
@@ -83,11 +84,11 @@ module.exports = async (interaction, client) => {
             if (customId === 'modal_orp_config') return await orpHandler(interaction, client);
             if (customId === 'modal_live_admin') return await liveAdminHandler(interaction, client);
             if (customId.startsWith('modal_live_')) return await liveAdminHandler(interaction, client);
-            // Ensure player hub buttons route to your player panel handler
-if (customId.startsWith('hub_') || customId.startsWith('btn_player_') || customId.startsWith('player_')) {
-    const playerPanelHandler = require(handlerPath('playerPanelHandler')); // Adjust require path if named differently
-    return await playerPanelHandler(interaction, client);
-}
+            
+            if (customId.startsWith('hub_') || customId.startsWith('btn_player_') || customId.startsWith('player_')) {
+                return await playerPanelHandler(interaction, client);
+            }
+
             return await adminHandler(interaction, client);
         }
 
@@ -151,12 +152,11 @@ if (customId.startsWith('hub_') || customId.startsWith('btn_player_') || customI
             if (selectedValue === 'setup_kits') return await kitHandler(interaction, client);
             if (selectedValue === 'setup_logging' || selectedValue.includes('log')) return await loggingHandler(interaction, client);
             if (selectedValue === 'setup_binds') return await bindHandler(interaction, client);
-            // Add inside your Admin Dropdown router or component buttons:
-            if (selectedValue === 'admin_tools' || customId.startsWith('live_') || customId === 'modal_live_say' || customId === 'modal_live_kick' || customId === 'modal_live_ban' || customId === 'modal_live_custom') {
             
-    return await liveAdminHandler(interaction, client);
-}
-            // 🛡️ Fixed ORP Route
+            if (selectedValue === 'admin_tools' || customId.startsWith('live_') || customId === 'modal_live_say' || customId === 'modal_live_kick' || customId === 'modal_live_ban' || customId === 'modal_live_custom') {
+                return await liveAdminHandler(interaction, client);
+            }
+
             if (selectedValue === 'setup_orp') return await orpHandler(interaction, client);
             
             if (selectedValue.includes('pve') || selectedValue.includes('zone') || selectedValue === 'setup_custom_zones') return await customZoneHandler(interaction, client);
@@ -166,7 +166,6 @@ if (customId.startsWith('hub_') || customId.startsWith('btn_player_') || customI
             if (selectedValue === 'setup_prison' || selectedValue.startsWith('set_cell_')) return await prisonHandler(interaction, client); 
             if (selectedValue === 'setup_automessages') return await autoMessageHandler(interaction, client);
             
-            // 🎯 Routed Gun Game opening from dropdown
             if (selectedValue === 'setup_buddy_games' || selectedValue === 'setup_gungame') {
                 return await gunGameHandler(interaction, client);
             }
@@ -207,16 +206,21 @@ if (customId.startsWith('hub_') || customId.startsWith('btn_player_') || customI
             return await skipNightHandler(interaction, client);
         }
 
-        if (customId === 'hometp_btn_settings' || customId === 'admin_menu_back') {
+        if (customId === 'hometp_btn_settings') {
             return await homeTpHandler(interaction, client);
         }
 
         if (customId === 'admin_menu_back') {
-            const adminHandler = require('./adminHandler');
-            if (adminHandler && adminHandler.renderMainPanel) {
-                return await adminHandler.renderMainPanel(interaction);
+            const adminHandlerRef = require('./adminHandler');
+            if (adminHandlerRef && adminHandlerRef.renderMainPanel) {
+                return await adminHandlerRef.renderMainPanel(interaction);
             }
         }  
+
+        // 🎯 Route Player Panel & Hub Buttons safely here
+        if (customId.startsWith('hub_') || customId.startsWith('btn_player_') || customId.startsWith('player_')) {
+            return await playerPanelHandler(interaction, client);
+        }
 
         if (customId.includes('recycler')) return await recyclerHandler(interaction, client);
         if (customId.includes('prison') || customId === 'prison_btn_jail' || customId === 'prison_btn_unjail') return await prisonHandler(interaction, client);
@@ -225,17 +229,14 @@ if (customId.startsWith('hub_') || customId.startsWith('btn_player_') || customI
             return await autoMessageHandler(interaction, client);
         }
 
-        // 🎯 GLOBAL GUN GAME BUTTON & SELECT MENU ROUTER
         if (customId.startsWith('gg_') || customId.includes('gg_')) {
             return await gunGameHandler(interaction, client);
         }
 
-        // 🛡️ ORP Components & Server Select Dropdown Route
         if (customId.startsWith('btn_orp_') || customId.startsWith('orp_') || customId.includes('orp')) {
             return await orpHandler(interaction, client);
         }
 
-        // 📢 EMBED BUILDER & REACTION PANEL ROUTER (FINAL FIX)
         if (
             customId.startsWith('emb_') || 
             customId.startsWith('select_emb_') || 
@@ -250,7 +251,6 @@ if (customId.startsWith('hub_') || customId.startsWith('btn_player_') || customI
             console.log(`[ROUTER] Routing to postEmbedHandler: ${customId}`);
             return await postEmbedHandler(interaction, client);
         }
-        
 
         if (customId.includes('kit') && !customId.includes('ticket')) {
             return await kitHandler(interaction, client);
