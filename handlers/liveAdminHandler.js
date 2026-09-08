@@ -1,13 +1,49 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, RoleSelectMenuBuilder } = require('discord.js');
 const { GameServer, GuildConfig } = require('../database/db');
 const { sendRconCommand, activeConnections } = require('../utils/rconManager');
+const { RUST_CATEGORIES } = require('../utils/rustCatalog'); // Adjust path if your catalog file is located elsewhere
 
 const liveSessions = new Map();
+
+// Helper to parse online players from console RCON `playerlist` response
+async function getOnlinePlayerOptions(guildId, serverId, client) {
+    try {
+        const res = await sendRconCommand(guildId, 'playerlist', client, serverId);
+        if (!res || typeof res !== 'string') return [{ label: 'No online players or empty response', value: 'none', emoji: '❌' }];
+        
+        // Console playerlist formats can vary, but typically JSON or plaintext lines containing player names
+        let players = [];
+        try {
+            const parsed = JSON.parse(res);
+            players = Array.isArray(parsed) ? parsed : (parsed.Players || []);
+        } catch (e) {
+            // Fallback line parser if plaintext
+            const lines = res.split('\n');
+            for (const line of lines) {
+                if (line.trim() && !line.includes('SteamID') && !line.includes('Connected')) {
+                    const parts = line.split('"');
+                    if (parts.length >= 2) players.push({ Username: parts[1] });
+                }
+            }
+        }
+
+        if (players.length === 0) {
+            return [{ label: 'No players currently online', value: 'none', emoji: '👥' }];
+        }
+
+        return players.slice(0, 25).map(p => {
+            const name = p.Username || p.name || p.DisplayName || 'Unknown Player';
+            return { label: name.substring(0, 100), value: `player_sel_${name}`, emoji: '🎮' };
+        });
+    } catch (err) {
+        return [{ label: 'Error fetching playerlist', value: 'none', emoji: '❌' }];
+    }
+}
 
 async function renderLiveToolsPanel(interaction, messageOverride = '') {
     const guildId = interaction.guild.id;
     if (!liveSessions.has(guildId)) {
-        liveSessions.set(guildId, { serverId: null, mode: 'dashboard' });
+        liveSessions.set(guildId, { serverId: null, mode: 'dashboard', selectedCategory: null, selectedItem: null, selectedPlayer: null });
     }
     const session = liveSessions.get(guildId);
     const servers = await GameServer.findAll({ where: { guildId } }).catch(() => []);
@@ -19,10 +55,10 @@ async function renderLiveToolsPanel(interaction, messageOverride = '') {
     }
 
     const embed = new EmbedBuilder()
-        .setTitle('⚡ Rust Console Edition — Live RCON Suite')
+        .setTitle('⚡ Rust Console Edition — Catalog & RCON Suite')
         .setDescription(
             (messageOverride ? `**${messageOverride}**\n\n` : '') +
-            `Admin command center connected to your item catalog & in-game Kit Manager for **Rust Console Edition**.\n\n` +
+            `Admin command center linked to your item catalog & live player dropdowns.\n\n` +
             `• **Active Target Server:** \`${targetServerName}\`\n` +
             `• **WebRCON Status:** ${activeConnections.has(guildId) ? '🟢 Connected' : '🟡 Ready / On-Demand'}`
         )
@@ -41,33 +77,69 @@ async function renderLiveToolsPanel(interaction, messageOverride = '') {
         ));
     }
 
-    // Row 1: Catalog & Kit Actions
-    components.push(new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('live_btn_giveitem').setLabel('Give Catalog Item').setStyle(ButtonStyle.Success).setEmoji('🎁'),
-        new ButtonBuilder().setCustomId('live_btn_givekit').setLabel('Give Kit (Manager)').setStyle(ButtonStyle.Success).setEmoji('📦'),
-        new ButtonBuilder().setCustomId('live_btn_addvip').setLabel('Add VIP').setStyle(ButtonStyle.Success).setEmoji('⭐'),
-        new ButtonBuilder().setCustomId('live_btn_addmod').setLabel('Add Moderator').setStyle(ButtonStyle.Primary).setEmoji('🛡️')
-    ));
+    if (session.mode === 'give_item_category') {
+        embed.addFields({ name: '🎁 Step 1: Select Item Category', value: 'Choose a catalog category to pick an item from:' });
+        const catOptions = Object.keys(RUST_CATEGORIES).slice(0, 25).map(key => ({
+            label: RUST_CATEGORIES[key].label.substring(0, 100),
+            value: `cat_${key}`,
+            emoji: RUST_CATEGORIES[key].emoji || '📦'
+        }));
+        components.push(new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder().setCustomId('live_cat_select').setPlaceholder('Select item category...').addOptions(catOptions)
+        ));
+        components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('live_btn_back_dash').setLabel('Back to Dashboard').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+        ));
+    } else if (session.mode === 'give_item_product') {
+        const cat = RUST_CATEGORIES[session.selectedCategory];
+        embed.addFields({ name: `🎁 Step 2: Select Item from [${cat?.label}]`, value: 'Choose the specific item you want to give:' });
+        const itemOptions = cat.items.slice(0, 25).map(item => ({
+            label: item.name.substring(0, 100),
+            description: `Shortname: ${item.shortname}`,
+            value: `item_${item.shortname}`,
+            emoji: '🔹'
+        }));
+        components.push(new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder().setCustomId('live_item_select').setPlaceholder('Select item...').addOptions(itemOptions)
+        ));
+        components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('live_btn_back_cat').setLabel('Back to Categories').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+        ));
+    } else if (session.mode === 'give_item_player') {
+        embed.addFields({ name: `🎁 Step 3: Select Recipient`, value: `Item: \`${session.selectedItem}\`. Select online player destination:` });
+        const playerOptions = await getOnlinePlayerOptions(guildId, session.serverId, interaction.client);
+        components.push(new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder().setCustomId('live_player_select').setPlaceholder('Select online player...').addOptions(playerOptions)
+        ));
+        components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('live_btn_back_prod').setLabel('Back to Items').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+        ));
+    } else {
+        // Main Dashboard View
+        components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('live_btn_giveitem_menu').setLabel('Give Catalog Item').setStyle(ButtonStyle.Success).setEmoji('🎁'),
+            new ButtonBuilder().setCustomId('live_btn_givekit').setLabel('Give Kit (Manager)').setStyle(ButtonStyle.Success).setEmoji('📦'),
+            new ButtonBuilder().setCustomId('live_btn_addvip').setLabel('Add VIP').setStyle(ButtonStyle.Success).setEmoji('⭐'),
+            new ButtonBuilder().setCustomId('live_btn_addmod').setLabel('Add Moderator').setStyle(ButtonStyle.Primary).setEmoji('🛡️')
+        ));
 
-    // Row 2: Player Management
-    components.push(new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('live_btn_players').setLabel('Online Players').setStyle(ButtonStyle.Secondary).setEmoji('👥'),
-        new ButtonBuilder().setCustomId('live_btn_say').setLabel('Global Broadcast').setStyle(ButtonStyle.Primary).setEmoji('📢'),
-        new ButtonBuilder().setCustomId('live_btn_kick').setLabel('Kick Player').setStyle(ButtonStyle.Danger).setEmoji('👢'),
-        new ButtonBuilder().setCustomId('live_btn_ban').setLabel('Ban Player').setStyle(ButtonStyle.Danger).setEmoji('🔨')
-    ));
+        components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('live_btn_players').setLabel('Online Players').setStyle(ButtonStyle.Secondary).setEmoji('👥'),
+            new ButtonBuilder().setCustomId('live_btn_say').setLabel('Global Broadcast').setStyle(ButtonStyle.Primary).setEmoji('📢'),
+            new ButtonBuilder().setCustomId('live_btn_kick').setLabel('Kick Player').setStyle(ButtonStyle.Danger).setEmoji('👢'),
+            new ButtonBuilder().setCustomId('live_btn_ban').setLabel('Ban Player').setStyle(ButtonStyle.Danger).setEmoji('🔨')
+        ));
 
-    // Row 3: Server Controls
-    components.push(new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('live_btn_save').setLabel('Save World').setStyle(ButtonStyle.Success).setEmoji('💾'),
-        new ButtonBuilder().setCustomId('live_btn_weather').setLabel('Weather / Time').setStyle(ButtonStyle.Secondary).setEmoji('⛅'),
-        new ButtonBuilder().setCustomId('live_btn_custom').setLabel('Custom RCON').setStyle(ButtonStyle.Secondary).setEmoji('⌨️')
-    ));
+        components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('live_btn_save').setLabel('Save World').setStyle(ButtonStyle.Success).setEmoji('💾'),
+            new ButtonBuilder().setCustomId('live_btn_weather').setLabel('Weather / Time').setStyle(ButtonStyle.Secondary).setEmoji('⛅'),
+            new ButtonBuilder().setCustomId('live_btn_custom').setLabel('Custom RCON').setStyle(ButtonStyle.Secondary).setEmoji('⌨️')
+        ));
 
-    // Row 4: Back
-    components.push(new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
-    ));
+        components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
+        ));
+    }
 
     const payload = { embeds: [embed], components, flags: 64 };
 
@@ -86,12 +158,13 @@ const liveAdminHandler = async (interaction, client) => {
     const guildId = interaction.guild.id;
 
     if (!liveSessions.has(guildId)) {
-        liveSessions.set(guildId, { serverId: null, mode: 'dashboard' });
+        liveSessions.set(guildId, { serverId: null, mode: 'dashboard', selectedCategory: null, selectedItem: null, selectedPlayer: null });
     }
     const session = liveSessions.get(guildId);
 
     try {
         if (selectedValue === 'admin_tools') {
+            session.mode = 'dashboard';
             return await renderLiveToolsPanel(interaction);
         }
 
@@ -100,7 +173,44 @@ const liveAdminHandler = async (interaction, client) => {
             return await renderLiveToolsPanel(interaction, `🌐 **Target Server Switched Successfully!**`);
         }
 
+        // Dropdown Flow Selectors
+        if (interaction.isStringSelectMenu()) {
+            if (customId === 'live_cat_select') {
+                session.selectedCategory = selectedValue.replace('cat_', '');
+                session.mode = 'give_item_product';
+                return await renderLiveToolsPanel(interaction);
+            }
+            if (customId === 'live_item_select') {
+                session.selectedItem = selectedValue.replace('item_', '');
+                session.mode = 'give_item_player';
+                return await renderLiveToolsPanel(interaction);
+            }
+            if (customId === 'live_player_select') {
+                const targetPlayer = selectedValue.replace('player_sel_', '');
+                session.mode = 'dashboard';
+                await sendRconCommand(guildId, `inventory.giveto "${targetPlayer}" "${session.selectedItem}" 1`, client, session.serverId);
+                return await renderLiveToolsPanel(interaction, `🎁 Successfully gave **1x ${session.selectedItem}** to **${targetPlayer}**!`);
+            }
+        }
+
         if (interaction.isButton()) {
+            if (customId === 'live_btn_back_dash' || customId === 'live_btn_cancel') {
+                session.mode = 'dashboard';
+                return await renderLiveToolsPanel(interaction);
+            }
+            if (customId === 'live_btn_back_cat') {
+                session.mode = 'give_item_category';
+                return await renderLiveToolsPanel(interaction);
+            }
+            if (customId === 'live_btn_back_prod') {
+                session.mode = 'give_item_product';
+                return await renderLiveToolsPanel(interaction);
+            }
+            if (customId === 'live_btn_giveitem_menu') {
+                session.mode = 'give_item_category';
+                return await renderLiveToolsPanel(interaction);
+            }
+
             if (customId === 'live_btn_players') {
                 const res = await sendRconCommand(guildId, 'playerlist', client, session.serverId);
                 return await renderLiveToolsPanel(interaction, `👥 **Online Players List:**\n\`\`\`${res || 'No players online or response empty'}\`\`\``);
@@ -111,21 +221,11 @@ const liveAdminHandler = async (interaction, client) => {
                 return await renderLiveToolsPanel(interaction, `💾 **World saved successfully!**`);
             }
 
-            if (customId === 'live_btn_giveitem') {
-                const modal = new ModalBuilder().setCustomId('modal_live_giveitem').setTitle('Catalog: Give Item');
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('player').setLabel('Exact Gamertag').setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('item').setLabel('Catalog Shortname / Item ID').setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel('Quantity').setStyle(TextInputStyle.Short).setValue('1').setRequired(true))
-                );
-                return await interaction.showModal(modal);
-            }
-
             if (customId === 'live_btn_givekit') {
                 const modal = new ModalBuilder().setCustomId('modal_live_givekit').setTitle('Kit Manager: Give Kit');
                 modal.addComponents(
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('player').setLabel('Exact Gamertag').setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('kitname').setLabel('Kit Name (from Kit Manager)').setStyle(TextInputStyle.Short).setRequired(true))
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('kitname').setLabel('Kit Name').setStyle(TextInputStyle.Short).setRequired(true))
                 );
                 return await interaction.showModal(modal);
             }
@@ -197,19 +297,9 @@ const liveAdminHandler = async (interaction, client) => {
         }
 
         if (interaction.isModalSubmit()) {
-            if (customId === 'modal_live_giveitem') {
-                const player = interaction.fields.getTextInputValue('player');
-                const item = interaction.fields.getTextInputValue('item');
-                const amount = interaction.fields.getTextInputValue('amount') || '1';
-                // Pulling from catalog / item database via standard console inventory give command
-                await sendRconCommand(guildId, `inventory.giveto "${player}" "${item}" ${amount}`, client, session.serverId);
-                return await renderLiveToolsPanel(interaction, `🎁 Catalog Item Sent: **${amount}x ${item}** to **${player}**!`);
-            }
-
             if (customId === 'modal_live_givekit') {
                 const player = interaction.fields.getTextInputValue('player');
                 const kitName = interaction.fields.getTextInputValue('kitname');
-                // Pulling directly from in-game kit manager syntax
                 await sendRconCommand(guildId, `kit.give "${player}" "${kitName}"`, client, session.serverId);
                 return await renderLiveToolsPanel(interaction, `📦 Kit Manager Issued: **${kitName}** to **${player}**!`);
             }
