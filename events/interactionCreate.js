@@ -40,7 +40,7 @@ module.exports = async (interaction, client) => {
             Object.defineProperty(interaction, 'customId', { value: 'admin_menu_select', writable: true, configurable: true });
         }
         console.log(`[ROUTER DEBUG] Incoming Interaction -> ID: "${interaction.customId}", Type: ${interaction.type}, Selected: "${interaction.isStringSelectMenu() ? interaction.values[0] : 'N/A'}"`);
-        
+
         if (interaction.isChatInputCommand()) {
             const command = client.commands.get(interaction.commandName);
             if (!command) return;
@@ -236,6 +236,7 @@ module.exports = async (interaction, client) => {
             customId.includes('select_emb_') ||
             interaction.isStringSelectMenu() && (customId.includes('emb_') || customId.includes('rr_'))
         ) {
+            console.log(`[ROUTER] Routing to postEmbedHandler: ${customId}`);
             return await postEmbedHandler(interaction, client);
         }
         
