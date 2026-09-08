@@ -218,8 +218,8 @@ module.exports = async (interaction, client) => {
             return await gunGameHandler(interaction, client);
         }
 
-        // 🛡️ ORP Buttons Route
-        if (customId.startsWith('btn_orp_') || customId.includes('orp')) {
+        // 🛡️ ORP Components & Server Select Dropdown Route
+        if (customId.startsWith('btn_orp_') || customId.startsWith('orp_') || customId.includes('orp')) {
             return await orpHandler(interaction, client);
         }
 
