@@ -24,6 +24,7 @@ const bindHandler = require(handlerPath('bindHandler'));
 const adminHandler = require(handlerPath('adminHandler'));
 const loggingHandler = require(handlerPath('loggingHandler'));
 const postEmbedHandler = require(handlerPath('postEmbedHandler'));
+const orpHandler = require(handlerPath('orpHandler'));
 const customZoneHandler = require(handlerPath('customZoneHandler'));
 const autoModHandler = require(handlerPath('autoModHandler'));
 const wipeHandler = require(handlerPath('wipeHandler')); 
@@ -77,7 +78,8 @@ module.exports = async (interaction, client) => {
             if (customId.startsWith('modal_prison_')) return await prisonHandler(interaction, client);
             if (customId === 'modal_automsg_add') return await autoMessageHandler(interaction, client);
             if (customId.startsWith('modal_gg_') || customId === 'modal_gg_add_weapon') return await gunGameHandler(interaction, client);
-
+            if (customId === 'modal_orp_config') return await orpHandler(interaction, client);
+            
             return await adminHandler(interaction, client);
         }
 
@@ -141,7 +143,10 @@ module.exports = async (interaction, client) => {
             if (selectedValue === 'setup_kits') return await kitHandler(interaction, client);
             if (selectedValue === 'setup_logging' || selectedValue.includes('log')) return await loggingHandler(interaction, client);
             if (selectedValue === 'setup_binds') return await bindHandler(interaction, client);
-            if (selectedValue === 'setup_orp') return await adminHandler(interaction, client);
+            
+            // 🛡️ Fixed ORP Route
+            if (selectedValue === 'setup_orp') return await orpHandler(interaction, client);
+            
             if (selectedValue.includes('pve') || selectedValue.includes('zone') || selectedValue === 'setup_custom_zones') return await customZoneHandler(interaction, client);
             if (selectedValue === 'setup_automod') return await autoModHandler(interaction, client);
             if (selectedValue === 'setup_hometp') return await homeTpHandler(interaction, client);
@@ -211,6 +216,11 @@ module.exports = async (interaction, client) => {
         // 🎯 GLOBAL GUN GAME BUTTON & SELECT MENU ROUTER
         if (customId.startsWith('gg_') || customId.includes('gg_')) {
             return await gunGameHandler(interaction, client);
+        }
+
+        // 🛡️ ORP Buttons Route
+        if (customId.startsWith('btn_orp_') || customId.includes('orp')) {
+            return await orpHandler(interaction, client);
         }
 
         if (customId.includes('kit') && !customId.includes('ticket')) {

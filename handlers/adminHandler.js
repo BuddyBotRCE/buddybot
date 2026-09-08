@@ -6,6 +6,7 @@ const wipeHandler = require('./wipeHandler');
 const WebSocket = require('ws');
 const { activeConnections } = require('../utils/rconManager');
 
+
 const giveKitSessions = new Map();
 const adminActionSessions = new Map(); 
 
@@ -316,6 +317,7 @@ const adminHandler = async (interaction, client) => {
             return interaction.showModal(modal);
         }
     }
+
 
     if (interaction.isChannelSelectMenu()) {
         if (customId === 'tk_sel_cat') {
