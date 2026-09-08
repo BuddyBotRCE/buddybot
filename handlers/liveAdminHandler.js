@@ -1,49 +1,59 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, RoleSelectMenuBuilder } = require('discord.js');
 const { GameServer, GuildConfig } = require('../database/db');
 const { sendRconCommand, activeConnections } = require('../utils/rconManager');
-const { RUST_CATEGORIES } = require('../utils/rustCatalog'); // Adjust path if your catalog file is located elsewhere
+const { RUST_CATEGORIES } = require('../utils/rustCatalog');
 
 const liveSessions = new Map();
 
-// Helper to parse online players from console RCON `playerlist` response
 async function getOnlinePlayerOptions(guildId, serverId, client) {
     try {
         const res = await sendRconCommand(guildId, 'playerlist', client, serverId);
-        if (!res || typeof res !== 'string') return [{ label: 'No online players or empty response', value: 'none', emoji: '❌' }];
+        if (!res || typeof res !== 'string') return [];
         
-        // Console playerlist formats can vary, but typically JSON or plaintext lines containing player names
         let players = [];
         try {
             const parsed = JSON.parse(res);
-            players = Array.isArray(parsed) ? parsed : (parsed.Players || []);
+            players = Array.isArray(parsed) ? parsed : (parsed.Players || parsed.result || []);
         } catch (e) {
-            // Fallback line parser if plaintext
+            // Robust line parser for console RCON output formats
             const lines = res.split('\n');
             for (const line of lines) {
-                if (line.trim() && !line.includes('SteamID') && !line.includes('Connected')) {
-                    const parts = line.split('"');
-                    if (parts.length >= 2) players.push({ Username: parts[1] });
+                const trimmed = line.trim();
+                if (trimmed && !trimmed.toLowerCase().includes('steamid') && !trimmed.toLowerCase().includes('connected') && !trimmed.toLowerCase().includes('players')) {
+                    // Pull text inside quotes or clean line words
+                    const parts = trimmed.split('"');
+                    if (parts.length >= 2 && parts[1].length > 1) {
+                        players.push({ Username: parts[1] });
+                    } else {
+                        const words = trimmed.split(/\s+/);
+                        if (words.length > 0 && words[0].length > 1) {
+                            players.push({ Username: words[0] });
+                        }
+                    }
                 }
             }
         }
 
-        if (players.length === 0) {
-            return [{ label: 'No players currently online', value: 'none', emoji: '👥' }];
+        const uniqueNames = [...new Set(players.map(p => p.Username || p.name || p.DisplayName).filter(Boolean))];
+
+        if (uniqueNames.length === 0) {
+            return [];
         }
 
-        return players.slice(0, 25).map(p => {
-            const name = p.Username || p.name || p.DisplayName || 'Unknown Player';
-            return { label: name.substring(0, 100), value: `player_sel_${name}`, emoji: '🎮' };
-        });
+        return uniqueNames.slice(0, 25).map(name => ({
+            label: name.substring(0, 100),
+            value: `player_sel_${name}`,
+            emoji: '🎮'
+        }));
     } catch (err) {
-        return [{ label: 'Error fetching playerlist', value: 'none', emoji: '❌' }];
+        return [];
     }
 }
 
 async function renderLiveToolsPanel(interaction, messageOverride = '') {
     const guildId = interaction.guild.id;
     if (!liveSessions.has(guildId)) {
-        liveSessions.set(guildId, { serverId: null, mode: 'dashboard', selectedCategory: null, selectedItem: null, selectedPlayer: null });
+        liveSessions.set(guildId, { serverId: null, mode: 'dashboard', selectedCategory: null, selectedItem: null, selectedPlayer: null, itemQuantity: 1 });
     }
     const session = liveSessions.get(guildId);
     const servers = await GameServer.findAll({ where: { guildId } }).catch(() => []);
@@ -106,16 +116,23 @@ async function renderLiveToolsPanel(interaction, messageOverride = '') {
             new ButtonBuilder().setCustomId('live_btn_back_cat').setLabel('Back to Categories').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
         ));
     } else if (session.mode === 'give_item_player') {
-        embed.addFields({ name: `🎁 Step 3: Select Recipient`, value: `Item: \`${session.selectedItem}\`. Select online player destination:` });
+        embed.addFields({ name: `🎁 Step 3: Select Recipient`, value: `Item: \`${session.selectedItem}\` (Qty: \`${session.itemQuantity}\`). Select online player or use manual button below:` });
+        
         const playerOptions = await getOnlinePlayerOptions(guildId, session.serverId, interaction.client);
+        
+        if (playerOptions.length > 0) {
+            components.push(new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder().setCustomId('live_player_select').setPlaceholder('Select online player from server...').addOptions(playerOptions)
+            ));
+        } else {
+            embed.addFields({ name: '⚠️ No Active Players Detected', value: '*Could not fetch live playerlist automatically. Click the button below to type the exact gamertag manually.*' });
+        }
+
         components.push(new ActionRowBuilder().addComponents(
-            new StringSelectMenuBuilder().setCustomId('live_player_select').setPlaceholder('Select online player...').addOptions(playerOptions)
-        ));
-        components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('live_btn_manual_player').setLabel('Type Gamertag Manually').setStyle(ButtonStyle.Primary).setEmoji('⌨️'),
             new ButtonBuilder().setCustomId('live_btn_back_prod').setLabel('Back to Items').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
         ));
     } else {
-        // Main Dashboard View
         components.push(new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('live_btn_giveitem_menu').setLabel('Give Catalog Item').setStyle(ButtonStyle.Success).setEmoji('🎁'),
             new ButtonBuilder().setCustomId('live_btn_givekit').setLabel('Give Kit (Manager)').setStyle(ButtonStyle.Success).setEmoji('📦'),
@@ -158,7 +175,7 @@ const liveAdminHandler = async (interaction, client) => {
     const guildId = interaction.guild.id;
 
     if (!liveSessions.has(guildId)) {
-        liveSessions.set(guildId, { serverId: null, mode: 'dashboard', selectedCategory: null, selectedItem: null, selectedPlayer: null });
+        liveSessions.set(guildId, { serverId: null, mode: 'dashboard', selectedCategory: null, selectedItem: null, selectedPlayer: null, itemQuantity: 1 });
     }
     const session = liveSessions.get(guildId);
 
@@ -173,7 +190,6 @@ const liveAdminHandler = async (interaction, client) => {
             return await renderLiveToolsPanel(interaction, `🌐 **Target Server Switched Successfully!**`);
         }
 
-        // Dropdown Flow Selectors
         if (interaction.isStringSelectMenu()) {
             if (customId === 'live_cat_select') {
                 session.selectedCategory = selectedValue.replace('cat_', '');
@@ -182,14 +198,18 @@ const liveAdminHandler = async (interaction, client) => {
             }
             if (customId === 'live_item_select') {
                 session.selectedItem = selectedValue.replace('item_', '');
-                session.mode = 'give_item_player';
-                return await renderLiveToolsPanel(interaction);
+                // Prompt modal for quantity before choosing player
+                const modal = new ModalBuilder().setCustomId('modal_live_item_qty').setTitle('Set Item Quantity');
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('qty').setLabel('Quantity to Give').setStyle(TextInputStyle.Short).setValue('1').setRequired(true))
+                );
+                return await interaction.showModal(modal);
             }
             if (customId === 'live_player_select') {
                 const targetPlayer = selectedValue.replace('player_sel_', '');
                 session.mode = 'dashboard';
-                await sendRconCommand(guildId, `inventory.giveto "${targetPlayer}" "${session.selectedItem}" 1`, client, session.serverId);
-                return await renderLiveToolsPanel(interaction, `🎁 Successfully gave **1x ${session.selectedItem}** to **${targetPlayer}**!`);
+                await sendRconCommand(guildId, `inventory.giveto "${targetPlayer}" "${session.selectedItem}" ${session.itemQuantity || 1}`, client, session.serverId);
+                return await renderLiveToolsPanel(interaction, `🎁 Successfully gave **${session.itemQuantity}x ${session.selectedItem}** to **${targetPlayer}**!`);
             }
         }
 
@@ -209,6 +229,13 @@ const liveAdminHandler = async (interaction, client) => {
             if (customId === 'live_btn_giveitem_menu') {
                 session.mode = 'give_item_category';
                 return await renderLiveToolsPanel(interaction);
+            }
+            if (customId === 'live_btn_manual_player') {
+                const modal = new ModalBuilder().setCustomId('modal_live_manual_player').setTitle('Enter Gamertag Manually');
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('player').setLabel('Exact Gamertag').setStyle(TextInputStyle.Short).setRequired(true))
+                );
+                return await interaction.showModal(modal);
             }
 
             if (customId === 'live_btn_players') {
@@ -297,6 +324,19 @@ const liveAdminHandler = async (interaction, client) => {
         }
 
         if (interaction.isModalSubmit()) {
+            if (customId === 'modal_live_item_qty') {
+                session.itemQuantity = parseInt(interaction.fields.getTextInputValue('qty')) || 1;
+                session.mode = 'give_item_player';
+                return await renderLiveToolsPanel(interaction);
+            }
+
+            if (customId === 'modal_live_manual_player') {
+                const targetPlayer = interaction.fields.getTextInputValue('player');
+                session.mode = 'dashboard';
+                await sendRconCommand(guildId, `inventory.giveto "${targetPlayer}" "${session.selectedItem}" ${session.itemQuantity || 1}`, client, session.serverId);
+                return await renderLiveToolsPanel(interaction, `🎁 Successfully gave **${session.itemQuantity}x ${session.selectedItem}** to **${targetPlayer}**!`);
+            }
+
             if (customId === 'modal_live_givekit') {
                 const player = interaction.fields.getTextInputValue('player');
                 const kitName = interaction.fields.getTextInputValue('kitname');
