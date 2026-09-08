@@ -19,10 +19,10 @@ async function renderLiveToolsPanel(interaction, messageOverride = '') {
     }
 
     const embed = new EmbedBuilder()
-        .setTitle('⚡ Live Server Admin Tools')
+        .setTitle('⚡ Live Server Admin Tools & RCON Suite')
         .setDescription(
             (messageOverride ? `**${messageOverride}**\n\n` : '') +
-            `Execute real-time RCON commands, manage players, broadcast messages, and control your Rust servers live from Discord.\n\n` +
+            `Complete real-time server command center. Execute live RCON instructions, manage online players, trigger weather/time states, and monitor server health instantly.\n\n` +
             `• **Active Target Server:** \`${targetServerName}\`\n` +
             `• **WebRCON Status:** ${activeConnections.has(guildId) ? '🟢 Connected' : '🟡 Ready / On-Demand'}`
         )
@@ -31,7 +31,7 @@ async function renderLiveToolsPanel(interaction, messageOverride = '') {
 
     const components = [];
 
-    // Server Selector Dropdown if multiple servers exist
+    // Server Selector Dropdown
     if (servers.length > 0) {
         const serverOptions = [{ label: '🌐 All Servers (Global Command)', value: 'live_server_all', emoji: '🌐' }];
         servers.forEach(s => {
@@ -42,22 +42,25 @@ async function renderLiveToolsPanel(interaction, messageOverride = '') {
         ));
     }
 
-    // Action Buttons Row 1
-    const row1 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('live_btn_say').setLabel('Global Chat Say').setStyle(ButtonStyle.Primary).setEmoji('📢'),
+    // Row 1: Player & Broadcast Actions
+    components.push(new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('live_btn_players').setLabel('Online Players').setStyle(ButtonStyle.Primary).setEmoji('👥'),
+        new ButtonBuilder().setCustomId('live_btn_say').setLabel('Global Broadcast').setStyle(ButtonStyle.Primary).setEmoji('📢'),
         new ButtonBuilder().setCustomId('live_btn_kick').setLabel('Kick Player').setStyle(ButtonStyle.Danger).setEmoji('👢'),
-        new ButtonBuilder().setCustomId('live_btn_ban').setLabel('Ban Player').setStyle(ButtonStyle.Danger).setEmoji('🔨'),
-        new ButtonBuilder().setCustomId('live_btn_save').setLabel('Save World Data').setStyle(ButtonStyle.Success).setEmoji('💾')
-    );
+        new ButtonBuilder().setCustomId('live_btn_ban').setLabel('Ban Player').setStyle(ButtonStyle.Danger).setEmoji('🔨')
+    ));
 
-    // Action Buttons Row 2
-    const row2 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('live_btn_pop').setLabel('Server Population').setStyle(ButtonStyle.Secondary).setEmoji('👥'),
-        new ButtonBuilder().setCustomId('live_btn_custom').setLabel('Custom RCON Command').setStyle(ButtonStyle.Primary).setEmoji('⌨️'),
+    // Row 2: World & Server Controls
+    components.push(new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('live_btn_save').setLabel('Save World').setStyle(ButtonStyle.Success).setEmoji('💾'),
+        new ButtonBuilder().setCustomId('live_btn_weather').setLabel('Weather / Time').setStyle(ButtonStyle.Secondary).setEmoji('⛅'),
+        new ButtonBuilder().setCustomId('live_btn_custom').setLabel('Custom RCON').setStyle(ButtonStyle.Secondary).setEmoji('⌨️')
+    ));
+
+    // Row 3: Navigation Back
+    components.push(new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('admin_menu_back').setLabel('Back to Admin Panel').setStyle(ButtonStyle.Secondary).setEmoji('🔙')
-    );
-
-    components.push(row1, row2);
+    ));
 
     const payload = { embeds: [embed], components, flags: 64 };
 
@@ -91,9 +94,9 @@ const liveAdminHandler = async (interaction, client) => {
         }
 
         if (interaction.isButton()) {
-            if (customId === 'live_btn_pop') {
-                const res = await sendRconCommand(guildId, 'server.population', client, session.serverId);
-                return await renderLiveToolsPanel(interaction, `📊 **Server Population Report:**\n\`\`\`${res || 'No response data'}\`\`\``);
+            if (customId === 'live_btn_players') {
+                const res = await sendRconCommand(guildId, 'playerlist', client, session.serverId);
+                return await renderLiveToolsPanel(interaction, `👥 **Online Players List:**\n\`\`\`${res || 'No players online or response empty'}\`\`\``);
             }
 
             if (customId === 'live_btn_save') {
@@ -125,6 +128,15 @@ const liveAdminHandler = async (interaction, client) => {
                 return await interaction.showModal(modal);
             }
 
+            if (customId === 'live_btn_weather') {
+                const modal = new ModalBuilder().setCustomId('modal_live_weather').setTitle('Weather & Time Control');
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('time').setLabel('Set Time (0-24)').setStyle(TextInputStyle.Short).setValue('12').setRequired(false)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rain').setLabel('Rain Intensity (0 to 1)').setStyle(TextInputStyle.Short).setValue('0').setRequired(false))
+                );
+                return await interaction.showModal(modal);
+            }
+
             if (customId === 'live_btn_custom') {
                 const modal = new ModalBuilder().setCustomId('modal_live_custom').setTitle('Execute Custom RCON');
                 modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('command').setLabel('RCON Command (e.g. status)').setStyle(TextInputStyle.Short).setRequired(true)));
@@ -133,9 +145,8 @@ const liveAdminHandler = async (interaction, client) => {
         }
 
         if (interaction.isModalSubmit()) {
-            const val = interaction.fields.getTextInputValue('message') || interaction.fields.getTextInputValue('command') || interaction.fields.getTextInputValue('player');
-
             if (customId === 'modal_live_say') {
+                const val = interaction.fields.getTextInputValue('message');
                 await sendRconCommand(guildId, `say "${val}"`, client, session.serverId);
                 return await renderLiveToolsPanel(interaction, `📢 Broadcasted message to server: \`${val}\``);
             }
@@ -154,7 +165,16 @@ const liveAdminHandler = async (interaction, client) => {
                 return await renderLiveToolsPanel(interaction, `🔨 Banned player **${player}**.`);
             }
 
+            if (customId === 'modal_live_weather') {
+                const time = interaction.fields.getTextInputValue('time');
+                const rain = interaction.fields.getTextInputValue('rain');
+                if (time) await sendRconCommand(guildId, `env.time ${time}`, client, session.serverId);
+                if (rain) await sendRconCommand(guildId, `weather.rain ${rain}`, client, session.serverId);
+                return await renderLiveToolsPanel(interaction, `⛅ **Weather & Time Updated!** (Time: \`${time}\`, Rain: \`${rain}\`)`);
+            }
+
             if (customId === 'modal_live_custom') {
+                const val = interaction.fields.getTextInputValue('command');
                 const output = await sendRconCommand(guildId, val, client, session.serverId);
                 return await renderLiveToolsPanel(interaction, `⌨️ **Executed:** \`${val}\`\n\`\`\`${output || 'Command executed (No response text)'}\`\`\``);
             }
