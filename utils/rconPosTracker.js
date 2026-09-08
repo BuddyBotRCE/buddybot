@@ -1,11 +1,25 @@
 // ============================================================================
 // STANDALONE RCON POSITION TRACKER FOR RUST CONSOLE EDITION
 // ============================================================================
-const { UserEconomy, CustomBind, HomeTeleportLocation, PrisonCell, JailedPlayer } = require('../database/db');
+const { UserEconomy, CustomBind, HomeTeleportLocation, PrisonCell, JailedPlayer, OrpConfig, PlayerOrpBase } = require('../database/db');
 
 const adminPosQueue = new Map();
 const homeTpPosQueue = new Map();
 const recyclerPosQueue = new Map();
+const orpPosQueue = new Map(); // 🛡️ NEW: Queue for tracking ORP base anchors
+
+// === 🛡️ ORP QUEUE FUNCTION ===
+async function queueOrpPos(guildId, inGameName, client, serverId = null) {
+    if (orpPosQueue.has(inGameName)) clearTimeout(orpPosQueue.get(inGameName).timeoutTimer);
+    const timeoutTimer = setTimeout(() => { if (orpPosQueue.has(inGameName)) orpPosQueue.delete(inGameName); }, 15000);
+    orpPosQueue.set(inGameName, { guildId, inGameName, timeoutTimer, serverId, client });
+    try {
+        const { sendRconCommand } = require('./rconManager');
+        await sendRconCommand(guildId, `printpos "${inGameName}"`, client, serverId);
+    } catch (err) {
+        orpPosQueue.delete(inGameName);
+    }
+}
 
 async function queueHomeTpPos(guildId, userId, inGameName, client, serverId = null) {
     if (homeTpPosQueue.has(userId)) clearTimeout(homeTpPosQueue.get(userId).timeoutTimer);
@@ -112,6 +126,40 @@ async function handleRconLogMessage(guildId, msg) {
         }
     }
 
+    // === 2.5 ORP EMOTE INTERCEPT (🛡️ NEW) ===
+    if (orpPosQueue.size > 0) {
+        for (const [inGameName, orpData] of orpPosQueue.entries()) {
+            if (orpData.guildId !== guildId) continue;
+            let posX, posY, posZ;
+            let foundPos = false;
+            const nakedCoordMatch = msg.match(/(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)/);
+            if (nakedCoordMatch) {
+                posX = parseFloat(nakedCoordMatch[1]).toFixed(2);
+                posY = parseFloat(nakedCoordMatch[2]).toFixed(2);
+                posZ = parseFloat(nakedCoordMatch[3]).toFixed(2);
+                foundPos = true;
+            }
+            if (foundPos) {
+                if (orpData.timeoutTimer) clearTimeout(orpData.timeoutTimer);
+                orpPosQueue.delete(inGameName);
+
+                const { sendRconCommand } = require('./rconManager');
+                const [conf] = await OrpConfig.findOrCreate({ where: { guildId } });
+                
+                if (!conf.isEnabled) {
+                    await sendRconCommand(guildId, `say "❌ ${inGameName}, Offline Raid Protection is currently disabled on this server."`, orpData.client, orpData.serverId);
+                    return true;
+                }
+
+                const expiresAt = new Date(Date.now() + (conf.activeDurationHours * 3600000));
+                await PlayerOrpBase.upsert({ guildId, inGameName, posX, posY, posZ, isOnline: true, expiresAt });
+
+                await sendRconCommand(guildId, `say "🛡️ [ORP] Raid Protection Zone anchored successfully for ${inGameName}!"`, orpData.client, orpData.serverId);
+                return true;
+            }
+        }
+    }
+
     // === 3. DEATH & RESPAWN ENFORCER (PRISON TRAP) ===
     const deathMatch = msg.match(/(['"]?)([^'"]+)\1 (was killed by|died)/i);
     if (deathMatch) {
@@ -176,6 +224,7 @@ async function handleRconLogMessage(guildId, msg) {
     }
     return false;
 }
+
 // === AUTOMATED PRISON EXPIRATION, RF DOOR TRIGGER & REMINDER LOOP ===
 setInterval(async () => {
     try {
@@ -245,5 +294,6 @@ module.exports = {
     queueAdminPos: captureAdminPosition, 
     handleRconLogMessage,
     queueHomeTpPos,
-    queueRecyclerPos
+    queueRecyclerPos,
+    queueOrpPos // 🛡️ NEW: Exporting ORP Queue
 };

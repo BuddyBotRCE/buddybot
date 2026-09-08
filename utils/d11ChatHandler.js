@@ -3,6 +3,7 @@ const { processCustomBindChat } = require('./chatCustomBinds');
 const { processSkipNightChat } = require('./chatSkipNight');
 const { processTeleportAction } = require('../handlers/teleportHandler');
 const { processRecyclerChat } = require('./chatRecycler');
+const { queueOrpPos } = require('../utils/rconPosTracker'); // 🛡️ NEW: Import ORP Queue
 
 const CHAT_CATEGORIES = [
     { label: 'Combat', value: 'cat_combat', emoji: '⚔️', description: 'Under attack, move out, etc.' },
@@ -113,6 +114,13 @@ async function processD11Router(guildId, rawUsername, rawContent, msgLower, clie
     if (handledTeleport) return true;
 
     const isQuickChat = rawContent.includes('d11_quick_chat_');
+
+    // 🛡️ ORP TRIGGER ("Can I Build Around Here?" OR typed command !orp)
+    const isOrpTrigger = (isQuickChat && rawContent.includes('d11_quick_chat_questions_slot_1')) || rawContent === '!orp' || rawContent === '/orp';
+    if (isOrpTrigger) {
+        await queueOrpPos(guildId, rawUsername, client);
+        return true;
+    }
 
     const isSkipNight = (isQuickChat && rawContent.includes('d11_quick_chat_orders_slot_3')) || rawContent === '!skipnight' || rawContent === '/skipnight';
     if (isSkipNight) {
