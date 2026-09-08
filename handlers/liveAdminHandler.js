@@ -8,17 +8,24 @@ const liveSessions = new Map();
 async function getOnlinePlayerOptions(guildId, serverId, client) {
     try {
         const res = await sendRconCommand(guildId, 'playerlist', client, serverId);
-        if (!res || typeof res !== 'string') return [];
-        
+        if (!res) return [];
+
         let players = [];
-        try {
-            const parsed = JSON.parse(res);
-            players = Array.isArray(parsed) ? parsed : (parsed.Players || parsed.result || []);
-        } catch (e) {
+        
+        // If the response is already an object/array (if rconManager parses it)
+        if (typeof res === 'object') {
+            players = Array.isArray(res) ? res : (res.Players || res.result || []);
+        } else if (typeof res === 'string') {
             try {
-                const fixedJson = JSON.parse(res.trim());
-                players = Array.isArray(fixedJson) ? fixedJson : [];
-            } catch (err2) {}
+                const parsed = JSON.parse(res);
+                players = Array.isArray(parsed) ? parsed : (parsed.Players || parsed.result || []);
+            } catch (e) {
+                // If it's raw text logs containing JSON or player names
+                const matches = res.match(/"displayname"\s*:\s*"([^"]+)"/g);
+                if (matches) {
+                    players = matches.map(m => ({ displayname: m.split('"')[3] }));
+                }
+            }
         }
 
         const uniqueNames = [...new Set(players.map(p => p.displayname || p.DisplayName || p.Username || p.name).filter(Boolean))];
@@ -33,6 +40,7 @@ async function getOnlinePlayerOptions(guildId, serverId, client) {
             emoji: '🎮'
         }));
     } catch (err) {
+        console.error('[PLAYERLIST PARSE ERROR]', err);
         return [];
     }
 }
