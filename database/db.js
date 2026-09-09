@@ -74,7 +74,7 @@ const GuildConfig = sequelize.define('GuildConfig', {
     autoEventsEnabled: { type: DataTypes.BOOLEAN, defaultValue: true },
     orpEnabled: { type: DataTypes.BOOLEAN, defaultValue: true },
     homeTpEnabled: { type: DataTypes.BOOLEAN, defaultValue: true },
-    prisonEnabled: { type: DataTypes.BOOLEAN, defaultValue: true }, // 🔒 Prison Toggle
+    prisonEnabled: { type: DataTypes.BOOLEAN, defaultValue: true },
 
     aiProvider: { type: DataTypes.STRING, defaultValue: 'openai' },
     aiModel: { type: DataTypes.STRING, defaultValue: 'gpt-4o-mini' },
@@ -124,13 +124,31 @@ const GuildConfig = sequelize.define('GuildConfig', {
     skipNightPercentage: { type: DataTypes.INTEGER, defaultValue: 50 },
     skipNightEmote: { type: DataTypes.STRING, defaultValue: 'Wait Here' },
     ticketTranscriptChannel: { type: DataTypes.STRING, allowNull: true },
-    ticketSupportRole: { type: DataTypes.STRING, allowNull: true }, 
+    ticketSupportRole: { type: DataTypes.STRING, allowNull: true }
+});
+
+const GameServer = sequelize.define('GameServer', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, serverName: { type: DataTypes.STRING, allowNull: false }, rconIp: { type: DataTypes.STRING, allowNull: false }, rconPort: { type: DataTypes.STRING, allowNull: false }, rconPassword: { type: DataTypes.STRING, allowNull: false }});
+
+const UserEconomy = sequelize.define('UserEconomy', { 
+    guildId: { type: DataTypes.STRING, primaryKey: true }, 
+    userId: { type: DataTypes.STRING, primaryKey: true }, 
+    wallet: { type: DataTypes.INTEGER, defaultValue: 0 }, 
+    bank: { type: DataTypes.INTEGER, defaultValue: 0 }, 
+    inGameName: { type: DataTypes.STRING, allowNull: true }, 
+    lastDaily: { type: DataTypes.DATE, allowNull: true }, 
+    lastVoteTime: { type: DataTypes.DATE, allowNull: true }, 
+    xp: { type: DataTypes.INTEGER, defaultValue: 0 }, 
+    level: { type: DataTypes.INTEGER, defaultValue: 1 }, 
+    pvpKills: { type: DataTypes.INTEGER, defaultValue: 0 }, 
+    pveKills: { type: DataTypes.INTEGER, defaultValue: 0 }, 
+    deaths: { type: DataTypes.INTEGER, defaultValue: 0 }, 
+    currentKillstreak: { type: DataTypes.INTEGER, defaultValue: 0 }, 
+    buddyDaysStreak: { type: DataTypes.INTEGER, defaultValue: 0 }, 
+    lastBuddyDaysClaim: { type: DataTypes.DATE, allowNull: true },
     casinoWins: { type: DataTypes.INTEGER, defaultValue: 0 },
     casinoLosses: { type: DataTypes.INTEGER, defaultValue: 0 }
 });
 
-const GameServer = sequelize.define('GameServer', { id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true }, guildId: { type: DataTypes.STRING, allowNull: false }, serverName: { type: DataTypes.STRING, allowNull: false }, rconIp: { type: DataTypes.STRING, allowNull: false }, rconPort: { type: DataTypes.STRING, allowNull: false }, rconPassword: { type: DataTypes.STRING, allowNull: false }});
-const UserEconomy = sequelize.define('UserEconomy', { guildId: { type: DataTypes.STRING, primaryKey: true }, userId: { type: DataTypes.STRING, primaryKey: true }, wallet: { type: DataTypes.INTEGER, defaultValue: 0 }, bank: { type: DataTypes.INTEGER, defaultValue: 0 }, inGameName: { type: DataTypes.STRING, allowNull: true }, lastDaily: { type: DataTypes.DATE, allowNull: true }, lastVoteTime: { type: DataTypes.DATE, allowNull: true }, xp: { type: DataTypes.INTEGER, defaultValue: 0 }, level: { type: DataTypes.INTEGER, defaultValue: 1 }, pvpKills: { type: DataTypes.INTEGER, defaultValue: 0 }, pveKills: { type: DataTypes.INTEGER, defaultValue: 0 }, deaths: { type: DataTypes.INTEGER, defaultValue: 0 }, currentKillstreak: { type: DataTypes.INTEGER, defaultValue: 0 }, buddyDaysStreak: { type: DataTypes.INTEGER, defaultValue: 0 }, lastBuddyDaysClaim: { type: DataTypes.DATE, allowNull: true } });
 const Giveaway = sequelize.define('Giveaway', { messageId: { type: DataTypes.STRING, primaryKey: true }, guildId: { type: DataTypes.STRING }, channelId: { type: DataTypes.STRING }, prize: { type: DataTypes.STRING }, endTime: { type: DataTypes.DATE }, winnersCount: { type: DataTypes.INTEGER, defaultValue: 1 }, entries: { type: DataTypes.TEXT, defaultValue: '[]' }, isActive: { type: DataTypes.BOOLEAN, defaultValue: true } });
 const CustomBind = sequelize.define('CustomBind', { guildId: { type: DataTypes.STRING, allowNull: false }, name: { type: DataTypes.STRING, defaultValue: 'Custom Bind' }, actionType: { type: DataTypes.STRING, defaultValue: 'custom' }, targetValue: { type: DataTypes.TEXT, allowNull: true }, rotation: { type: DataTypes.STRING, allowNull: true }, emote: { type: DataTypes.STRING, defaultValue: '⭐' }, command: { type: DataTypes.TEXT, allowNull: true }, cooldown: { type: DataTypes.INTEGER, defaultValue: 0 }, cost: { type: DataTypes.INTEGER, defaultValue: 0 }, roleId: { type: DataTypes.STRING, allowNull: true } });
 const BindCooldown = sequelize.define('BindCooldown', { guildId: { type: DataTypes.STRING, primaryKey: true }, userId: { type: DataTypes.STRING, primaryKey: true }, bindId: { type: DataTypes.INTEGER, primaryKey: true }, expiresAt: { type: DataTypes.DATE } });
@@ -225,8 +243,6 @@ const RecyclerLocation = sequelize.define('RecyclerLocation', {
     posZ: { type: DataTypes.FLOAT, allowNull: false }
 });
 
-// 👇 NEW: Advanced 20-Cell Prison System Tables 👇
-// Update PrisonCell to store RF Frequency
 const PrisonCell = sequelize.define('PrisonCell', {
     id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
     guildId: { type: DataTypes.STRING, allowNull: false },
@@ -234,16 +250,15 @@ const PrisonCell = sequelize.define('PrisonCell', {
     posX: { type: DataTypes.STRING, allowNull: false },
     posY: { type: DataTypes.STRING, allowNull: false },
     posZ: { type: DataTypes.STRING, allowNull: false },
-    rfFrequency: { type: DataTypes.STRING, allowNull: true } // 🚪 RF Frequency for door trigger
+    rfFrequency: { type: DataTypes.STRING, allowNull: true }
 });
 
-// 📋 NEW: Prison Audit & Inspection Logs Table
 const PrisonLog = sequelize.define('PrisonLog', {
     id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
     guildId: { type: DataTypes.STRING, allowNull: false },
     inGameName: { type: DataTypes.STRING, allowNull: false },
     cellNumber: { type: DataTypes.INTEGER, allowNull: false },
-    action: { type: DataTypes.STRING, allowNull: false }, // 'JAILED', 'RELEASED', 'TIME_EXPIRED'
+    action: { type: DataTypes.STRING, allowNull: false },
     reason: { type: DataTypes.TEXT, allowNull: true },
     wardenDiscordId: { type: DataTypes.STRING, allowNull: true }
 });
@@ -259,24 +274,16 @@ const JailedPlayer = sequelize.define('JailedPlayer', {
     expiresAt: { type: DataTypes.DATE, allowNull: true },
     jailedAt: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 });
-// 👇 NEW: Auto-Messages System Table 👇
+
 const AutoMessage = sequelize.define('AutoMessage', {
     id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
     guildId: { type: DataTypes.STRING, allowNull: false },
-    serverId: { type: DataTypes.STRING, allowNull: true }, // null = all servers
+    serverId: { type: DataTypes.STRING, allowNull: true },
     message: { type: DataTypes.TEXT, allowNull: false },
     intervalMinutes: { type: DataTypes.INTEGER, defaultValue: 30 },
     isEnabled: { type: DataTypes.BOOLEAN, defaultValue: true },
-    color: { type: DataTypes.STRING, defaultValue: '#3498db' }, // Embed color / Tag color style
+    color: { type: DataTypes.STRING, defaultValue: '#3498db' },
     prefix: { type: DataTypes.STRING, defaultValue: '[ANNOUNCEMENT]' }
-});
-
-const User = sequelize.define('User', {
-    discordId: { type: DataTypes.STRING, unique: true },
-    balance: { type: DataTypes.FLOAT, defaultValue: 0 },
-    // Make sure these two lines exist on your model:
-    casinoWins: { type: DataTypes.INTEGER, defaultValue: 0 },
-    casinoLosses: { type: DataTypes.INTEGER, defaultValue: 0 }
 });
 
 async function initDb() { 
@@ -290,5 +297,5 @@ module.exports = {
     sequelize, GuildConfig, GameServer, UserEconomy, Giveaway, CustomBind, BindCooldown, ServerKit, ShopItem, ShopCooldown, CasinoCooldown, OrpConfig, PlayerOrpBase, BuddyPassChallenge, BuddyPassReward, TicketCategory, PveZone, AutoEvent, AutoEventLocation, ActiveBounty, BountyCooldown, Clan, ClanMember, ClanInvite, ClanWar, ReactionRole, CustomEmbed,
     HomeTeleportConfig, HomeTeleportCooldown, HomeTeleportLocation, ArenaCratePoint, ArenaConfig, ArenaPrize, ArenaSpawn, GunGameWeapon,
     RecyclerConfig, RecyclerLocation,
-    PrisonCell, JailedPlayer, AutoMessage, PrisonLog // 🛑 Exported Prison Tables
+    PrisonCell, JailedPlayer, AutoMessage, PrisonLog
 };
