@@ -7,6 +7,7 @@ const { GuildConfig } = require('../database/db');
 
 const handlerPath = (fileName) => path.join(__dirname, '..', 'handlers', fileName);
 
+const linkHandler = require(handlerPath('linkHandler'));
 const autoEventsHandler = require(handlerPath('autoEventsHandler'));
 const autoMessageHandler = require(handlerPath('autoMessageHandler'));
 const economyHandler = require(handlerPath('economyHandler'));
@@ -58,7 +59,8 @@ module.exports = async (interaction, client) => {
             if (customId === 'modal_bind_name' || customId.startsWith('bind_') || customId.includes('bind')) {
                 return await bindHandler(interaction, client);
             }
-
+            
+            if (customId === 'modal_link_account_submit') return await linkHandler(interaction, client);
             if (customId === 'modal_hometp_settings') return await homeTpHandler(interaction, client);
             if (customId === 'modal_skipnight_percentage') return await skipNightHandler(interaction, client);
             if (customId.startsWith('modal_givekit_exec_')) return await adminHandler(interaction, client);
@@ -214,7 +216,10 @@ module.exports = async (interaction, client) => {
             if (adminHandler && adminHandler.renderMainPanel) {
                 return await adminHandler.renderMainPanel(interaction);
             }
-        }  
+        } 
+        if (customId === 'hub_link_account' || customId.startsWith('link_')) {
+    return await linkHandler(interaction, client);
+} 
 
         if (customId.includes('recycler')) return await recyclerHandler(interaction, client);
         if (customId.includes('prison') || customId === 'prison_btn_jail' || customId === 'prison_btn_unjail') return await prisonHandler(interaction, client);
