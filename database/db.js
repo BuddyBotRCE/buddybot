@@ -271,6 +271,14 @@ const AutoMessage = sequelize.define('AutoMessage', {
     prefix: { type: DataTypes.STRING, defaultValue: '[ANNOUNCEMENT]' }
 });
 
+const User = sequelize.define('User', {
+    discordId: { type: DataTypes.STRING, unique: true },
+    balance: { type: DataTypes.FLOAT, defaultValue: 0 },
+    // Make sure these two lines exist on your model:
+    casinoWins: { type: DataTypes.INTEGER, defaultValue: 0 },
+    casinoLosses: { type: DataTypes.INTEGER, defaultValue: 0 }
+});
+
 async function initDb() { 
     await sequelize.authenticate(); 
     await sequelize.sync({ alter: true }); 
