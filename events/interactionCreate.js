@@ -254,6 +254,7 @@ module.exports = async (interaction, client) => {
         if (customId.startsWith('live_') || customId.startsWith('modal_live_')) {
             return await liveAdminHandler(interaction, client);
         }
+
         // 🎯 Route Player Hub & Panel Buttons to their specific feature handlers
         if (customId.startsWith('hub_shop') || customId.startsWith('shop_')) return await shopHandler(interaction, client);
         if (customId.startsWith('hub_clan') || customId.startsWith('clan_')) return await clanHandler(interaction, client);
