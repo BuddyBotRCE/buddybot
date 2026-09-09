@@ -264,6 +264,7 @@ module.exports = async (interaction, client) => {
         if (customId.startsWith('hub_hometp') || customId.startsWith('hometp_')) return await homeTpHandler(interaction, client);
         if (customId.startsWith('hub_leaderboards') || customId.startsWith('hub_bounty')) return await bountyHandler(interaction, client);
         if (customId.startsWith('hub_economy') || customId.startsWith('hub_link') || customId.startsWith('econ_')) return await economyHandler(interaction, client);
+        if (customId === 'hub_link_account' || customId.startsWith('link_') || customId.includes('link')) return await adminHandler(interaction, client);
         if (customId === 'btn_player_open_suggestion' || customId.startsWith('sug_')) return await suggestionHandler(interaction, client);
 
         return await adminHandler(interaction, client);
