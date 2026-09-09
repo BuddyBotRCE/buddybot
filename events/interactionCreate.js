@@ -81,8 +81,11 @@ module.exports = async (interaction, client) => {
             if (customId === 'modal_automsg_add') return await autoMessageHandler(interaction, client);
             if (customId.startsWith('modal_gg_') || customId === 'modal_gg_add_weapon') return await gunGameHandler(interaction, client);
             if (customId === 'modal_orp_config') return await orpHandler(interaction, client);
-            if (customId === 'modal_live_admin') return await liveAdminHandler(interaction, client);
-            if (customId.startsWith('modal_live_')) return await liveAdminHandler(interaction, client);
+            
+            // Your Live Admin Tools Routes!
+            if (customId === 'modal_live_admin' || customId.startsWith('modal_live_')) {
+                return await liveAdminHandler(interaction, client);
+            }
 
             return await adminHandler(interaction, client);
         }
@@ -148,6 +151,7 @@ module.exports = async (interaction, client) => {
             if (selectedValue === 'setup_logging' || selectedValue.includes('log')) return await loggingHandler(interaction, client);
             if (selectedValue === 'setup_binds') return await bindHandler(interaction, client);
             
+            // Your Live Admin Tools Route
             if (selectedValue === 'admin_tools' || customId.startsWith('live_') || customId === 'modal_live_say' || customId === 'modal_live_kick' || customId === 'modal_live_ban' || customId === 'modal_live_custom') {
                 return await liveAdminHandler(interaction, client);
             }
@@ -201,35 +205,16 @@ module.exports = async (interaction, client) => {
             return await skipNightHandler(interaction, client);
         }
 
-        if (customId === 'hometp_btn_settings') {
+        if (customId === 'hometp_btn_settings' || customId === 'admin_menu_back') {
             return await homeTpHandler(interaction, client);
         }
 
         if (customId === 'admin_menu_back') {
-            const adminHandlerRef = require('./adminHandler');
-            if (adminHandlerRef && adminHandlerRef.renderMainPanel) {
-                return await adminHandlerRef.renderMainPanel(interaction);
+            const adminHandler = require('./adminHandler');
+            if (adminHandler && adminHandler.renderMainPanel) {
+                return await adminHandler.renderMainPanel(interaction);
             }
         }  
-
-        // 🎯 Route Player Hub & Panel Buttons safely here with safety fallback
-        if (customId.startsWith('hub_') || customId.startsWith('btn_player_')) {
-            if (!interaction.deferred && !interaction.replied) {
-                await interaction.deferReply({ flags: 64 }).catch(() => {});
-            }
-
-            if (customId.startsWith('hub_shop') || customId.startsWith('shop_')) return await shopHandler(interaction, client);
-            if (customId.startsWith('hub_clan') || customId.startsWith('clan_')) return await clanHandler(interaction, client);
-            if (customId.startsWith('hub_buddypass') || customId.startsWith('buddypass_')) return await buddyPassHandler(interaction, client);
-            if (customId.startsWith('hub_casino') || customId.startsWith('casino_')) return await casinoHandler(interaction, client);
-            if (customId.startsWith('hub_kit') || customId.startsWith('kit_')) return await kitHandler(interaction, client);
-            if (customId.startsWith('hub_hometp') || customId.startsWith('hometp_')) return await homeTpHandler(interaction, client);
-            if (customId.startsWith('hub_leaderboards') || customId.startsWith('hub_bounty')) return await bountyHandler(interaction, client);
-            if (customId === 'btn_player_open_suggestion' || customId.startsWith('sug_')) return await suggestionHandler(interaction, client);
-            
-            // Generic fallback for any other hub button
-            return await adminHandler(interaction, client);
-        }
 
         if (customId.includes('recycler')) return await recyclerHandler(interaction, client);
         if (customId.includes('prison') || customId === 'prison_btn_jail' || customId === 'prison_btn_unjail') return await prisonHandler(interaction, client);
@@ -265,6 +250,7 @@ module.exports = async (interaction, client) => {
             return await kitHandler(interaction, client);
         }
 
+        // Your Live Admin Tools Route
         if (customId.startsWith('live_') || customId.startsWith('modal_live_')) {
             return await liveAdminHandler(interaction, client);
         }
