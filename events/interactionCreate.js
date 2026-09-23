@@ -43,10 +43,7 @@ module.exports = async (interaction, client) => {
         }
         console.log(`[ROUTER DEBUG] Incoming Interaction -> ID: "${interaction.customId}", Type: ${interaction.type}, Selected: "${interaction.isStringSelectMenu() ? interaction.values[0] : 'N/A'}"`);
 
-        // 🛡️ INSTANT ACKNOWLEDGEMENT: Prevent Discord interaction timeouts (3-second limit)
-        if (interaction.isMessageComponent() && !interaction.deferred && !interaction.replied) {
-            await interaction.deferUpdate().catch(() => {});
-        }
+       
 
         if (interaction.isChatInputCommand()) {
             const command = client.commands.get(interaction.commandName);
