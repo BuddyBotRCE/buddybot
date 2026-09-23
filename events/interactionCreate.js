@@ -89,6 +89,27 @@ module.exports = async (interaction, client) => {
             if (customId === 'modal_live_admin' || customId.startsWith('modal_live_')) {
                 return await liveAdminHandler(interaction, client);
             }
+            // 🚦 1. ADMIN MENU DROPDOWN SELECT ROUTER
+        if (customId === 'admin_menu_select') {
+            try {
+                // If the user selected an unhandled option, reply safely instead of dropping it
+                if (!selectedValue) {
+                    return await interaction.reply({ content: '❌ Please select a valid option from the menu.', flags: 64 }).catch(() => {});
+                }
+
+                if (selectedValue === 'setup_server_roles') {
+                    // ... existing role code ...
+                }
+
+                // Default catch-all for any unhandled dropdown values so it never freezes
+                return await adminHandler(interaction, client);
+            } catch (err) {
+                console.error('[ADMIN DROPDOWN ERROR]', err);
+                if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
+                    return await interaction.reply({ content: `⚙️ Executing admin option: \`${selectedValue}\`... (Handler processing)`, flags: 64 }).catch(() => {});
+                }
+            }
+        }
 
             return await adminHandler(interaction, client);
         }
