@@ -7,7 +7,6 @@ const { GuildConfig } = require('../database/db');
 
 const handlerPath = (fileName) => path.join(__dirname, '..', 'handlers', fileName);
 
-const linkHandler = require(handlerPath('linkHandler'));
 const autoEventsHandler = require(handlerPath('autoEventsHandler'));
 const autoMessageHandler = require(handlerPath('autoMessageHandler'));
 const economyHandler = require(handlerPath('economyHandler'));
@@ -35,6 +34,7 @@ const recyclerHandler = require(handlerPath('recyclerHandler'));
 const prisonHandler = require(handlerPath('prisonHandler')); 
 const gunGameHandler = require(handlerPath('gunGameHandler'));
 const liveAdminHandler = require(handlerPath('liveAdminHandler'));
+const linkHandler = require(handlerPath('linkHandler')); // Linked account handler
 
 module.exports = async (interaction, client) => {
     try {
@@ -42,6 +42,11 @@ module.exports = async (interaction, client) => {
             Object.defineProperty(interaction, 'customId', { value: 'admin_menu_select', writable: true, configurable: true });
         }
         console.log(`[ROUTER DEBUG] Incoming Interaction -> ID: "${interaction.customId}", Type: ${interaction.type}, Selected: "${interaction.isStringSelectMenu() ? interaction.values[0] : 'N/A'}"`);
+
+        // 🛡️ INSTANT ACKNOWLEDGEMENT: Prevent Discord interaction timeouts (3-second limit)
+        if (interaction.isMessageComponent() && !interaction.deferred && !interaction.replied) {
+            await interaction.deferUpdate().catch(() => {});
+        }
 
         if (interaction.isChatInputCommand()) {
             const command = client.commands.get(interaction.commandName);
@@ -59,14 +64,13 @@ module.exports = async (interaction, client) => {
             if (customId === 'modal_bind_name' || customId.startsWith('bind_') || customId.includes('bind')) {
                 return await bindHandler(interaction, client);
             }
-            
-            if (customId === 'modal_link_account_submit') return await linkHandler(interaction, client);
+
             if (customId === 'modal_hometp_settings') return await homeTpHandler(interaction, client);
             if (customId === 'modal_skipnight_percentage') return await skipNightHandler(interaction, client);
             if (customId.startsWith('modal_givekit_exec_')) return await adminHandler(interaction, client);
             if (customId === 'modal_shop_multiplier' || customId === 'modal_shop_custom' || customId.startsWith('modal_buy_qty_')) return await shopHandler(interaction, client);
             if (customId === 'modal_wipe_full' || customId.startsWith('modal_wipe_sel_') || customId === 'modal_wipe_cooldowns') return await wipeHandler(interaction, client);
-            if (customId === 'modal_link_account_global' || customId.startsWith('modal_link_account_')) return await adminHandler(interaction, client);
+            if (customId === 'modal_link_account_global' || customId.startsWith('modal_link_account_') || customId === 'modal_link_account_submit') return await linkHandler(interaction, client);
             if (customId.startsWith('modal_sug_') || customId === 'modal_player_submit_suggestion' || customId.startsWith('modal_sug_decline_reason_')) return await suggestionHandler(interaction, client);
             if (customId === 'modal_verify_email' || customId === 'modal_transfer_license') return await premiumHandler(interaction, client);
             if (customId === 'modal_setup_economy' || customId === 'modal_econ_interest' || customId === 'modal_hub_deposit' || customId === 'modal_hub_withdraw' || customId.startsWith('modal_admin_give_exec_') || customId.startsWith('modal_admin_take_exec_')) return await economyHandler(interaction, client);
@@ -216,10 +220,7 @@ module.exports = async (interaction, client) => {
             if (adminHandler && adminHandler.renderMainPanel) {
                 return await adminHandler.renderMainPanel(interaction);
             }
-        } 
-        if (customId === 'hub_link_account' || customId.startsWith('link_')) {
-    return await linkHandler(interaction, client);
-} 
+        }  
 
         if (customId.includes('recycler')) return await recyclerHandler(interaction, client);
         if (customId.includes('prison') || customId === 'prison_btn_jail' || customId === 'prison_btn_unjail') return await prisonHandler(interaction, client);
@@ -268,8 +269,8 @@ module.exports = async (interaction, client) => {
         if (customId.startsWith('hub_kit') || customId.startsWith('kit_')) return await kitHandler(interaction, client);
         if (customId.startsWith('hub_hometp') || customId.startsWith('hometp_')) return await homeTpHandler(interaction, client);
         if (customId.startsWith('hub_leaderboards') || customId.startsWith('hub_bounty')) return await bountyHandler(interaction, client);
-        if (customId.startsWith('hub_economy') || customId.startsWith('hub_link') || customId.startsWith('econ_')) return await economyHandler(interaction, client);
-        if (customId === 'hub_link_account' || customId.startsWith('link_') || customId.includes('link')) return await adminHandler(interaction, client);
+        if (customId.startsWith('hub_economy') || customId.startsWith('econ_')) return await economyHandler(interaction, client);
+        if (customId === 'hub_link_account' || customId.startsWith('link_')) return await linkHandler(interaction, client);
         if (customId === 'btn_player_open_suggestion' || customId.startsWith('sug_')) return await suggestionHandler(interaction, client);
 
         return await adminHandler(interaction, client);
