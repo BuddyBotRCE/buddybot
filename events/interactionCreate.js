@@ -136,7 +136,7 @@ module.exports = async (interaction, client) => {
                 );
                 return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
             }
-
+            if (selectedValue === 'setup_multiserver') return await adminHandler(interaction, client);
             if (selectedValue === 'setup_skipnight') return await skipNightHandler(interaction, client);
             if (selectedValue === 'setup_wipe') return await wipeHandler(interaction, client);
             if (selectedValue === 'setup_autoevents') return await autoEventsHandler(interaction, client);
